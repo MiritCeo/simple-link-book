@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, QrCode, Link2, ChevronRight, Plus, Clock, Users, Scissors, Palette } from 'lucide-react';
+import { Copy, QrCode, Link2, ChevronRight, Clock, Users, Scissors, Palette, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -23,54 +23,76 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="px-4 pt-4">
-      <h1 className="text-xl font-bold mb-4">Ustawienia</h1>
+    <div className="px-4 pt-4 lg:px-8 lg:pt-6">
+      <h1 className="text-xl font-bold mb-4 lg:text-2xl lg:mb-6">Ustawienia</h1>
 
-      {/* Booking link */}
-      <div className="bg-card rounded-2xl p-5 border border-border mb-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Link2 className="w-5 h-5 text-primary" />
-          <h2 className="font-semibold">Link rezerwacyjny</h2>
-        </div>
-        <p className="text-xs text-muted-foreground mb-3">Udostępnij klientom ten link, aby mogli rezerwować wizyty online.</p>
-        <div className="flex gap-2 mb-3">
-          <Input value={bookingUrl} readOnly className="h-10 rounded-xl text-xs bg-muted" />
-          <Button variant="outline" size="sm" onClick={copyLink} className="rounded-xl h-10 px-3 shrink-0">
-            <Copy className="w-4 h-4" />
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setShowQR(!showQR)} className="rounded-xl h-9 gap-1.5">
-            <QrCode className="w-4 h-4" />Kod QR
-          </Button>
-        </div>
-        {showQR && (
-          <div className="mt-4 flex justify-center p-4 bg-white rounded-xl">
-            <QRCodeSVG value={bookingUrl} size={180} />
-          </div>
-        )}
-      </div>
-
-      {/* Settings sections */}
-      <div className="space-y-2">
-        {sections.map(sec => (
-          <button key={sec.label} className="w-full text-left bg-card rounded-2xl p-4 border border-border flex items-center gap-3 touch-target hover:border-primary/30 transition-all">
-            <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shrink-0">
-              <sec.icon className="w-5 h-5 text-secondary-foreground" />
+      <div className="lg:grid lg:grid-cols-2 lg:gap-6">
+        {/* Left column */}
+        <div>
+          {/* Booking link */}
+          <div className="bg-card rounded-2xl p-5 border border-border mb-4 lg:p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Link2 className="w-5 h-5 text-primary" />
+              <h2 className="font-semibold">Link rezerwacyjny</h2>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="font-medium text-sm">{sec.label}</p>
-                {sec.count !== undefined && <span className="text-xs text-muted-foreground">({sec.count})</span>}
+            <p className="text-xs text-muted-foreground mb-3">Udostępnij klientom ten link, aby mogli rezerwować wizyty online.</p>
+            <div className="flex gap-2 mb-3">
+              <Input value={bookingUrl} readOnly className="h-10 rounded-xl text-xs bg-muted" />
+              <Button variant="outline" size="sm" onClick={copyLink} className="rounded-xl h-10 px-3 shrink-0">
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setShowQR(!showQR)} className="rounded-xl h-9 gap-1.5">
+                <QrCode className="w-4 h-4" />Kod QR
+              </Button>
+              <Button variant="secondary" size="sm" className="rounded-xl h-9 gap-1.5" onClick={() => window.open(`/s/${mockSalon.slug}`, '_blank')}>
+                <ExternalLink className="w-4 h-4" />Podgląd strony
+              </Button>
+            </div>
+            {showQR && (
+              <div className="mt-4 flex justify-center p-4 bg-white rounded-xl">
+                <QRCodeSVG value={bookingUrl} size={180} />
               </div>
-              <p className="text-xs text-muted-foreground">{sec.desc}</p>
+            )}
+          </div>
+
+          {/* Salon info (desktop bonus) */}
+          <div className="hidden lg:block bg-card rounded-2xl p-6 border border-border mb-4">
+            <h2 className="font-semibold mb-3">Dane salonu</h2>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">Nazwa</span><span className="font-medium">{mockSalon.name}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Adres</span><span className="font-medium">{mockSalon.address}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Telefon</span><span className="font-medium">{mockSalon.phone}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Godziny</span><span className="font-medium">{mockSalon.hours}</span></div>
             </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-          </button>
-        ))}
+          </div>
+        </div>
+
+        {/* Right column - settings sections */}
+        <div>
+          <h2 className="font-semibold mb-3 hidden lg:block">Zarządzanie</h2>
+          <div className="space-y-2">
+            {sections.map(sec => (
+              <button key={sec.label} className="w-full text-left bg-card rounded-2xl p-4 border border-border flex items-center gap-3 touch-target hover:border-primary/30 transition-all lg:p-5">
+                <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center shrink-0 lg:w-12 lg:h-12">
+                  <sec.icon className="w-5 h-5 text-secondary-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm">{sec.label}</p>
+                    {sec.count !== undefined && <span className="text-xs text-muted-foreground">({sec.count})</span>}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{sec.desc}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <p className="text-xs text-muted-foreground text-center mt-8 mb-4">purebook.pl v1.0</p>
+      <p className="text-xs text-muted-foreground text-center mt-8 mb-4 lg:text-left">purebook.pl v1.0</p>
     </div>
   );
 }
