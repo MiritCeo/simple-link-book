@@ -4,93 +4,93 @@
 
 @layer base {
   :root {
-    --background: 150 10% 98%;
-    --foreground: 220 20% 10%;
+    --background: 36 33% 97%;
+    --foreground: 24 18% 14%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
+    --card: 36 25% 99%;
+    --card-foreground: 24 18% 14%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
+    --popover: 36 25% 99%;
+    --popover-foreground: 24 18% 14%;
 
-    --primary: 168 76% 26%;
+    --primary: 348 32% 52%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 168 20% 94%;
-    --secondary-foreground: 168 76% 22%;
+    --secondary: 32 28% 93%;
+    --secondary-foreground: 348 28% 42%;
 
-    --muted: 210 15% 96%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 30 18% 94%;
+    --muted-foreground: 24 10% 46%;
 
-    --accent: 168 30% 92%;
-    --accent-foreground: 168 76% 22%;
+    --accent: 24 25% 91%;
+    --accent-foreground: 24 18% 20%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 65% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 10% 91%;
-    --input: 220 10% 91%;
-    --ring: 168 76% 26%;
+    --border: 30 18% 88%;
+    --input: 30 18% 88%;
+    --ring: 348 32% 52%;
 
     --radius: 0.75rem;
 
-    --success: 142 70% 40%;
+    --success: 152 50% 38%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 38 85% 52%;
+    --warning-foreground: 24 18% 14%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 168 76% 26%;
+    --sidebar-background: 36 25% 97%;
+    --sidebar-foreground: 24 18% 14%;
+    --sidebar-primary: 348 32% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 168 30% 92%;
-    --sidebar-accent-foreground: 168 76% 22%;
-    --sidebar-border: 220 10% 91%;
-    --sidebar-ring: 168 76% 26%;
+    --sidebar-accent: 32 28% 93%;
+    --sidebar-accent-foreground: 348 28% 42%;
+    --sidebar-border: 30 18% 88%;
+    --sidebar-ring: 348 32% 52%;
   }
 
   .dark {
-    --background: 220 20% 7%;
-    --foreground: 210 20% 96%;
+    --background: 24 18% 7%;
+    --foreground: 30 20% 92%;
 
-    --card: 220 20% 10%;
-    --card-foreground: 210 20% 96%;
+    --card: 24 16% 10%;
+    --card-foreground: 30 20% 92%;
 
-    --popover: 220 20% 10%;
-    --popover-foreground: 210 20% 96%;
+    --popover: 24 16% 10%;
+    --popover-foreground: 30 20% 92%;
 
-    --primary: 168 70% 40%;
+    --primary: 348 38% 58%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 16%;
-    --secondary-foreground: 168 50% 70%;
+    --secondary: 24 14% 16%;
+    --secondary-foreground: 348 35% 72%;
 
-    --muted: 220 15% 16%;
-    --muted-foreground: 215 15% 60%;
+    --muted: 24 14% 16%;
+    --muted-foreground: 24 12% 55%;
 
-    --accent: 220 15% 16%;
-    --accent-foreground: 168 50% 70%;
+    --accent: 24 14% 16%;
+    --accent-foreground: 348 35% 72%;
 
-    --destructive: 0 62% 40%;
+    --destructive: 0 55% 42%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 18%;
-    --input: 220 15% 18%;
-    --ring: 168 70% 40%;
+    --border: 24 14% 18%;
+    --input: 24 14% 18%;
+    --ring: 348 38% 58%;
 
-    --success: 142 60% 45%;
+    --success: 152 45% 42%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 80% 55%;
+    --warning: 38 75% 55%;
     --warning-foreground: 0 0% 100%;
 
-    --sidebar-background: 220 20% 7%;
-    --sidebar-foreground: 210 20% 96%;
-    --sidebar-primary: 168 70% 40%;
+    --sidebar-background: 24 18% 7%;
+    --sidebar-foreground: 30 20% 92%;
+    --sidebar-primary: 348 38% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 16%;
-    --sidebar-accent-foreground: 168 50% 70%;
-    --sidebar-border: 220 15% 18%;
-    --sidebar-ring: 168 70% 40%;
+    --sidebar-accent: 24 14% 16%;
+    --sidebar-accent-foreground: 348 35% 72%;
+    --sidebar-border: 24 14% 18%;
+    --sidebar-ring: 348 38% 58%;
   }
 }
 
@@ -101,8 +101,13 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'DM Serif Display', Georgia, serif;
   }
 
   /* Mobile app-like behavior */
@@ -119,5 +124,13 @@
   
   .touch-target {
     @apply min-h-[48px] min-w-[48px];
+  }
+
+  .font-display {
+    font-family: 'DM Serif Display', Georgia, serif;
+  }
+
+  .font-body {
+    font-family: 'DM Sans', system-ui, sans-serif;
   }
 }
