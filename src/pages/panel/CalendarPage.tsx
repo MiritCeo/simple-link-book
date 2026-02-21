@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Clock, User, List, LayoutGrid } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Clock, User, List, LayoutGrid, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { mockAppointments, statusLabels, statusColors, type Appointment } from '@/data/mockData';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { mockAppointments, mockSpecialists, statusLabels, statusColors, type Appointment } from '@/data/mockData';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8:00 - 19:00
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState('2026-02-21');
   const [view, setView] = useState<'list' | 'timeline'>('list');
+  const [selectedSpecialist, setSelectedSpecialist] = useState<string>('all');
 
   const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
   const dayNamesFull = ['Niedziela', 'Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota'];
@@ -27,7 +29,14 @@ export default function CalendarPage() {
     });
   }, [weekStart]);
 
-  const appointments = mockAppointments.filter(a => a.date === selectedDate);
+  const appointments = useMemo(() => {
+    let appts = mockAppointments.filter(a => a.date === selectedDate);
+    if (selectedSpecialist !== 'all') {
+      appts = appts.filter(a => a.specialistName === selectedSpecialist);
+    }
+    return appts;
+  }, [selectedDate, selectedSpecialist]);
+
   const allWeekAppointments = mockAppointments.filter(a => weekDays.includes(a.date));
 
   const shiftWeek = (dir: number) => {
@@ -96,7 +105,7 @@ export default function CalendarPage() {
         {weekDays.map(date => {
           const d = new Date(date);
           const isSelected = selectedDate === date;
-          const dayAppts = mockAppointments.filter(a => a.date === date);
+          const dayAppts = mockAppointments.filter(a => a.date === date && (selectedSpecialist === 'all' || a.specialistName === selectedSpecialist));
           return (
             <button
               key={date}
@@ -115,7 +124,27 @@ export default function CalendarPage() {
         })}
       </div>
 
-      {/* Selected date label on desktop */}
+      {/* Specialist filter */}
+      <div className="flex items-center gap-2 mb-4">
+        <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
+        <Select value={selectedSpecialist} onValueChange={setSelectedSpecialist}>
+          <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-56">
+            <SelectValue placeholder="Wszyscy specjaliści" />
+          </SelectTrigger>
+          <SelectContent className="bg-popover z-50">
+            <SelectItem value="all">Wszyscy specjaliści</SelectItem>
+            {mockSpecialists.map(sp => (
+              <SelectItem key={sp.id} value={sp.name}>{sp.name} — {sp.role}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selectedSpecialist !== 'all' && (
+          <Button variant="ghost" size="sm" onClick={() => setSelectedSpecialist('all')} className="rounded-xl h-9 text-xs text-muted-foreground shrink-0">
+            Wyczyść
+          </Button>
+        )}
+      </div>
+
       <div className="hidden lg:flex items-center gap-2 mb-4">
         <h2 className="text-lg font-semibold">
           {dayNamesFull[new Date(selectedDate).getDay()]}, {new Date(selectedDate).getDate()}.{String(new Date(selectedDate).getMonth() + 1).padStart(2, '0')}
@@ -203,7 +232,7 @@ export default function CalendarPage() {
         <div className="grid grid-cols-7 gap-2">
           {weekDays.map(date => {
             const d = new Date(date);
-            const dayAppts = mockAppointments.filter(a => a.date === date);
+            const dayAppts = mockAppointments.filter(a => a.date === date && (selectedSpecialist === 'all' || a.specialistName === selectedSpecialist));
             const isSelected = selectedDate === date;
             return (
               <button
