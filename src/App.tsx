@@ -6,10 +6,12 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import SalonBooking from "./pages/booking/SalonBooking";
 import LoginPage from "./pages/auth/LoginPage";
 import PanelLayout from "./components/layout/PanelLayout";
+import DashboardPage from "./pages/panel/DashboardPage";
 import CalendarPage from "./pages/panel/CalendarPage";
 import AppointmentsPage from "./pages/panel/AppointmentsPage";
 import ClientsPage from "./pages/panel/ClientsPage";
 import SettingsPage from "./pages/panel/SettingsPage";
+import NotificationsPage from "./pages/panel/NotificationsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,10 +31,12 @@ const App = () => (
 
           {/* Salon panel */}
           <Route path="/panel" element={<PanelLayout />}>
-            <Route index element={<Navigate to="kalendarz" replace />} />
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="kalendarz" element={<CalendarPage />} />
             <Route path="wizyty" element={<AppointmentsPage />} />
             <Route path="klienci" element={<ClientsPage />} />
+            <Route path="powiadomienia" element={<NotificationsPage />} />
             <Route path="ustawienia" element={<SettingsPage />} />
           </Route>
 

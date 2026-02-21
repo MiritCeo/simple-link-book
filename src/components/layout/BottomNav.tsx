@@ -1,11 +1,21 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, ClipboardList, Users, Settings } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ClipboardList, Users, Bell, Settings } from 'lucide-react';
 
 const navItems = [
+  { path: '/panel/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/panel/kalendarz', label: 'Kalendarz', icon: CalendarDays },
   { path: '/panel/wizyty', label: 'Wizyty', icon: ClipboardList },
   { path: '/panel/klienci', label: 'Klienci', icon: Users },
+  { path: '/panel/powiadomienia', label: 'Powiadomienia', icon: Bell },
   { path: '/panel/ustawienia', label: 'Ustawienia', icon: Settings },
+];
+
+// Bottom nav shows fewer items on mobile
+const mobileNavItems = [
+  navItems[0], // Dashboard
+  navItems[1], // Kalendarz
+  navItems[2], // Wizyty
+  navItems[5], // Ustawienia
 ];
 
 export function Sidebar() {
@@ -53,7 +63,7 @@ export default function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border safe-bottom z-50 lg:hidden">
       <div className="max-w-lg mx-auto flex">
-        {navItems.map(item => {
+        {mobileNavItems.map(item => {
           const isActive = location.pathname.startsWith(item.path);
           return (
             <button
