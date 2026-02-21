@@ -12,6 +12,10 @@ import AppointmentsPage from "./pages/panel/AppointmentsPage";
 import ClientsPage from "./pages/panel/ClientsPage";
 import SettingsPage from "./pages/panel/SettingsPage";
 import NotificationsPage from "./pages/panel/NotificationsPage";
+import ClientLayout from "./components/layout/ClientLayout";
+import ClientDashboard from "./pages/client/ClientDashboard";
+import ClientAppointments from "./pages/client/ClientAppointments";
+import ClientProfile from "./pages/client/ClientProfile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +32,13 @@ const App = () => (
 
           {/* Auth */}
           <Route path="/login" element={<LoginPage />} />
+
+          {/* Client panel */}
+          <Route path="/konto" element={<ClientLayout />}>
+            <Route index element={<ClientDashboard />} />
+            <Route path="wizyty" element={<ClientAppointments />} />
+            <Route path="profil" element={<ClientProfile />} />
+          </Route>
 
           {/* Salon panel */}
           <Route path="/panel" element={<PanelLayout />}>
