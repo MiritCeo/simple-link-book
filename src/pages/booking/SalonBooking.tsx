@@ -180,7 +180,7 @@ export default function SalonBooking() {
             transition={{ delay: 0.5, duration: 0.4 }}
           >
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Button onClick={() => { setDirection(1); setStep(1); }} size="lg" className="w-full h-14 text-lg rounded-2xl shadow-lg">
+              <Button onClick={() => { setDirection(1); setStep(1); }} size="lg" className="w-full h-14 text-lg rounded-2xl shadow-lg bg-foreground text-background hover:bg-foreground/90">
                 Umów wizytę
               </Button>
             </motion.div>
