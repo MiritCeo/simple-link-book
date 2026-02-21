@@ -27,6 +27,9 @@ export default function SalonBooking() {
   const [searchQuery, setSearchQuery] = useState('');
   const [clientData, setClientData] = useState({ name: '', phone: '', email: '', notes: '' });
   const [bookingComplete, setBookingComplete] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+  const [registerData, setRegisterData] = useState({ password: '', confirmPassword: '' });
+  const [registered, setRegistered] = useState(false);
 
   const salon = mockSalon;
 
@@ -91,6 +94,13 @@ export default function SalonBooking() {
     setStep(6);
   };
 
+  const handleRegister = () => {
+    if (registerData.password.length >= 8 && registerData.password === registerData.confirmPassword) {
+      setRegistered(true);
+      setShowRegister(false);
+    }
+  };
+
   if (step === 0) {
     return (
       <div className="min-h-screen bg-background">
@@ -138,15 +148,21 @@ export default function SalonBooking() {
     );
   }
 
+
   if (bookingComplete) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-6">
-        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center max-w-sm">
-          <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-6">
-            <Check className="w-10 h-10 text-success" />
+      <div className="min-h-screen bg-background px-6 py-12">
+        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-sm mx-auto">
+          {/* Success header */}
+          <div className="text-center mb-6">
+            <div className="w-20 h-20 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-6">
+              <Check className="w-10 h-10 text-success" />
+            </div>
+            <h1 className="text-2xl font-bold mb-2">Wizyta umówiona!</h1>
+            <p className="text-muted-foreground">Potwierdzenie zostanie wysłane na podany numer telefonu.</p>
           </div>
-          <h1 className="text-2xl font-bold mb-2">Wizyta umówiona!</h1>
-          <p className="text-muted-foreground mb-6">Potwierdzenie zostanie wysłane na podany numer telefonu.</p>
+
+          {/* Booking summary */}
           <div className="bg-card rounded-2xl p-5 border border-border text-left space-y-3 mb-6">
             <div className="flex justify-between"><span className="text-sm text-muted-foreground">Usługa</span><span className="text-sm font-medium">{selectedService?.name}</span></div>
             <div className="flex justify-between"><span className="text-sm text-muted-foreground">Specjalista</span><span className="text-sm font-medium">{anySpecialist ? 'Dowolny' : selectedSpecialist?.name}</span></div>
@@ -154,6 +170,109 @@ export default function SalonBooking() {
             <div className="flex justify-between"><span className="text-sm text-muted-foreground">Godzina</span><span className="text-sm font-medium">{selectedTime}</span></div>
             <div className="flex justify-between"><span className="text-sm text-muted-foreground">Cena</span><span className="text-sm font-medium">{selectedService?.price} zł</span></div>
           </div>
+
+          {/* Register account prompt */}
+          {!registered && !showRegister && (
+            <div className="bg-secondary/50 rounded-2xl p-5 border border-border mb-6">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <User className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">Załóż konto i zapamiętaj dane</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Następnym razem nie musisz wpisywać danych — rezerwacja w kilka sekund. Będziesz też mógł zarządzać swoimi wizytami.
+                  </p>
+                  <ul className="text-xs text-muted-foreground mt-2 space-y-1">
+                    <li className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" />Szybsza rezerwacja bez wpisywania danych</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" />Historia wizyt w jednym miejscu</li>
+                    <li className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary" />Łatwe odwoływanie i zmiana terminów</li>
+                  </ul>
+                  <Button onClick={() => setShowRegister(true)} size="sm" className="mt-3 rounded-xl h-10 w-full">
+                    Utwórz konto
+                  </Button>
+                  <button onClick={() => {}} className="text-xs text-muted-foreground mt-2 block text-center w-full hover:underline">
+                    Nie teraz, dziękuję
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Register form */}
+          {showRegister && !registered && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-2xl p-5 border border-border mb-6">
+              <h3 className="font-semibold mb-1">Utwórz konto</h3>
+              <p className="text-xs text-muted-foreground mb-4">Ustaw hasło, a Twoje dane ({clientData.name}, {clientData.phone}) zostaną zapamiętane.</p>
+              
+              {clientData.email && (
+                <div className="mb-3">
+                  <label className="text-sm font-medium mb-1.5 block">Email</label>
+                  <Input value={clientData.email} readOnly className="h-12 rounded-xl bg-muted text-muted-foreground" />
+                </div>
+              )}
+              {!clientData.email && (
+                <div className="mb-3">
+                  <label className="text-sm font-medium mb-1.5 block">Email *</label>
+                  <Input 
+                    placeholder="twoj@email.com" 
+                    value={clientData.email} 
+                    onChange={e => setClientData(d => ({ ...d, email: e.target.value }))} 
+                    className="h-12 rounded-xl" 
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Potrzebujemy emaila do logowania</p>
+                </div>
+              )}
+              <div className="mb-3">
+                <label className="text-sm font-medium mb-1.5 block">Hasło *</label>
+                <Input 
+                  type="password" 
+                  placeholder="Min. 8 znaków" 
+                  value={registerData.password} 
+                  onChange={e => setRegisterData(d => ({ ...d, password: e.target.value }))} 
+                  className="h-12 rounded-xl" 
+                />
+              </div>
+              <div className="mb-4">
+                <label className="text-sm font-medium mb-1.5 block">Powtórz hasło *</label>
+                <Input 
+                  type="password" 
+                  placeholder="Powtórz hasło" 
+                  value={registerData.confirmPassword} 
+                  onChange={e => setRegisterData(d => ({ ...d, confirmPassword: e.target.value }))} 
+                  className="h-12 rounded-xl" 
+                />
+                {registerData.confirmPassword && registerData.password !== registerData.confirmPassword && (
+                  <p className="text-xs text-destructive mt-1">Hasła nie są identyczne</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowRegister(false)} className="flex-1 h-12 rounded-xl">
+                  Anuluj
+                </Button>
+                <Button 
+                  onClick={handleRegister} 
+                  disabled={registerData.password.length < 8 || registerData.password !== registerData.confirmPassword || (!clientData.email)}
+                  className="flex-1 h-12 rounded-xl"
+                >
+                  Zarejestruj się
+                </Button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Registration success */}
+          {registered && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-success/5 rounded-2xl p-5 border border-success/20 mb-6 text-center">
+              <Check className="w-8 h-8 text-success mx-auto mb-2" />
+              <p className="font-semibold text-sm">Konto utworzone!</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Twoje dane zostały zapamiętane. Następnym razem wystarczy się zalogować.
+              </p>
+            </motion.div>
+          )}
+
+          {/* Actions */}
           <div className="space-y-3">
             <Button variant="outline" className="w-full h-12 rounded-xl gap-2"><CalendarPlus className="w-4 h-4" />Dodaj do kalendarza</Button>
             <Button variant="ghost" className="w-full h-12 rounded-xl text-destructive">Zmień / Odwołaj wizytę</Button>
