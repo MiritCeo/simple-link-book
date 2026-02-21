@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { mockAppointments, mockSpecialists, statusLabels, statusColors, type Appointment } from '@/data/mockData';
+import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 8); // 8:00 - 19:00
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState('2026-02-21');
@@ -37,8 +39,6 @@ export default function CalendarPage() {
     return appts;
   }, [selectedDate, selectedSpecialist]);
 
-  const allWeekAppointments = mockAppointments.filter(a => weekDays.includes(a.date));
-
   const shiftWeek = (dir: number) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + dir * 7);
@@ -53,18 +53,17 @@ export default function CalendarPage() {
 
   const getAppointmentPosition = (apt: Appointment) => {
     const [h, m] = apt.time.split(':').map(Number);
-    const top = ((h - 8) * 60 + m) * (64 / 60); // 64px per hour
+    const top = ((h - 8) * 60 + m) * (64 / 60);
     const height = apt.duration * (64 / 60);
     return { top, height: Math.max(height, 24) };
   };
 
   return (
-    <div className="px-4 pt-4 lg:px-8 lg:pt-6">
+    <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold lg:text-2xl">Kalendarz</h1>
         <div className="flex items-center gap-2">
-          {/* View toggle - visible on all sizes */}
           <div className="hidden sm:flex items-center bg-muted rounded-xl p-1">
             <button
               onClick={() => setView('list')}
@@ -81,23 +80,25 @@ export default function CalendarPage() {
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
-          <Button size="sm" className="rounded-xl gap-1.5 h-10">
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Dodaj wizytę</span>
-            <span className="sm:hidden">Dodaj</span>
-          </Button>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button size="sm" className="rounded-xl gap-1.5 h-10">
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Dodaj wizytę</span>
+              <span className="sm:hidden">Dodaj</span>
+            </Button>
+          </motion.div>
         </div>
       </div>
 
       {/* Week selector */}
       <div className="flex items-center justify-between mb-2">
-        <button onClick={() => shiftWeek(-1)} className="touch-target flex items-center justify-center">
+        <motion.button whileHover={{ x: -2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(-1)} className="touch-target flex items-center justify-center">
           <ChevronLeft className="w-5 h-5" />
-        </button>
+        </motion.button>
         <span className="text-sm font-medium">{getMonthLabel()}</span>
-        <button onClick={() => shiftWeek(1)} className="touch-target flex items-center justify-center">
+        <motion.button whileHover={{ x: 2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(1)} className="touch-target flex items-center justify-center">
           <ChevronRight className="w-5 h-5" />
-        </button>
+        </motion.button>
       </div>
 
       {/* Week days */}
@@ -107,19 +108,25 @@ export default function CalendarPage() {
           const isSelected = selectedDate === date;
           const dayAppts = mockAppointments.filter(a => a.date === date && (selectedSpecialist === 'all' || a.specialistName === selectedSpecialist));
           return (
-            <button
+            <motion.button
               key={date}
               onClick={() => setSelectedDate(date)}
+              whileTap={{ scale: 0.93 }}
               className={`flex flex-col items-center py-2 rounded-xl transition-all ${
                 isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
               }`}
+              layout
             >
               <span className="text-[10px] uppercase lg:text-xs">{dayNames[d.getDay()]}</span>
               <span className="text-lg font-semibold lg:text-xl">{d.getDate()}</span>
               {dayAppts.length > 0 && (
-                <div className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-primary-foreground/60' : 'bg-primary/40'}`} />
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-primary-foreground/60' : 'bg-primary/40'}`}
+                />
               )}
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -138,11 +145,15 @@ export default function CalendarPage() {
             ))}
           </SelectContent>
         </Select>
-        {selectedSpecialist !== 'all' && (
-          <Button variant="ghost" size="sm" onClick={() => setSelectedSpecialist('all')} className="rounded-xl h-9 text-xs text-muted-foreground shrink-0">
-            Wyczyść
-          </Button>
-        )}
+        <AnimatePresence>
+          {selectedSpecialist !== 'all' && (
+            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedSpecialist('all')} className="rounded-xl h-9 text-xs text-muted-foreground shrink-0">
+                Wyczyść
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div className="hidden lg:flex items-center gap-2 mb-4">
@@ -154,9 +165,13 @@ export default function CalendarPage() {
 
       {/* Timeline view (desktop) */}
       {view === 'timeline' && (
-        <div className="hidden sm:block">
+        <motion.div
+          className="hidden sm:block"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
           <div className="relative border border-border rounded-2xl bg-card overflow-hidden">
-            {/* Hour grid */}
             {HOURS.map(hour => (
               <div key={hour} className="flex items-start border-b border-border last:border-0" style={{ height: 64 }}>
                 <div className="w-16 shrink-0 text-xs text-muted-foreground py-1 px-3 text-right border-r border-border">
@@ -165,80 +180,83 @@ export default function CalendarPage() {
                 <div className="flex-1 relative" />
               </div>
             ))}
-
-            {/* Appointments overlay */}
             <div className="absolute top-0 left-16 right-0 bottom-0">
-              {appointments.map(apt => {
+              {appointments.map((apt, i) => {
                 const pos = getAppointmentPosition(apt);
                 return (
-                  <div
+                  <motion.div
                     key={apt.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05, duration: 0.3 }}
                     className={`absolute left-1 right-1 rounded-lg px-3 py-1.5 border cursor-pointer hover:opacity-90 transition-opacity overflow-hidden ${statusColors[apt.status]} border-current/10`}
                     style={{ top: pos.top, height: pos.height }}
                   >
                     <p className="text-xs font-semibold truncate">{apt.time} — {apt.serviceName}</p>
                     <p className="text-[10px] truncate opacity-70">{apt.clientName} • {apt.specialistName}</p>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* List view (default, always on mobile) */}
+      {/* List view */}
       {(view === 'list' || typeof window !== 'undefined') && (
         <div className={view === 'timeline' ? 'sm:hidden' : ''}>
-          <div className="space-y-3">
+          <MotionList className="space-y-3" key={selectedDate + selectedSpecialist}>
             {appointments.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-12">Brak wizyt w tym dniu</p>
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-sm text-muted-foreground text-center py-12"
+              >
+                Brak wizyt w tym dniu
+              </motion.p>
             )}
             {appointments.map(apt => (
-              <div key={apt.id} className="bg-card rounded-2xl p-4 border border-border lg:flex lg:items-center lg:gap-6 lg:px-6">
-                {/* Time block */}
-                <div className="flex items-start justify-between mb-2 lg:mb-0 lg:flex-col lg:items-start lg:gap-0.5 lg:w-24 lg:shrink-0">
-                  <div className="flex items-center gap-2 lg:flex-col lg:items-start lg:gap-0">
-                    <Clock className="w-4 h-4 text-muted-foreground lg:hidden" />
-                    <span className="font-semibold text-sm lg:text-base">{apt.time}</span>
-                    <span className="text-xs text-muted-foreground">({apt.duration} min)</span>
+              <MotionItem key={apt.id}>
+                <HoverCard className="bg-card rounded-2xl p-4 border border-border lg:flex lg:items-center lg:gap-6 lg:px-6">
+                  <div className="flex items-start justify-between mb-2 lg:mb-0 lg:flex-col lg:items-start lg:gap-0.5 lg:w-24 lg:shrink-0">
+                    <div className="flex items-center gap-2 lg:flex-col lg:items-start lg:gap-0">
+                      <Clock className="w-4 h-4 text-muted-foreground lg:hidden" />
+                      <span className="font-semibold text-sm lg:text-base">{apt.time}</span>
+                      <span className="text-xs text-muted-foreground">({apt.duration} min)</span>
+                    </div>
+                    <Badge variant="secondary" className={`text-[10px] lg:mt-1 ${statusColors[apt.status]}`}>
+                      {statusLabels[apt.status]}
+                    </Badge>
                   </div>
-                  <Badge variant="secondary" className={`text-[10px] lg:mt-1 ${statusColors[apt.status]}`}>
-                    {statusLabels[apt.status]}
-                  </Badge>
-                </div>
-
-                {/* Details */}
-                <div className="lg:flex-1">
-                  <p className="font-medium lg:text-base">{apt.serviceName}</p>
-                  <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{apt.clientName}</span>
-                    <span>{apt.specialistName}</span>
+                  <div className="lg:flex-1">
+                    <p className="font-medium lg:text-base">{apt.serviceName}</p>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{apt.clientName}</span>
+                      <span>{apt.specialistName}</span>
+                    </div>
                   </div>
-                </div>
-
-                {/* Desktop actions */}
-                <div className="hidden lg:flex items-center gap-2 shrink-0">
-                  <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs">Szczegóły</Button>
-                </div>
-              </div>
+                  <div className="hidden lg:flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs">Szczegóły</Button>
+                  </div>
+                </HoverCard>
+              </MotionItem>
             ))}
-          </div>
+          </MotionList>
         </div>
       )}
 
-      {/* Desktop: week overview table */}
-      <div className="hidden lg:block mt-8">
-        <h3 className="text-base font-semibold mb-3">Przegląd tygodnia</h3>
-        <div className="grid grid-cols-7 gap-2">
-          {weekDays.map(date => {
-            const d = new Date(date);
-            const dayAppts = mockAppointments.filter(a => a.date === date && (selectedSpecialist === 'all' || a.specialistName === selectedSpecialist));
-            const isSelected = selectedDate === date;
-            return (
-              <button
-                key={date}
+      {/* Desktop: week overview */}
+      <MotionList className="hidden lg:grid lg:grid-cols-7 gap-2 mt-8">
+        <h3 className="col-span-7 text-base font-semibold mb-1">Przegląd tygodnia</h3>
+        {weekDays.map(date => {
+          const d = new Date(date);
+          const dayAppts = mockAppointments.filter(a => a.date === date && (selectedSpecialist === 'all' || a.specialistName === selectedSpecialist));
+          const isSelected = selectedDate === date;
+          return (
+            <MotionItem key={date}>
+              <HoverCard
                 onClick={() => setSelectedDate(date)}
-                className={`text-left p-3 rounded-xl border transition-all min-h-[120px] ${
+                className={`text-left p-3 rounded-xl border cursor-pointer transition-all min-h-[120px] ${
                   isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-primary/30'
                 }`}
               >
@@ -259,11 +277,11 @@ export default function CalendarPage() {
                     <p className="text-[10px] text-muted-foreground italic">Brak wizyt</p>
                   )}
                 </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+              </HoverCard>
+            </MotionItem>
+          );
+        })}
+      </MotionList>
+    </PageTransition>
   );
 }
