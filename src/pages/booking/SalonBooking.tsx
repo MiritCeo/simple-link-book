@@ -347,6 +347,23 @@ export default function SalonBooking() {
               <div>
                 <h2 className="text-xl font-bold mb-1">Twoje dane</h2>
                 <p className="text-sm text-muted-foreground mb-4">Potrzebujemy ich do potwierdzenia wizyty</p>
+
+                {/* Login hint */}
+                <div className="bg-secondary/50 rounded-xl p-4 mb-5 border border-border">
+                  <div className="flex items-start gap-3">
+                    <User className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Masz już konto?</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Zaloguj się, a dane uzupełnią się automatycznie — nie musisz ich wpisywać za każdym razem.
+                      </p>
+                      <button className="text-sm font-semibold text-primary mt-2 inline-block hover:underline">
+                        Zaloguj się
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-medium mb-1.5 block">Imię i nazwisko *</label>
@@ -365,10 +382,13 @@ export default function SalonBooking() {
                     <Textarea placeholder="Np. chcę odświeżyć kolor, mam uczulenie na..." value={clientData.notes} onChange={e => setClientData(d => ({ ...d, notes: e.target.value }))} className="rounded-xl min-h-[80px]" />
                   </div>
                 </div>
+
+                <p className="text-xs text-muted-foreground mt-4 mb-2">Kontynuując, rezerwujesz jako gość. Możesz też utworzyć konto po wizycie.</p>
+
                 <Button
                   onClick={goNext}
                   size="lg"
-                  className="w-full h-14 rounded-2xl text-base mt-6"
+                  className="w-full h-14 rounded-2xl text-base mt-2"
                   disabled={!clientData.name || !clientData.phone}
                 >
                   Przejdź do podsumowania
