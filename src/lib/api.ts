@@ -362,7 +362,7 @@ export async function deleteClient(id: string) {
   });
 }
 
-export async function getClientAppointments(clientId: string) {
+export async function getSalonClientAppointments(clientId: string) {
   return apiFetch<{ appointments: any[] }>(`/api/salon/clients/${clientId}/appointments`, { auth: true });
 }
 

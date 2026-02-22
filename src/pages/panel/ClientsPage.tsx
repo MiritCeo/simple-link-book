@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { createClient, deleteClient, getClientAppointments, getSalonClients, updateClient } from '@/lib/api';
+import { createClient, deleteClient, getSalonClientAppointments, getSalonClients, updateClient } from '@/lib/api';
 import { statusLabels } from '@/data/mockData';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -88,7 +88,7 @@ export default function ClientsPage() {
     }
     let mounted = true;
     setAppointmentsLoading(true);
-    getClientAppointments(selectedClient)
+    getSalonClientAppointments(selectedClient)
       .then(res => {
         if (!mounted) return;
         setClientAppointments(res.appointments || []);
