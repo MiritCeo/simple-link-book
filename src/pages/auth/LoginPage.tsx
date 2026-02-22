@@ -1,25 +1,46 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Scissors } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { login } from '@/lib/api';
+import { setActiveSalonId, setSalons } from '@/lib/auth';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/panel/kalendarz');
+    try {
+      const data = await login(email, password);
+      if (data.salons?.length) {
+        setSalons(data.salons as any);
+      }
+      if (data.salonId) {
+        setActiveSalonId(data.salonId);
+      }
+      if (data.role === 'SUPER_ADMIN') {
+        navigate('/admin');
+        return;
+      }
+      if (data.salons && data.salons.length > 1) {
+        navigate('/wybierz-salon');
+        return;
+      }
+      navigate('/panel/kalendarz');
+    } catch (err: any) {
+      toast.error(err.message || 'Nie udało się zalogować');
+    }
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
-            <Scissors className="w-8 h-8 text-primary-foreground" />
+          <div className="w-16 h-16 flex items-center justify-center mx-auto mb-4">
+            <img src="/purebooklogo.svg" alt="purebook" className="w-12 h-12" />
           </div>
           <h1 className="text-2xl font-bold">purebook</h1>
           <p className="text-sm text-muted-foreground mt-1">Zaloguj się do panelu salonu</p>

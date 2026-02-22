@@ -1,0 +1,21 @@
+{
+  "name": "purebook",
+  "short_name": "purebook",
+  "description": "System rezerwacji wizyt i zarzadzania salonem.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#CD798A",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

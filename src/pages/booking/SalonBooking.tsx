@@ -1,12 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Clock, Phone, ArrowLeft, Check, Search, User, CalendarDays, ChevronLeft, ChevronRight, CalendarPlus, Scissors } from 'lucide-react';
+import { MapPin, Clock, Phone, ArrowLeft, Check, Search, User, CalendarDays, ChevronLeft, ChevronRight, CalendarPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { mockSalon, mockServices, mockSpecialists, generateTimeSlots, type Service, type Specialist, type TimeSlot } from '@/data/mockData';
+import { type TimeSlot } from '@/data/mockData';
+import { createPublicAppointment, getPublicAvailability, getPublicSalon } from '@/lib/api';
 
 const STEPS = ['Usługa', 'Specjalista', 'Termin', 'Dane', 'Potwierdzenie'];
 
@@ -37,25 +38,97 @@ export default function SalonBooking() {
   const { slug } = useParams();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1); // 1=forward, -1=back
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [selectedSpecialist, setSelectedSpecialist] = useState<Specialist | null>(null);
+  const [selectedService, setSelectedService] = useState<any | null>(null);
+  const [selectedSpecialist, setSelectedSpecialist] = useState<any | null>(null);
   const [anySpecialist, setAnySpecialist] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [clientData, setClientData] = useState({ name: '', phone: '', email: '', notes: '' });
   const [bookingComplete, setBookingComplete] = useState(false);
+  const [cancelToken, setCancelToken] = useState<string | null>(null);
   const [showRegister, setShowRegister] = useState(false);
   const [registerData, setRegisterData] = useState({ password: '', confirmPassword: '' });
   const [registered, setRegistered] = useState(false);
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [salon, setSalon] = useState<any | null>(null);
+  const accentHex = salon?.accentColor || '#CD798A';
+  const logoSrc = salon?.logoUrl || '/purebooklogo.svg';
 
-  const salon = mockSalon;
+  const hexToHsl = (hex: string) => {
+    const value = hex.replace('#', '');
+    if (![3, 6].includes(value.length)) return null;
+    const full = value.length === 3 ? value.split('').map(c => c + c).join('') : value;
+    const num = parseInt(full, 16);
+    const r = ((num >> 16) & 255) / 255;
+    const g = ((num >> 8) & 255) / 255;
+    const b = (num & 255) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h = 0;
+    let s = 0;
+    const l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r:
+          h = (g - b) / d + (g < b ? 6 : 0);
+          break;
+        case g:
+          h = (b - r) / d + 2;
+          break;
+        case b:
+          h = (r - g) / d + 4;
+          break;
+        default:
+          break;
+      }
+      h /= 6;
+    }
+    return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+  };
+
+  const accentHsl = useMemo(() => hexToHsl(accentHex), [accentHex]);
+  const accentVars = accentHsl ? ({
+    ['--primary' as any]: accentHsl,
+    ['--ring' as any]: accentHsl,
+    ['--sidebar-primary' as any]: accentHsl,
+  }) : undefined;
+  const [services, setServices] = useState<any[]>([]);
+  const [specialists, setSpecialists] = useState<any[]>([]);
+  const [loadingSalon, setLoadingSalon] = useState(true);
+  const [salonError, setSalonError] = useState<string | null>(null);
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoadingSalon(true);
+    setSalonError(null);
+    if (!slug) return;
+    getPublicSalon(slug)
+      .then(data => {
+        if (!mounted) return;
+        setSalon(data.salon);
+        setServices(data.services || []);
+        setSpecialists(data.staff || []);
+      })
+      .catch(err => {
+        if (!mounted) return;
+        setSalonError(err.message || 'Nie udało się pobrać danych salonu');
+      })
+      .finally(() => mounted && setLoadingSalon(false));
+    return () => { mounted = false; };
+  }, [slug]);
 
   const filteredServices = useMemo(() => {
-    if (!searchQuery) return mockServices;
+    if (!searchQuery) return services;
     const q = searchQuery.toLowerCase();
-    return mockServices.filter(s => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
-  }, [searchQuery]);
+    return services.filter(s => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
+  }, [searchQuery, services]);
 
   const groupedServices = useMemo(() => {
     const groups: Record<string, Service[]> = {};
@@ -68,8 +141,8 @@ export default function SalonBooking() {
 
   const availableSpecialists = useMemo(() => {
     if (!selectedService) return [];
-    return mockSpecialists.filter(sp => sp.services.includes(selectedService.id));
-  }, [selectedService]);
+    return specialists.filter(sp => sp.services?.some((s: any) => s.id === selectedService.id));
+  }, [selectedService, specialists]);
 
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date();
@@ -85,10 +158,33 @@ export default function SalonBooking() {
     });
   }, [weekStart]);
 
-  const timeSlots = useMemo(() => {
-    if (!selectedDate) return [];
-    return generateTimeSlots(selectedDate);
-  }, [selectedDate]);
+  useEffect(() => {
+    let mounted = true;
+    if (!slug || !selectedDate || !selectedService) {
+      setTimeSlots([]);
+      return () => { mounted = false; };
+    }
+    setSlotsLoading(true);
+    setSlotsError(null);
+    const staffId = anySpecialist ? undefined : selectedSpecialist?.id;
+    getPublicAvailability({ slug, date: selectedDate, serviceId: selectedService.id, staffId })
+      .then(res => {
+        if (!mounted) return;
+        const slots = (res.slots || []).map(time => ({ time, available: true }));
+        setTimeSlots(slots);
+      })
+      .catch(err => {
+        if (!mounted) return;
+        setTimeSlots([]);
+        setSlotsError(err.message || 'Nie udało się pobrać godzin');
+      })
+      .finally(() => mounted && setSlotsLoading(false));
+    return () => { mounted = false; };
+  }, [slug, selectedDate, selectedService, selectedSpecialist, anySpecialist]);
+
+  const availableSlots = useMemo(() => timeSlots.filter(s => s.available), [timeSlots]);
+  const recommendedSlots = useMemo(() => availableSlots.slice(0, 3), [availableSlots]);
+  const nearestSlot = recommendedSlots[0];
 
   const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
   const monthNames = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
@@ -107,9 +203,35 @@ export default function SalonBooking() {
   const goNext = () => { setDirection(1); setStep(s => s + 1); };
   const goBack = () => { setDirection(-1); setStep(s => s - 1); };
 
-  const handleBook = () => {
-    setBookingComplete(true);
-    setStep(6);
+  const handleBook = async () => {
+    if (!slug || !selectedService || !selectedDate || !selectedTime || !clientData.name || !clientData.phone) {
+      setBookingError('Uzupełnij wymagane dane przed potwierdzeniem.');
+      return;
+    }
+    setBookingLoading(true);
+    setBookingError(null);
+    try {
+      const res = await createPublicAppointment(slug, {
+        date: selectedDate,
+        time: selectedTime,
+        notes: clientData.notes || undefined,
+        serviceId: selectedService.id,
+        staffId: anySpecialist ? undefined : selectedSpecialist?.id,
+        client: {
+          name: clientData.name,
+          phone: clientData.phone,
+          email: clientData.email || undefined,
+          notes: clientData.notes || undefined,
+        },
+      });
+      setCancelToken(res.cancelToken || null);
+      setBookingComplete(true);
+      setStep(6);
+    } catch (err: any) {
+      setBookingError(err.message || 'Nie udało się zapisać wizyty.');
+    } finally {
+      setBookingLoading(false);
+    }
   };
 
   const handleRegister = () => {
@@ -122,21 +244,28 @@ export default function SalonBooking() {
   // Landing page
   if (step === 0) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background" style={accentVars}>
+        {loadingSalon && (
+          <div className="px-6 py-10 text-center text-sm text-muted-foreground">Ładowanie danych salonu...</div>
+        )}
+        {salonError && (
+          <div className="px-6 py-10 text-center text-sm text-destructive">{salonError}</div>
+        )}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
           className="bg-primary text-primary-foreground px-6 pt-12 pb-8"
+          style={{ backgroundColor: accentHex }}
         >
           <div className="max-w-lg mx-auto">
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.15, type: 'spring', stiffness: 200, damping: 20 }}
-              className="w-16 h-16 rounded-2xl bg-primary-foreground/20 flex items-center justify-center mb-4"
+              className="w-16 h-16 flex items-center justify-center mb-4"
             >
-              <Scissors className="w-8 h-8" />
+              <img src={logoSrc} alt="Logo salonu" className="w-12 h-12" />
             </motion.div>
             <motion.h1
               initial={{ opacity: 0, y: 10 }}
@@ -144,7 +273,7 @@ export default function SalonBooking() {
               transition={{ delay: 0.25, duration: 0.4 }}
               className="text-2xl font-bold mb-1"
             >
-              {salon.name}
+              {salon?.name || 'Salon'}
             </motion.h1>
             <motion.p
               initial={{ opacity: 0 }}
@@ -152,7 +281,7 @@ export default function SalonBooking() {
               transition={{ delay: 0.35, duration: 0.4 }}
               className="text-primary-foreground/80 text-sm mb-4"
             >
-              {salon.description}
+              {salon?.description || 'Opis salonu'}
             </motion.p>
             <motion.div
               initial="hidden"
@@ -161,9 +290,9 @@ export default function SalonBooking() {
               className="space-y-2 text-sm text-primary-foreground/70"
             >
               {[
-                { icon: MapPin, text: salon.address },
-                { icon: Clock, text: salon.hours },
-                { icon: Phone, text: salon.phone },
+                { icon: MapPin, text: salon?.address || '—' },
+                { icon: Clock, text: salon?.hours || '—' },
+                { icon: Phone, text: salon?.phone || '—' },
               ].map((item, i) => (
                 <motion.div key={i} variants={fadeUp} className="flex items-center gap-2">
                   <item.icon className="w-4 h-4" />{item.text}
@@ -406,9 +535,27 @@ export default function SalonBooking() {
           {/* Actions */}
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="space-y-3">
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Button variant="outline" className="w-full h-12 rounded-xl gap-2"><CalendarPlus className="w-4 h-4" />Dodaj do kalendarza</Button>
+              <Button variant="outline" className="w-full h-12 rounded-xl gap-2" disabled>
+                <CalendarPlus className="w-4 h-4" />Dodaj do kalendarza
+              </Button>
+              <p className="text-[10px] text-muted-foreground mt-2 text-center">Funkcja dostępna wkrótce.</p>
             </motion.div>
-            <Button variant="ghost" className="w-full h-12 rounded-xl text-destructive">Zmień / Odwołaj wizytę</Button>
+            <Button
+              variant="ghost"
+              className="w-full h-12 rounded-xl text-destructive"
+              disabled={!cancelToken}
+              onClick={() => {
+                if (!cancelToken) return;
+                window.open(`/cancel/${cancelToken}`, '_blank', 'noopener,noreferrer');
+              }}
+            >
+              Zmień / Odwołaj wizytę
+            </Button>
+            <p className="text-[11px] text-muted-foreground text-center">
+              {cancelToken
+                ? 'Bezpieczny link jest gotowy — możesz zmienić lub odwołać wizytę.'
+                : 'Link do zmiany i odwołania zostanie wysłany w bezpiecznej wiadomości.'}
+            </p>
           </motion.div>
         </motion.div>
       </div>
@@ -424,7 +571,7 @@ export default function SalonBooking() {
           <motion.button whileHover={{ x: -3 }} whileTap={{ scale: 0.9 }} onClick={goBack} className="touch-target flex items-center justify-center -ml-2">
             <ArrowLeft className="w-5 h-5" />
           </motion.button>
-          <span className="ml-3 font-semibold text-sm">{salon.name}</span>
+          <span className="ml-3 font-semibold text-sm">{salon?.name || 'Salon'}</span>
         </div>
         {/* Stepper */}
         <div className="max-w-lg mx-auto px-6 pb-3">
@@ -605,9 +752,58 @@ export default function SalonBooking() {
                       exit={{ opacity: 0, y: -8 }}
                       transition={{ duration: 0.3, ease }}
                     >
+                      {slotsLoading && (
+                        <p className="text-sm text-muted-foreground text-center py-6">Ładowanie dostępnych godzin...</p>
+                      )}
+                      {!slotsLoading && slotsError && (
+                        <p className="text-sm text-destructive text-center py-6">{slotsError}</p>
+                      )}
+                      {availableSlots.length > 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.05 }}
+                          className="bg-secondary/50 rounded-2xl p-4 border border-border mb-4"
+                        >
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Najbliższy termin</p>
+                          {nearestSlot && (
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium">{selectedDate}</p>
+                                <p className="text-xs text-muted-foreground">Najbliższy dostępny slot</p>
+                              </div>
+                              <motion.button
+                                whileHover={{ scale: 1.03 }}
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => setSelectedTime(nearestSlot.time)}
+                                className="px-4 py-2 rounded-xl text-sm font-semibold bg-primary text-primary-foreground"
+                              >
+                                {nearestSlot.time}
+                              </motion.button>
+                            </div>
+                          )}
+                          {recommendedSlots.length > 1 && (
+                            <div className="mt-3">
+                              <p className="text-[11px] text-muted-foreground mb-2">Rekomendacje</p>
+                              <div className="flex gap-2 flex-wrap">
+                                {recommendedSlots.slice(1).map(slot => (
+                                  <button
+                                    key={slot.time}
+                                    onClick={() => setSelectedTime(slot.time)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-card border border-border hover:border-primary/30 transition-colors"
+                                  >
+                                    {slot.time}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+
                       <p className="text-sm font-medium mb-3">Dostępne godziny</p>
                       <motion.div initial="hidden" animate="visible" variants={stagger} className="grid grid-cols-4 gap-2">
-                        {timeSlots.filter(s => s.available).map(slot => (
+                        {availableSlots.map(slot => (
                           <motion.button
                             key={slot.time}
                             variants={scaleIn}
@@ -622,7 +818,7 @@ export default function SalonBooking() {
                           </motion.button>
                         ))}
                       </motion.div>
-                      {timeSlots.filter(s => s.available).length === 0 && (
+                      {availableSlots.length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-8">Brak dostępnych terminów w tym dniu</p>
                       )}
                     </motion.div>
@@ -768,10 +964,18 @@ export default function SalonBooking() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  <Button onClick={handleBook} size="lg" className="w-full h-14 rounded-2xl text-base">
-                    Potwierdzam rezerwację
+                  <Button
+                    onClick={handleBook}
+                    size="lg"
+                    className="w-full h-14 rounded-2xl text-base"
+                    disabled={bookingLoading}
+                  >
+                    {bookingLoading ? 'Rezerwuję...' : 'Potwierdzam rezerwację'}
                   </Button>
                 </motion.div>
+                {bookingError && (
+                  <p className="text-xs text-destructive text-center mt-3">{bookingError}</p>
+                )}
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55 }} className="text-xs text-muted-foreground text-center mt-3">
                   Otrzymasz SMS z potwierdzeniem wizyty
                 </motion.p>

@@ -1,33 +1,60 @@
-import { useMemo } from 'react';
-import { CalendarDays, DollarSign, Users, TrendingUp, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarDays, CalendarX2, Users, TrendingUp, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { mockAppointments, mockClients, mockSpecialists, statusLabels, statusColors } from '@/data/mockData';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { statusLabels, statusColors } from '@/data/mockData';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
-
-const TODAY = '2026-02-21';
+import { getSalonAppointments, getSalonClients, getSalonStaff } from '@/lib/api';
 
 export default function DashboardPage() {
-  const todayAppts = useMemo(() => mockAppointments.filter(a => a.date === TODAY), []);
-  const completedToday = todayAppts.filter(a => a.status === 'completed' || a.status === 'in-progress');
-  const scheduledToday = todayAppts.filter(a => a.status === 'scheduled' || a.status === 'confirmed');
+  const navigate = useNavigate();
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
 
-  const todayRevenue = useMemo(() => {
-    return todayAppts
-      .filter(a => a.status !== 'cancelled' && a.status !== 'no-show')
-      .reduce((sum, a) => {
-        // simple mock: map service names to prices
-        const prices: Record<string, number> = {
-          'Strzyżenie damskie': 120, 'Strzyżenie męskie': 70, 'Koloryzacja': 250,
-          'Balayage': 450, 'Manicure hybrydowy': 100, 'Pedicure': 130,
-          'Henna brwi i rzęs': 60, 'Laminacja brwi': 120,
-        };
-        return sum + (prices[a.serviceName] || 100);
-      }, 0);
-  }, [todayAppts]);
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    Promise.all([getSalonAppointments(), getSalonClients(), getSalonStaff()])
+      .then(([apptsRes, clientsRes, staffRes]) => {
+        if (!mounted) return;
+        setAppointments(apptsRes.appointments || []);
+        setClients(clientsRes.clients || []);
+        setStaff(staffRes.staff || []);
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => { mounted = false; };
+  }, []);
 
-  const occupancyPercent = Math.round((todayAppts.length / 10) * 100); // mock: 10 slots max
+  const today = new Date().toISOString().split('T')[0];
+  const todayLabel = new Date().toLocaleDateString('pl-PL', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  const formattedTodayLabel = todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1);
+  const todayAppts = useMemo(() => appointments.filter(a => a.date === today), [appointments, today]);
+  const completedToday = todayAppts.filter(a => ['completed', 'in-progress'].includes(mapStatus(a.status)));
+  const scheduledToday = todayAppts.filter(a => ['scheduled', 'confirmed'].includes(mapStatus(a.status)));
+  const cancelledToday = todayAppts.filter(a => mapStatus(a.status) === 'cancelled');
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [activeAptId, setActiveAptId] = useState<string | null>(null);
+  const upcomingAppointments = useMemo(() => {
+    return appointments
+      .filter(a => a.date >= today && ['scheduled', 'confirmed'].includes(mapStatus(a.status)))
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  }, [appointments, today]);
+  const activeApt = upcomingAppointments.find(a => a.id === activeAptId);
+  const openDetails = (id: string) => { setActiveAptId(id); setDetailsOpen(true); };
+
+  const capacitySlots = Math.max(1, staff.length * 8); // rough: 8 slots per staff/day
+  const occupancyPercent = Math.min(100, Math.round((todayAppts.length / capacitySlots) * 100));
 
   const stats = [
     {
@@ -40,13 +67,13 @@ export default function DashboardPage() {
       bg: 'bg-primary/10',
     },
     {
-      label: 'Przychód dziś',
-      value: `${todayRevenue} zł`,
-      icon: DollarSign,
-      change: '+15% vs śr.',
-      up: true,
-      color: 'text-success',
-      bg: 'bg-success/10',
+      label: 'Odwołane dziś',
+      value: cancelledToday.length,
+      icon: CalendarX2,
+      change: 'Anulowane wizyty',
+      up: false,
+      color: 'text-destructive',
+      bg: 'bg-destructive/10',
     },
     {
       label: 'Obłożenie',
@@ -59,7 +86,7 @@ export default function DashboardPage() {
     },
     {
       label: 'Aktywni klienci',
-      value: mockClients.length,
+      value: clients.length,
       icon: Users,
       change: '+1 nowy ten tydzień',
       up: true,
@@ -79,8 +106,8 @@ export default function DashboardPage() {
   });
 
   // Specialist workload
-  const specialistLoad = mockSpecialists.map(sp => {
-    const appts = todayAppts.filter(a => a.specialistName === sp.name);
+  const specialistLoad = staff.map((sp: any) => {
+    const appts = todayAppts.filter(a => a.staff?.name === sp.name);
     const totalMin = appts.reduce((s, a) => s + a.duration, 0);
     return { ...sp, appointments: appts.length, totalMinutes: totalMin };
   });
@@ -90,9 +117,9 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold lg:text-2xl">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Sobota, 21 lutego 2026</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{formattedTodayLabel}</p>
         </div>
-        <Badge variant="secondary" className="text-xs">Na żywo</Badge>
+        <Badge variant="secondary" className="text-xs">{loading ? 'Ładowanie...' : 'Na żywo'}</Badge>
       </div>
 
       {/* Stats cards */}
@@ -152,37 +179,50 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold">Nadchodzące wizyty</h2>
-              <Button variant="ghost" size="sm" className="rounded-xl h-8 text-xs text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-xl h-8 text-xs text-muted-foreground"
+                onClick={() => navigate('/panel/wizyty')}
+              >
                 Zobacz wszystkie
               </Button>
             </div>
-            <MotionList className="space-y-2">
-              {scheduledToday.slice(0, 4).map(apt => (
-                <MotionItem key={apt.id}>
-                  <HoverCard className="bg-card rounded-xl p-3.5 border border-border flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Clock className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm truncate">{apt.clientName}</p>
-                        <Badge variant="secondary" className={`text-[9px] shrink-0 ${statusColors[apt.status]}`}>
-                          {statusLabels[apt.status]}
-                        </Badge>
+            {upcomingAppointments.length === 0 ? (
+              <div className="bg-card rounded-xl border border-border p-4 text-sm text-muted-foreground">
+                Brak nadchodzących wizyt
+              </div>
+            ) : (
+              <MotionList className="space-y-2">
+                {upcomingAppointments.slice(0, 4).map(apt => (
+                  <MotionItem key={apt.id}>
+                    <HoverCard
+                      className="bg-card rounded-xl p-3.5 border border-border flex items-center gap-3 cursor-pointer"
+                      onClick={() => openDetails(apt.id)}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Clock className="w-4 h-4 text-primary" />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{apt.serviceName} • {apt.specialistName}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-semibold">{apt.time}</p>
-                      <p className="text-[10px] text-muted-foreground">{apt.duration} min</p>
-                    </div>
-                  </HoverCard>
-                </MotionItem>
-              ))}
-              {scheduledToday.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-8">Brak nadchodzących wizyt</p>
-              )}
-            </MotionList>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm truncate">{apt.client?.name}</p>
+                          <Badge variant="secondary" className={`text-[9px] shrink-0 ${statusColors[mapStatus(apt.status) as keyof typeof statusColors]}`}>
+                            {statusLabels[mapStatus(apt.status) as keyof typeof statusLabels]}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')} • {apt.staff?.name || 'Dowolny'}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold">{apt.time}</p>
+                        <p className="text-[10px] text-muted-foreground">{apt.duration} min</p>
+                      </div>
+                    </HoverCard>
+                  </MotionItem>
+                ))}
+              </MotionList>
+            )}
           </div>
         </div>
 
@@ -230,6 +270,73 @@ export default function DashboardPage() {
           </div>
         </motion.div>
       </div>
+
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Szczegóły wizyty</DialogTitle>
+            <DialogDescription>Podgląd wizyty (placeholder)</DialogDescription>
+          </DialogHeader>
+          {activeApt ? (
+            <div className="space-y-3">
+              {[
+                ['Klient', activeApt.client?.name],
+                ['Usługa', activeApt.appointmentServices?.map((s: any) => s.service.name).join(', ')],
+                ['Specjalista', activeApt.staff?.name || 'Dowolny'],
+                ['Data', activeApt.date],
+                ['Godzina', activeApt.time],
+                ['Status', statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]],
+              ].map(([label, value]) => (
+                <div key={label} className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">{label}</span>
+                  <span className="text-sm font-medium">{value}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl h-9"
+                  disabled={!activeApt.client?.phone}
+                  onClick={() => {
+                    if (!activeApt.client?.phone) return;
+                    window.open(`tel:${activeApt.client.phone}`, '_self');
+                  }}
+                >
+                  Zadzwoń
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl h-9"
+                  disabled={!activeApt.client?.phone}
+                  onClick={() => {
+                    if (!activeApt.client?.phone) return;
+                    window.open(`sms:${activeApt.client.phone}`, '_self');
+                  }}
+                >
+                  SMS
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Brak danych wizyty</p>
+          )}
+          <DialogFooter className="pt-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => setDetailsOpen(false)}>Zamknij</Button>
+            <Button
+              className="rounded-xl"
+              onClick={() => {
+                if (!activeApt?.id) return;
+                setDetailsOpen(false);
+                navigate(`/panel/wizyty?edit=${activeApt.id}`);
+              }}
+            >
+              Edytuj wizytę
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageTransition>
   );
 }
