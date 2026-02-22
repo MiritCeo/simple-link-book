@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { type TimeSlot } from '@/data/mockData';
-import { createPublicAppointment, getPublicAvailability, getPublicSalon } from '@/lib/api';
+import { createPublicAppointment, getPublicAvailability, getPublicSalon, registerClientFromBooking } from '@/lib/api';
 
 const STEPS = ['Usługa', 'Specjalista', 'Termin', 'Dane', 'Potwierdzenie'];
 
@@ -52,6 +52,8 @@ export default function SalonBooking() {
   const [showRegister, setShowRegister] = useState(false);
   const [registerData, setRegisterData] = useState({ password: '', confirmPassword: '' });
   const [registered, setRegistered] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [salon, setSalon] = useState<any | null>(null);
@@ -240,10 +242,29 @@ export default function SalonBooking() {
     }
   };
 
-  const handleRegister = () => {
-    if (registerData.password.length >= 8 && registerData.password === registerData.confirmPassword) {
+  const handleRegister = async () => {
+    if (!cancelToken) {
+      setRegisterError("Link do rezerwacji nie jest gotowy. Spróbuj za chwilę.");
+      return;
+    }
+    if (registerData.password.length < 8 || registerData.password !== registerData.confirmPassword) return;
+    setRegisterLoading(true);
+    setRegisterError(null);
+    try {
+      const res = await registerClientFromBooking({
+        token: cancelToken,
+        email: clientData.email || undefined,
+        password: registerData.password,
+      });
+      localStorage.setItem("client_token", res.token);
+      localStorage.setItem("client_id", res.clientId);
+      localStorage.setItem("client_salon_id", res.salonId);
       setRegistered(true);
       setShowRegister(false);
+    } catch (err: any) {
+      setRegisterError(err?.message || "Nie udało się utworzyć konta");
+    } finally {
+      setRegisterLoading(false);
     }
   };
 
@@ -497,6 +518,7 @@ export default function SalonBooking() {
                       <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-destructive mt-1">Hasła nie są identyczne</motion.p>
                     )}
                   </div>
+                  {registerError && <p className="text-xs text-destructive mb-3">{registerError}</p>}
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setShowRegister(false)} className="flex-1 h-12 rounded-xl">
                       Anuluj
@@ -504,10 +526,10 @@ export default function SalonBooking() {
                     <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
                       <Button 
                         onClick={handleRegister} 
-                        disabled={registerData.password.length < 8 || registerData.password !== registerData.confirmPassword || (!clientData.email)}
+                        disabled={registerLoading || registerData.password.length < 8 || registerData.password !== registerData.confirmPassword || (!clientData.email)}
                         className="w-full h-12 rounded-xl"
                       >
-                        Zarejestruj się
+                        {registerLoading ? 'Tworzenie...' : 'Zarejestruj się'}
                       </Button>
                     </motion.div>
                   </div>
@@ -534,6 +556,9 @@ export default function SalonBooking() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Twoje dane zostały zapamiętane. Następnym razem wystarczy się zalogować.
                 </p>
+                <Button onClick={() => navigate('/konto')} size="sm" className="mt-3 rounded-xl h-10 w-full">
+                  Przejdź do konta
+                </Button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -872,7 +897,7 @@ export default function SalonBooking() {
                       </p>
                       <button
                         className="text-sm font-semibold text-primary mt-2 inline-block hover:underline"
-                        onClick={() => navigate('/login')}
+                        onClick={() => navigate('/konto/logowanie')}
                       >
                         Zaloguj się
                       </button>

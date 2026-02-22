@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth";
 import publicRoutes from "./routes/public";
 import salonRoutes from "./routes/salon";
 import adminRoutes from "./routes/admin";
+import clientRoutes from "./routes/client";
 import auth from "./middleware/auth";
 import prisma from "./prisma";
 import { sendEventNotification } from "./notificationService";
@@ -19,6 +20,7 @@ app.use(express.json());
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/public", publicRoutes);
+app.use("/api/client", clientRoutes);
 app.use("/api/salon", auth, salonRoutes);
 app.use("/api/admin", auth, adminRoutes);
 

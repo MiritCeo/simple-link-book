@@ -8,7 +8,7 @@ const router = Router();
 
 const requireSuperAdmin = (req: AuthRequest, res: any) => {
   if (req.user?.role !== "SUPER_ADMIN") {
-    res.status(403).json({ error: "Forbidden" });
+    res.status(403).json({ error: "Brak dostępu" });
     return false;
   }
   return true;
@@ -43,15 +43,15 @@ router.post("/owners", async (req: AuthRequest, res) => {
     salonSlug: z.string().min(2),
   });
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane właściciela" });
 
   const { email, phone, password, salonName } = parsed.data;
   const salonSlug = parsed.data.salonSlug.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return res.status(409).json({ error: "Email already exists" });
+  if (existing) return res.status(409).json({ error: "Podany email jest już zajęty" });
 
   const existingSalon = await prisma.salon.findUnique({ where: { slug: salonSlug } });
-  if (existingSalon) return res.status(409).json({ error: "Salon slug already exists" });
+  if (existingSalon) return res.status(409).json({ error: "Taki slug salonu już istnieje" });
 
   const salon = await prisma.salon.create({
     data: {
@@ -98,10 +98,10 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
     password: z.string().min(8).optional(),
   });
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane aktualizacji" });
 
   const user = await prisma.user.findUnique({ where: { id: req.params.id } });
-  if (!user || user.role !== "OWNER") return res.status(404).json({ error: "Owner not found" });
+  if (!user || user.role !== "OWNER") return res.status(404).json({ error: "Nie znaleziono właściciela" });
 
   const data: any = {};
   if (parsed.data.active !== undefined) data.active = parsed.data.active;
@@ -121,3 +121,4 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
 });
 
 export default router;
+

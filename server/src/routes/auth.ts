@@ -22,13 +22,13 @@ const loginSchema = z.object({
 router.post("/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload" });
+    return res.status(400).json({ error: "Nieprawidłowe dane rejestracji" });
   }
 
   const { email, phone, password, salonName, salonSlug } = parsed.data;
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    return res.status(409).json({ error: "Email already exists" });
+    return res.status(409).json({ error: "Podany email jest już zajęty" });
   }
 
   const salon = await prisma.salon.create({
@@ -76,20 +76,20 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload" });
+    return res.status(400).json({ error: "Nieprawidłowe dane logowania" });
   }
 
   const { email, password } = parsed.data;
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
   }
   if (!user.active) {
-    return res.status(403).json({ error: "Account inactive" });
+    return res.status(403).json({ error: "Konto jest nieaktywne" });
   }
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
   }
 
   if (user.role === "SUPER_ADMIN") {
@@ -121,19 +121,19 @@ router.post("/login", async (req, res) => {
 router.post("/switch-salon", async (req, res) => {
   const schema = z.object({ salonId: z.string() });
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane salonu" });
 
   const token = req.headers.authorization?.startsWith("Bearer ")
     ? req.headers.authorization.slice(7)
     : null;
-  if (!token) return res.status(401).json({ error: "Unauthorized" });
+  if (!token) return res.status(401).json({ error: "Brak autoryzacji" });
 
   const payload = jwt.verify(token, process.env.JWT_SECRET || "dev") as { userId: string };
   const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  if (!user) return res.status(401).json({ error: "Brak autoryzacji" });
 
   if (user.role === "SUPER_ADMIN") {
-    return res.status(403).json({ error: "Forbidden" });
+    return res.status(403).json({ error: "Brak dostępu" });
   }
 
   let role: "OWNER" | "STAFF" | null = null;
@@ -145,7 +145,7 @@ router.post("/switch-salon", async (req, res) => {
     });
     role = link?.role || null;
   }
-  if (!role) return res.status(403).json({ error: "Forbidden" });
+  if (!role) return res.status(403).json({ error: "Brak dostępu" });
 
   const newToken = jwt.sign(
     { userId: user.id, salonId: parsed.data.salonId, role },
@@ -156,3 +156,4 @@ router.post("/switch-salon", async (req, res) => {
 });
 
 export default router;
+

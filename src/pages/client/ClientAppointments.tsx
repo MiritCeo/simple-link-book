@@ -1,24 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Clock, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { statusLabels, statusColors, type Appointment } from '@/data/mockData';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
-
-const upcoming: Appointment[] = [
-  { id: 'c1', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Strzyżenie damskie', specialistName: 'Anna Kowalska', date: '2026-02-24', time: '10:00', duration: 45, status: 'confirmed' },
-  { id: 'c2', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Koloryzacja', specialistName: 'Marta Nowak', date: '2026-03-05', time: '14:00', duration: 120, status: 'scheduled' },
-];
-
-const past: Appointment[] = [
-  { id: 'p1', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Strzyżenie damskie', specialistName: 'Anna Kowalska', date: '2026-02-14', time: '11:00', duration: 45, status: 'completed' },
-  { id: 'p2', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Manicure hybrydowy', specialistName: 'Karolina Wiśniewska', date: '2026-02-07', time: '15:00', duration: 60, status: 'completed' },
-  { id: 'p3', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Balayage', specialistName: 'Anna Kowalska', date: '2026-01-20', time: '09:00', duration: 180, status: 'completed' },
-  { id: 'p4', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Henna brwi i rzęs', specialistName: 'Ewa Zielińska', date: '2026-01-10', time: '16:00', duration: 30, status: 'completed' },
-  { id: 'p5', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Strzyżenie damskie', specialistName: 'Anna Kowalska', date: '2025-12-20', time: '10:00', duration: 45, status: 'completed' },
-  { id: 'p6', clientName: 'Joanna Majewska', clientPhone: '+48 501 234 567', serviceName: 'Pedicure', specialistName: 'Karolina Wiśniewska', date: '2025-12-10', time: '13:00', duration: 75, status: 'cancelled' },
-];
+import { getClientAppointments, getClientMe } from '@/lib/api';
 
 const tabs = [
   { key: 'upcoming', label: 'Nadchodzące' },
@@ -28,14 +15,78 @@ const tabs = [
 const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
 const monthNames = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
 
+const mapStatus = (status?: string): Appointment['status'] => {
+  switch (status) {
+    case 'CONFIRMED':
+      return 'confirmed';
+    case 'IN_PROGRESS':
+      return 'in-progress';
+    case 'COMPLETED':
+      return 'completed';
+    case 'CANCELLED':
+      return 'cancelled';
+    case 'NO_SHOW':
+      return 'no-show';
+    case 'SCHEDULED':
+    default:
+      return 'scheduled';
+  }
+};
+
+const toDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`);
+
+type ClientAppointment = Appointment & { cancelToken?: string | null };
+
 export default function ClientAppointments() {
   const [activeTab, setActiveTab] = useState('upcoming');
-  const appointments = activeTab === 'upcoming' ? upcoming : past;
+  const [appointments, setAppointments] = useState<ClientAppointment[]>([]);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return `${dayNames[d.getDay()]}, ${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
   };
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([getClientMe(), getClientAppointments()])
+      .then(([meRes, apptRes]) => {
+        if (!mounted) return;
+        const mapped = (apptRes.appointments || []).map((apt: any) => ({
+          id: apt.id,
+          clientName: meRes.client?.name || '',
+          clientPhone: meRes.client?.phone || '',
+          serviceName: apt.appointmentServices?.map((s: any) => s.service?.name).filter(Boolean).join(' + ') || 'Usługa',
+          specialistName: apt.staff?.name || 'Dowolny',
+          date: apt.date,
+          time: apt.time,
+          duration: apt.duration || 0,
+          status: mapStatus(apt.status),
+          cancelToken: apt.cancelToken || null,
+        })) as ClientAppointment[];
+        setAppointments(mapped);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAppointments([]);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const now = new Date();
+  const upcoming = useMemo(
+    () => appointments
+      .filter(a => ['scheduled', 'confirmed', 'in-progress'].includes(a.status))
+      .filter(a => toDateTime(a.date, a.time) >= now)
+      .sort((a, b) => toDateTime(a.date, a.time).getTime() - toDateTime(b.date, b.time).getTime()),
+    [appointments],
+  );
+  const past = useMemo(
+    () => appointments
+      .filter(a => ['completed', 'cancelled', 'no-show'].includes(a.status) || toDateTime(a.date, a.time) < now)
+      .sort((a, b) => toDateTime(b.date, b.time).getTime() - toDateTime(a.date, a.time).getTime()),
+    [appointments],
+  );
+  const visibleAppointments = activeTab === 'upcoming' ? upcoming : past;
 
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6 pb-8">
@@ -65,10 +116,10 @@ export default function ClientAppointments() {
       </div>
 
       <MotionList className="space-y-3" key={activeTab}>
-        {appointments.length === 0 && (
+        {visibleAppointments.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-12">Brak wizyt</p>
         )}
-        {appointments.map(apt => (
+        {visibleAppointments.map(apt => (
           <MotionItem key={apt.id}>
             <HoverCard className="bg-card rounded-2xl p-4 border border-border">
               <div className="flex items-start justify-between mb-2">
@@ -92,10 +143,22 @@ export default function ClientAppointments() {
               </div>
               {activeTab === 'upcoming' && (
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs flex-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl h-9 text-xs flex-1"
+                    disabled={!apt.cancelToken}
+                    onClick={() => apt.cancelToken && window.open(`/cancel/${apt.cancelToken}`, '_blank', 'noopener,noreferrer')}
+                  >
                     Przełóż
                   </Button>
-                  <Button variant="ghost" size="sm" className="rounded-xl h-9 text-xs text-destructive">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-xl h-9 text-xs text-destructive"
+                    disabled={!apt.cancelToken}
+                    onClick={() => apt.cancelToken && window.open(`/cancel/${apt.cancelToken}`, '_blank', 'noopener,noreferrer')}
+                  >
                     Odwołaj
                   </Button>
                 </div>

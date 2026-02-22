@@ -1,29 +1,83 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User, Mail, Phone, Lock, Check, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { PageTransition, MotionList, MotionItem } from '@/components/motion';
+import { PageTransition } from '@/components/motion';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import { changeClientPassword, getClientMe, updateClientProfile } from '@/lib/api';
 
 export default function ClientProfile() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState({
-    name: 'Joanna Majewska',
-    phone: '+48 501 234 567',
-    email: 'joanna@example.com',
+    name: '',
+    phone: '',
+    email: '',
   });
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingPassword, setEditingPassword] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
-  const handleSaveProfile = () => {
-    setEditingProfile(false);
-    toast.success('Dane zostały zaktualizowane');
+  const formatPhonePL = (input: string) => {
+    const digits = input.replace(/\D/g, '');
+    const withCountry = digits.startsWith('48') ? digits : `48${digits}`;
+    const limited = withCountry.slice(0, 11);
+    const rest = limited.slice(2);
+    const parts = [rest.slice(0, 3), rest.slice(3, 6), rest.slice(6, 9)].filter(Boolean);
+    return `+48 ${parts.join(' ')}`.trim();
   };
 
-  const handleChangePassword = () => {
+  const isValidPhonePL = (value: string) => /^\+48\s?\d{3}\s?\d{3}\s?\d{3}$/.test(value);
+
+  useEffect(() => {
+    let mounted = true;
+    getClientMe()
+      .then(res => {
+        if (!mounted) return;
+        setProfile({
+          name: res.client?.name || '',
+          phone: res.client?.phone || '',
+          email: res.client?.email || '',
+        });
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSaveProfile = async () => {
+    if (!isValidPhonePL(profile.phone)) {
+      toast.error('Podaj poprawny numer telefonu w formacie +48 123 456 789');
+      return;
+    }
+    try {
+      setSavingProfile(true);
+      const res = await updateClientProfile({
+        name: profile.name,
+        phone: profile.phone,
+        email: profile.email || undefined,
+      });
+      setProfile({
+        name: res.client?.name || '',
+        phone: res.client?.phone || '',
+        email: res.client?.email || '',
+      });
+      setEditingProfile(false);
+      toast.success('Dane zostały zaktualizowane');
+    } catch (err: any) {
+      if (err?.message?.includes('format')) {
+        toast.error('Podaj numer telefonu w formacie +48 123 456 789');
+      } else {
+        toast.error(err?.message || 'Nie udało się zapisać danych');
+      }
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
     if (passwords.new.length < 8) {
       toast.error('Hasło musi mieć min. 8 znaków');
       return;
@@ -32,9 +86,17 @@ export default function ClientProfile() {
       toast.error('Hasła nie są identyczne');
       return;
     }
-    setEditingPassword(false);
-    setPasswords({ current: '', new: '', confirm: '' });
-    toast.success('Hasło zostało zmienione');
+    try {
+      setSavingPassword(true);
+      await changeClientPassword({ currentPassword: passwords.current, newPassword: passwords.new });
+      setEditingPassword(false);
+      setPasswords({ current: '', new: '', confirm: '' });
+      toast.success('Hasło zostało zmienione');
+    } catch (err: any) {
+      toast.error(err?.message || 'Nie udało się zmienić hasła');
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   return (
@@ -86,7 +148,12 @@ export default function ClientProfile() {
                 <Phone className="w-3.5 h-3.5 text-muted-foreground" />Telefon
               </label>
               {editingProfile ? (
-                <Input value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} className="h-11 rounded-xl" />
+                <Input
+                  value={profile.phone}
+                  onChange={e => setProfile(p => ({ ...p, phone: formatPhonePL(e.target.value) }))}
+                  className="h-11 rounded-xl"
+                  placeholder="+48 123 456 789"
+                />
               ) : (
                 <p className="text-sm text-muted-foreground bg-muted rounded-xl px-3 py-2.5">{profile.phone}</p>
               )}
@@ -105,12 +172,17 @@ export default function ClientProfile() {
 
           {editingProfile && (
             <div className="flex gap-2 mt-4">
-              <Button variant="outline" onClick={() => setEditingProfile(false)} className="flex-1 h-11 rounded-xl">
+              <Button
+                variant="outline"
+                onClick={() => setEditingProfile(false)}
+                className="flex-1 h-11 rounded-xl"
+                disabled={savingProfile}
+              >
                 Anuluj
               </Button>
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                <Button onClick={handleSaveProfile} className="w-full h-11 rounded-xl gap-1.5">
-                  <Check className="w-4 h-4" />Zapisz
+                <Button onClick={handleSaveProfile} className="w-full h-11 rounded-xl gap-1.5" disabled={savingProfile}>
+                  <Check className="w-4 h-4" />{savingProfile ? 'Zapisywanie...' : 'Zapisz'}
                 </Button>
               </motion.div>
             </div>
@@ -155,12 +227,17 @@ export default function ClientProfile() {
                   )}
                 </div>
                 <div className="flex gap-2 mt-2">
-                  <Button variant="outline" onClick={() => { setEditingPassword(false); setPasswords({ current: '', new: '', confirm: '' }); }} className="flex-1 h-11 rounded-xl">
+                  <Button
+                    variant="outline"
+                    onClick={() => { setEditingPassword(false); setPasswords({ current: '', new: '', confirm: '' }); }}
+                    className="flex-1 h-11 rounded-xl"
+                    disabled={savingPassword}
+                  >
                     Anuluj
                   </Button>
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="flex-1">
-                    <Button onClick={handleChangePassword} className="w-full h-11 rounded-xl">
-                      Zmień hasło
+                    <Button onClick={handleChangePassword} className="w-full h-11 rounded-xl" disabled={savingPassword}>
+                      {savingPassword ? 'Zapisywanie...' : 'Zmień hasło'}
                     </Button>
                   </motion.div>
                 </div>
@@ -182,7 +259,12 @@ export default function ClientProfile() {
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                 <Button
                   variant="outline"
-                  onClick={() => navigate('/s/studio-bella')}
+                  onClick={() => {
+                    localStorage.removeItem('client_token');
+                    localStorage.removeItem('client_id');
+                    localStorage.removeItem('client_salon_id');
+                    navigate('/konto/logowanie');
+                  }}
                   className="w-full rounded-xl h-11 gap-2 justify-start"
                 >
                   <LogOut className="w-4 h-4" />Wyloguj się

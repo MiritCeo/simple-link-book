@@ -19,7 +19,7 @@ const normalizeSender = (input?: string | null) => {
 
 const sendSmsRequest = async (to: string, message: string, from?: string | null) => {
   const fetchFn = getFetch();
-  if (!fetchFn) return { ok: false, error: "Fetch not available" };
+  if (!fetchFn) return { ok: false, error: "Brak dostępnego fetch" };
 
   const body = new URLSearchParams({
     to,
@@ -40,7 +40,7 @@ const sendSmsRequest = async (to: string, message: string, from?: string | null)
 
   const text = await res.text().catch(() => "");
   if (!res.ok) {
-    return { ok: false, error: text || `SMSAPI error: ${res.status}` };
+    return { ok: false, error: text || `Błąd SMSAPI: ${res.status}` };
   }
   return { ok: true };
 };
@@ -57,16 +57,16 @@ export async function sendSms(to: string, message: string, senderName?: string |
       const fallback = await sendSmsRequest(to, message, null);
       if (fallback.ok) return fallback;
       // eslint-disable-next-line no-console
-      console.warn("SMSAPI error", { primary: primary.error, fallback: fallback.error });
+      console.warn("Błąd SMSAPI", { primary: primary.error, fallback: fallback.error });
       return fallback;
     }
     // eslint-disable-next-line no-console
-    console.warn("SMSAPI error", primary.error);
+    console.warn("Błąd SMSAPI", primary.error);
     return primary;
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.warn("SMSAPI error", err);
-    return { ok: false, error: "SMSAPI error" };
+    console.warn("Błąd SMSAPI", err);
+    return { ok: false, error: "Błąd SMSAPI" };
   }
 }
 
@@ -98,3 +98,4 @@ export async function sendEmail(to: string, subject: string, html: string) {
     console.warn("SendGrid error", err);
   }
 }
+

@@ -1,7 +1,18 @@
-import { Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import ClientBottomNav, { ClientSidebar } from './ClientBottomNav';
 
 export default function ClientLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const token = localStorage.getItem("client_token");
+    if (!token) {
+      navigate("/konto/logowanie", { replace: true, state: { from: location.pathname } });
+    }
+  }, [navigate, location.pathname]);
+
   return (
     <div className="min-h-screen bg-background flex">
       <ClientSidebar />

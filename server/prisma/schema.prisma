@@ -143,6 +143,33 @@ model Client {
   salonId String
 
   appointments Appointment[]
+  account      ClientAccount?
+}
+
+model ClientAccount {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  client   Client @relation(fields: [clientId], references: [id])
+  clientId String @unique
+
+  resets ClientPasswordReset[]
+}
+
+model ClientPasswordReset {
+  id              String   @id @default(cuid())
+  token           String   @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  clientAccount   ClientAccount @relation(fields: [clientAccountId], references: [id])
+  clientAccountId String
+
+  @@index([clientAccountId])
 }
 
 model Appointment {

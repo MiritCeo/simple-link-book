@@ -178,6 +178,22 @@ async function seed() {
     })),
   );
 
+  const primaryClient = clientRecords.find(c => c.email);
+  if (primaryClient) {
+    const existingAccount = await prisma.clientAccount.findUnique({ where: { clientId: primaryClient.id } });
+    if (!existingAccount) {
+      const passwordHash = await bcrypt.hash("Client123!", 10);
+      await prisma.clientAccount.create({
+        data: {
+          clientId: primaryClient.id,
+          email: primaryClient.email!,
+          passwordHash,
+          active: true,
+        },
+      });
+    }
+  }
+
   const appts = [
     { client: "Joanna Majewska", staff: "Anna Kowalska", service: "Strzyżenie damskie", date: "2026-02-21", time: "09:00", duration: 45, status: "CONFIRMED" },
     { client: "Katarzyna Wójcik", staff: "Marta Nowak", service: "Koloryzacja", date: "2026-02-21", time: "10:00", duration: 120, status: "IN_PROGRESS" },

@@ -2,6 +2,8 @@ export const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localho
 
 const getToken = () => localStorage.getItem("auth_token");
 const setToken = (token: string) => localStorage.setItem("auth_token", token);
+const getClientToken = () => localStorage.getItem("client_token");
+const setClientToken = (token: string) => localStorage.setItem("client_token", token);
 
 type FetchOptions = RequestInit & { auth?: boolean };
 
@@ -27,6 +29,26 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   return res.json();
 }
 
+async function clientApiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  const token = getClientToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function login(email: string, password: string) {
   const data = await apiFetch<{ token: string; salonId: string | null; userId: string; role: "SUPER_ADMIN" | "OWNER" | "STAFF"; salons: any[] }>(
     "/api/auth/login",
@@ -37,6 +59,53 @@ export async function login(email: string, password: string) {
   if (data.salonId) localStorage.setItem("auth_salon_id", data.salonId);
   if (data.salons) localStorage.setItem("auth_salons", JSON.stringify(data.salons));
   return data;
+}
+
+export async function clientLogin(email: string, password: string) {
+  const data = await apiFetch<{ token: string; clientId: string; salonId: string }>(
+    "/api/client/login",
+    { method: "POST", body: JSON.stringify({ email, password }) },
+  );
+  setClientToken(data.token);
+  localStorage.setItem("client_id", data.clientId);
+  localStorage.setItem("client_salon_id", data.salonId);
+  return data;
+}
+
+export async function getClientMe() {
+  return clientApiFetch<{ client: any }>("/api/client/me");
+}
+
+export async function getClientAppointments() {
+  return clientApiFetch<{ appointments: any[] }>("/api/client/appointments");
+}
+
+export async function updateClientProfile(payload: { name: string; phone: string; email?: string }) {
+  return clientApiFetch<{ client: any }>("/api/client/me", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function changeClientPassword(payload: { currentPassword: string; newPassword: string }) {
+  return clientApiFetch<{ ok: boolean }>("/api/client/password", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function requestClientPasswordReset(email: string) {
+  return apiFetch<{ ok: boolean; token?: string }>("/api/client/password-reset", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function confirmClientPasswordReset(payload: { token: string; newPassword: string }) {
+  return apiFetch<{ ok: boolean }>("/api/client/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function switchSalon(salonId: string) {
@@ -76,6 +145,13 @@ export async function createPublicAppointment(
   },
 ) {
   return apiFetch<{ appointment: any; cancelToken?: string }>(`/api/public/salons/${slug}/appointments`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function registerClientFromBooking(payload: { token: string; email?: string; password: string }) {
+  return apiFetch<{ ok: boolean; token: string; clientId: string; salonId: string }>("/api/public/client/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../prisma";
 import { ensureCancelToken, sendEventNotification } from "../notificationService";
@@ -97,7 +99,7 @@ const validateAppointmentAvailability = async ({
 
   const exception = salonExceptions.find(ex => ex.date === date);
   if (exception?.closed) {
-    return { ok: false, error: "Salon is closed on this date" };
+    return { ok: false, error: "Salon jest zamknięty w tym dniu" };
   }
 
   const weekday = (new Date(date).getDay() + 6) % 7;
@@ -117,13 +119,13 @@ const validateAppointmentAvailability = async ({
     const staffException = staffExceptions.find(ex => ex.date === date);
     if (staffException) {
       if (!staffException.start || !staffException.end) {
-        return { ok: false, error: "Staff is not available at this time" };
+        return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
       }
       staffWindow = { start: staffException.start, end: staffException.end };
     } else if (availability.length > 0) {
       const day = availability.find(a => a.weekday === weekday);
       if (!day || !day.active || !day.start || !day.end) {
-        return { ok: false, error: "Staff is not available at this time" };
+        return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
       }
       staffWindow = { start: day.start, end: day.end };
     }
@@ -131,7 +133,7 @@ const validateAppointmentAvailability = async ({
 
   const window = staffWindow || salonWindow;
   if (!window) {
-    return { ok: false, error: "Time not available" };
+    return { ok: false, error: "Termin jest niedostępny" };
   }
 
   const buffers = getBufferMinutes(salonBreaks as any);
@@ -141,13 +143,13 @@ const validateAppointmentAvailability = async ({
   const windowStart = toMinutes(window.start);
   const windowEnd = toMinutes(window.end);
   if (start < windowStart || end > windowEnd) {
-    return { ok: false, error: "Time not available" };
+    return { ok: false, error: "Termin jest niedostępny" };
   }
 
   const breakWindows = getBreakWindowsForDate(date, salonBreaks as any);
   const breakOverlap = breakWindows.some(w => hasOverlap(start, end, w.start, w.end));
   if (breakOverlap) {
-    return { ok: false, error: "Time falls within a break" };
+    return { ok: false, error: "Termin wypada w czasie przerwy" };
   }
 
   if (staffId) {
@@ -166,7 +168,7 @@ const validateAppointmentAvailability = async ({
       return hasOverlap(start, end, s, e);
     });
     if (hasConflict) {
-      return { ok: false, error: "Staff is not available at this time" };
+      return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
     }
   }
 
@@ -313,7 +315,7 @@ router.get("/salons/:slug", async (req, res) => {
   });
 
   if (!salon) {
-    return res.status(404).json({ error: "Salon not found" });
+    return res.status(404).json({ error: "Nie znaleziono salonu o podanym linku" });
   }
 
   return res.json({
@@ -333,16 +335,16 @@ router.get("/salons/:slug/availability", async (req, res) => {
     staffId: z.string().optional(),
   });
   const parsed = schema.safeParse(req.query);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid query" });
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe parametry" });
 
   const slug = req.params.slug.toLowerCase();
   const salon = await prisma.salon.findUnique({ where: { slug } });
-  if (!salon) return res.status(404).json({ error: "Salon not found" });
+  if (!salon) return res.status(404).json({ error: "Nie znaleziono salonu o podanym linku" });
 
   const service = await prisma.service.findFirst({
     where: { salonId: salon.id, id: parsed.data.serviceId, active: true },
   });
-  if (!service) return res.status(404).json({ error: "Service not found" });
+  if (!service) return res.status(404).json({ error: "Nie znaleziono usługi w tym salonie" });
 
   const staffList = await prisma.staff.findMany({
     where: {
@@ -356,7 +358,7 @@ router.get("/salons/:slug/availability", async (req, res) => {
 
   const staffIds = staffList.map(s => s.id);
   if (parsed.data.staffId && !staffIds.includes(parsed.data.staffId)) {
-    return res.status(400).json({ error: "Staff not found" });
+    return res.status(400).json({ error: "Nie znaleziono pracownika w tym salonie" });
   }
 
   const [salonHours, salonExceptions, salonBreaks, staffAvailability, staffExceptions, appointments] = await Promise.all([
@@ -433,23 +435,23 @@ router.post("/salons/:slug/appointments", async (req, res) => {
     }),
   });
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane rezerwacji" });
 
   const slug = req.params.slug.toLowerCase();
   const salon = await prisma.salon.findUnique({ where: { slug } });
-  if (!salon) return res.status(404).json({ error: "Salon not found" });
+  if (!salon) return res.status(404).json({ error: "Nie znaleziono salonu o podanym linku" });
 
   const ids = parsed.data.serviceIds?.length
     ? parsed.data.serviceIds
     : parsed.data.serviceId
       ? [parsed.data.serviceId]
       : [];
-  if (!ids.length) return res.status(400).json({ error: "No services selected" });
+  if (!ids.length) return res.status(400).json({ error: "Wybierz przynajmniej jedną usługę" });
 
   const services = await prisma.service.findMany({
     where: { salonId: salon.id, id: { in: ids }, active: true },
   });
-  if (services.length !== ids.length) return res.status(400).json({ error: "Services not found" });
+  if (services.length !== ids.length) return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
 
   const duration = services.reduce((sum, s) => sum + s.duration, 0);
 
@@ -481,13 +483,13 @@ router.post("/salons/:slug/appointments", async (req, res) => {
       where: { id: parsed.data.staffId, salonId: salon.id, active: true },
       select: { id: true },
     });
-    if (!staffExists) return res.status(400).json({ error: "Staff not found" });
+    if (!staffExists) return res.status(400).json({ error: "Nie znaleziono pracownika w tym salonie" });
 
     const staffServiceCount = await prisma.staffService.count({
       where: { staffId: parsed.data.staffId, serviceId: { in: ids } },
     });
     if (staffServiceCount !== ids.length) {
-      return res.status(400).json({ error: "Staff does not perform selected services" });
+      return res.status(400).json({ error: "Pracownik nie wykonuje wybranych usług" });
     }
   }
 
@@ -499,7 +501,7 @@ router.post("/salons/:slug/appointments", async (req, res) => {
     staffId: parsed.data.staffId,
   });
   if (!availability.ok) {
-    return res.status(409).json({ error: availability.error || "Time not available" });
+    return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
   }
 
   const appointment = await prisma.appointment.create({
@@ -548,7 +550,7 @@ router.get("/cancel/:token", async (req, res) => {
       },
     },
   });
-  if (!record) return res.status(404).json({ error: "Token not found" });
+  if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
   return res.json({ appointment: record.appointment });
 });
 
@@ -558,7 +560,7 @@ router.get("/cancel/:token/availability", async (req, res) => {
     date: z.string().min(8),
   });
   const parsed = schema.safeParse(req.query);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid query" });
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe parametry" });
 
   const record = await prisma.appointmentToken.findFirst({
     where: {
@@ -569,7 +571,7 @@ router.get("/cancel/:token/availability", async (req, res) => {
     },
     include: { appointment: true },
   });
-  if (!record) return res.status(404).json({ error: "Token not found" });
+  if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
 
   const slots = await buildSlotsForAppointment({
     id: record.appointment.id,
@@ -588,7 +590,7 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
     time: z.string().min(4),
   });
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane zmiany terminu" });
 
   const record = await prisma.appointmentToken.findFirst({
     where: {
@@ -608,12 +610,12 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
       },
     },
   });
-  if (!record) return res.status(404).json({ error: "Token not found" });
+  if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
   if (record.appointment.status === "CANCELLED") {
-    return res.status(400).json({ error: "Appointment is cancelled" });
+    return res.status(400).json({ error: "Wizyta jest anulowana" });
   }
   if (["COMPLETED", "NO_SHOW"].includes(record.appointment.status)) {
-    return res.status(400).json({ error: "Appointment cannot be rescheduled" });
+    return res.status(400).json({ error: "Nie można przełożyć tej wizyty" });
   }
 
   const availability = await validateAppointmentAvailability({
@@ -624,7 +626,7 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
     staffId: record.appointment.staffId,
   });
   if (!availability.ok) {
-    return res.status(409).json({ error: availability.error || "Time not available" });
+    return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
   }
 
   const updated = await prisma.appointment.update({
@@ -667,7 +669,7 @@ router.post("/cancel/:token", async (req, res) => {
       },
     },
   });
-  if (!record) return res.status(404).json({ error: "Token not found" });
+  if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
 
   const appointment = record.appointment;
   if (appointment.status !== "CANCELLED") {
@@ -692,4 +694,64 @@ router.post("/cancel/:token", async (req, res) => {
   return res.json({ ok: true });
 });
 
+router.post("/client/register", async (req, res) => {
+  const schema = z.object({
+    token: z.string().min(10),
+    email: z.string().email().optional(),
+    password: z.string().min(8),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane rejestracji klienta" });
+
+  const record = await prisma.appointmentToken.findFirst({
+    where: {
+      token: parsed.data.token,
+      type: "CANCEL",
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    include: { appointment: { include: { client: true } } },
+  });
+  if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
+
+  const client = record.appointment.client;
+  const existingAccount = await prisma.clientAccount.findUnique({ where: { clientId: client.id } });
+  if (existingAccount) {
+    return res.status(409).json({ error: "Konto klienta już istnieje" });
+  }
+
+  const finalEmail = parsed.data.email || client.email;
+  if (!finalEmail) {
+    return res.status(400).json({ error: "Podaj email do konta" });
+  }
+
+  const emailExists = await prisma.clientAccount.findUnique({ where: { email: finalEmail } });
+  if (emailExists) {
+    return res.status(409).json({ error: "Podany email jest już zajęty" });
+  }
+
+  if (client.email !== finalEmail) {
+    await prisma.client.update({
+      where: { id: client.id },
+      data: { email: finalEmail },
+    });
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+  await prisma.clientAccount.create({
+    data: { clientId: client.id, email: finalEmail, passwordHash, active: true },
+  });
+
+  const token = jwt.sign(
+    { clientId: client.id, salonId: client.salonId, role: "CLIENT" },
+    process.env.JWT_SECRET || "dev",
+    { expiresIn: "14d" },
+  );
+
+  return res.json({ ok: true, token, clientId: client.id, salonId: client.salonId });
+});
+
 export default router;
+
+
+
