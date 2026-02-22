@@ -76,8 +76,8 @@ const App = () => (
             <Route path="ustawienia/przerwy" element={<BreaksSettingsPage />} />
           </Route>
 
-          {/* Root redirects to demo booking page */}
-          <Route path="/" element={<Navigate to="/s/studio-bella" replace />} />
+          {/* Root redirects to login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

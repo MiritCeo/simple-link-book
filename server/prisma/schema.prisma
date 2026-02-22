@@ -53,7 +53,7 @@ model Salon {
   hours       String
   description String
   accentColor String?
-  logoUrl     String?
+  logoUrl     String?  @db.Text
   createdAt   DateTime @default(now())
 
   users        User[]
