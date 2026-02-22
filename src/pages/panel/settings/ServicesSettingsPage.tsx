@@ -75,7 +75,7 @@ export default function ServicesSettingsPage() {
         </Button>
         <div>
           <h1 className="text-xl font-bold lg:text-2xl">Usługi</h1>
-          <p className="text-sm text-muted-foreground">CRUD usług (placeholder)</p>
+          <p className="text-sm text-muted-foreground">Zarządzaj usługami i cenami</p>
         </div>
       </div>
 
@@ -168,7 +168,7 @@ export default function ServicesSettingsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>{activeService ? 'Edytuj usługę' : 'Dodaj usługę'}</DialogTitle>
-            <DialogDescription>Formularz CRUD (placeholder)</DialogDescription>
+            <DialogDescription>Formularz usługi</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">

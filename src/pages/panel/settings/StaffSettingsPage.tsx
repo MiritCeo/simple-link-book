@@ -74,7 +74,7 @@ export default function StaffSettingsPage() {
         </Button>
         <div>
           <h1 className="text-xl font-bold lg:text-2xl">Pracownicy</h1>
-          <p className="text-sm text-muted-foreground">CRUD pracowników (placeholder)</p>
+          <p className="text-sm text-muted-foreground">Zarządzaj zespołem i kontami</p>
         </div>
       </div>
 
@@ -226,7 +226,7 @@ export default function StaffSettingsPage() {
               <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+48 500 000 000" className="h-11 rounded-xl" />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1.5 block">Usługi (placeholder)</label>
+              <label className="text-sm font-medium mb-1.5 block">Usługi</label>
               <Input
                 placeholder="Szukaj usługi..."
                 value={serviceSearch}

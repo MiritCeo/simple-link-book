@@ -49,7 +49,7 @@ export default function BreaksSettingsPage() {
         </Button>
         <div>
           <h1 className="text-xl font-bold lg:text-2xl">Przerwy i bufory</h1>
-          <p className="text-sm text-muted-foreground">CRUD przerw i buforów (placeholder)</p>
+          <p className="text-sm text-muted-foreground">Konfiguruj przerwy i bufory czasowe</p>
         </div>
       </div>
 
@@ -177,7 +177,7 @@ export default function BreaksSettingsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Dodaj przerwę</DialogTitle>
-            <DialogDescription>Formularz CRUD (placeholder)</DialogDescription>
+            <DialogDescription>Formularz przerwy</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -235,7 +235,7 @@ export default function BreaksSettingsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Dodaj bufor</DialogTitle>
-            <DialogDescription>Formularz CRUD (placeholder)</DialogDescription>
+            <DialogDescription>Formularz bufora</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>

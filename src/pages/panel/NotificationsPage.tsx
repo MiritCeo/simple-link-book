@@ -199,7 +199,7 @@ export default function NotificationsPage() {
           >
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold">Szablony wiadomości</h2>
-              <span className="text-[10px] text-muted-foreground">placeholder</span>
+              <span className="text-[10px] text-muted-foreground">zarządzanie treścią</span>
             </div>
             <div className="space-y-2">
               {templates.map(tpl => (

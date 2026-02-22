@@ -266,7 +266,12 @@ router.post("/user-salons", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
 
   const userId = req.user!.userId;
-  const salon = await prisma.salon.create({ data: parsed.data });
+  const salon = await prisma.salon.create({
+    data: {
+      ...parsed.data,
+      slug: parsed.data.slug.trim().toLowerCase(),
+    },
+  });
   await prisma.userSalon.create({
     data: { userId, salonId: salon.id, role: "OWNER" },
   });

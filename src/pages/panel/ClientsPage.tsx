@@ -247,7 +247,7 @@ export default function ClientsPage() {
                       variant="outline"
                       size="sm"
                       className="rounded-xl gap-1.5 h-9"
-                      onClick={() => toast('Połączenie z klientem (placeholder)')}
+                      onClick={() => toast('Połączenie z klientem')}
                     >
                       <Phone className="w-3.5 h-3.5" />Zadzwoń
                     </Button>
@@ -257,7 +257,7 @@ export default function ClientsPage() {
                       variant="outline"
                       size="sm"
                       className="rounded-xl gap-1.5 h-9"
-                      onClick={() => toast('Email do klienta (placeholder)')}
+                      onClick={() => toast('Email do klienta')}
                     >
                       <Mail className="w-3.5 h-3.5" />Email
                     </Button>
@@ -320,7 +320,7 @@ export default function ClientsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Dodaj klienta</DialogTitle>
-            <DialogDescription>Formularz CRUD (placeholder)</DialogDescription>
+            <DialogDescription>Formularz klienta</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -370,7 +370,7 @@ export default function ClientsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Profil klienta</DialogTitle>
-            <DialogDescription>Podgląd klienta (placeholder)</DialogDescription>
+            <DialogDescription>Podgląd klienta</DialogDescription>
           </DialogHeader>
           {activeClient ? (
             <div className="space-y-3">

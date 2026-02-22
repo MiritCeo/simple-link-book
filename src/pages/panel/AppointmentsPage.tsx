@@ -501,7 +501,7 @@ export default function AppointmentsPage() {
                     variant="outline"
                     size="icon"
                     className="rounded-xl h-8 w-8"
-                    onClick={() => toast('Połączenie z klientem (placeholder)')}
+                    onClick={() => toast('Połączenie z klientem')}
                   >
                     <Phone className="w-3.5 h-3.5" /><span className="lg:hidden">Zadzwoń</span>
                   </Button>
@@ -555,7 +555,7 @@ export default function AppointmentsPage() {
         <DialogContent className="rounded-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Szczegóły wizyty</DialogTitle>
-            <DialogDescription>Podgląd wizyty (placeholder)</DialogDescription>
+            <DialogDescription>Szczegóły wizyty</DialogDescription>
           </DialogHeader>
           {activeApt ? (
             editMode ? (

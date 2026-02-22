@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Phone, ArrowLeft, Check, Search, User, CalendarDays, ChevronLeft, ChevronRight, CalendarPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,9 @@ const scaleIn = {
 };
 
 export default function SalonBooking() {
+  const navigate = useNavigate();
   const { slug } = useParams();
+  const normalizedSlug = slug?.toLowerCase();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1); // 1=forward, -1=back
   const [selectedService, setSelectedService] = useState<any | null>(null);
@@ -105,11 +107,15 @@ export default function SalonBooking() {
   const [slotsError, setSlotsError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (slug && normalizedSlug && slug !== normalizedSlug) {
+      navigate(`/s/${normalizedSlug}`, { replace: true });
+      return;
+    }
     let mounted = true;
     setLoadingSalon(true);
     setSalonError(null);
-    if (!slug) return;
-    getPublicSalon(slug)
+    if (!normalizedSlug) return;
+    getPublicSalon(normalizedSlug)
       .then(data => {
         if (!mounted) return;
         setSalon(data.salon);
@@ -122,7 +128,7 @@ export default function SalonBooking() {
       })
       .finally(() => mounted && setLoadingSalon(false));
     return () => { mounted = false; };
-  }, [slug]);
+  }, [slug, normalizedSlug, navigate]);
 
   const filteredServices = useMemo(() => {
     if (!searchQuery) return services;
@@ -160,14 +166,14 @@ export default function SalonBooking() {
 
   useEffect(() => {
     let mounted = true;
-    if (!slug || !selectedDate || !selectedService) {
+    if (!normalizedSlug || !selectedDate || !selectedService) {
       setTimeSlots([]);
       return () => { mounted = false; };
     }
     setSlotsLoading(true);
     setSlotsError(null);
     const staffId = anySpecialist ? undefined : selectedSpecialist?.id;
-    getPublicAvailability({ slug, date: selectedDate, serviceId: selectedService.id, staffId })
+    getPublicAvailability({ slug: normalizedSlug, date: selectedDate, serviceId: selectedService.id, staffId })
       .then(res => {
         if (!mounted) return;
         const slots = (res.slots || []).map(time => ({ time, available: true }));
@@ -180,7 +186,7 @@ export default function SalonBooking() {
       })
       .finally(() => mounted && setSlotsLoading(false));
     return () => { mounted = false; };
-  }, [slug, selectedDate, selectedService, selectedSpecialist, anySpecialist]);
+  }, [normalizedSlug, selectedDate, selectedService, selectedSpecialist, anySpecialist]);
 
   const availableSlots = useMemo(() => timeSlots.filter(s => s.available), [timeSlots]);
   const recommendedSlots = useMemo(() => availableSlots.slice(0, 3), [availableSlots]);
@@ -204,14 +210,14 @@ export default function SalonBooking() {
   const goBack = () => { setDirection(-1); setStep(s => s - 1); };
 
   const handleBook = async () => {
-    if (!slug || !selectedService || !selectedDate || !selectedTime || !clientData.name || !clientData.phone) {
+    if (!normalizedSlug || !selectedService || !selectedDate || !selectedTime || !clientData.name || !clientData.phone) {
       setBookingError('Uzupełnij wymagane dane przed potwierdzeniem.');
       return;
     }
     setBookingLoading(true);
     setBookingError(null);
     try {
-      const res = await createPublicAppointment(slug, {
+      const res = await createPublicAppointment(normalizedSlug, {
         date: selectedDate,
         time: selectedTime,
         notes: clientData.notes || undefined,

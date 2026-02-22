@@ -45,7 +45,8 @@ router.post("/owners", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
 
-  const { email, phone, password, salonName, salonSlug } = parsed.data;
+  const { email, phone, password, salonName } = parsed.data;
+  const salonSlug = parsed.data.salonSlug.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return res.status(409).json({ error: "Email already exists" });
 

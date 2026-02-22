@@ -298,7 +298,7 @@ const buildSlotsForAppointment = async (appointment: { id: string; salonId: stri
 };
 
 router.get("/salons/:slug", async (req, res) => {
-  const { slug } = req.params;
+  const slug = req.params.slug.toLowerCase();
   const salon = await prisma.salon.findUnique({
     where: { slug },
     include: {
@@ -335,7 +335,7 @@ router.get("/salons/:slug/availability", async (req, res) => {
   const parsed = schema.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: "Invalid query" });
 
-  const { slug } = req.params;
+  const slug = req.params.slug.toLowerCase();
   const salon = await prisma.salon.findUnique({ where: { slug } });
   if (!salon) return res.status(404).json({ error: "Salon not found" });
 
@@ -435,7 +435,7 @@ router.post("/salons/:slug/appointments", async (req, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid payload" });
 
-  const { slug } = req.params;
+  const slug = req.params.slug.toLowerCase();
   const salon = await prisma.salon.findUnique({ where: { slug } });
   if (!salon) return res.status(404).json({ error: "Salon not found" });
 

@@ -117,7 +117,7 @@ export default function CancelBooking() {
             <div className="flex-1">
               <p className="text-sm font-medium">Potwierdzenie tożsamości</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Wpisz kod SMS, aby dokończyć zmianę lub odwołanie (placeholder).
+                Wpisz kod SMS, aby dokończyć zmianę lub odwołanie.
               </p>
               <Input placeholder="Kod SMS" className="h-11 rounded-xl mt-3" disabled />
               <p className="text-[10px] text-muted-foreground mt-2">Funkcjonalność weryfikacji tożsamości jest chwilowo nieaktywna.</p>

@@ -1237,7 +1237,7 @@ export default function CalendarPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Szczegóły wizyty</DialogTitle>
-            <DialogDescription>Podgląd wizyty (placeholder)</DialogDescription>
+            <DialogDescription>Szczegóły wizyty</DialogDescription>
           </DialogHeader>
           {activeApt ? (
             editMode ? (

@@ -54,7 +54,7 @@ export default function HoursSettingsPage() {
         </Button>
         <div>
           <h1 className="text-xl font-bold lg:text-2xl">Godziny pracy</h1>
-          <p className="text-sm text-muted-foreground">CRUD godzin pracy (placeholder)</p>
+          <p className="text-sm text-muted-foreground">Zarządzaj godzinami pracy salonu</p>
         </div>
       </div>
 
@@ -153,7 +153,7 @@ export default function HoursSettingsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Edytuj godziny pracy</DialogTitle>
-            <DialogDescription>Formularz CRUD (placeholder)</DialogDescription>
+            <DialogDescription>Formularz godzin pracy</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {editingHours.map((day: any) => (
@@ -197,7 +197,7 @@ export default function HoursSettingsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Dodaj wyjątek</DialogTitle>
-            <DialogDescription>Formularz CRUD (placeholder)</DialogDescription>
+            <DialogDescription>Formularz wyjątku</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
