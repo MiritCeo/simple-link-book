@@ -895,12 +895,12 @@ export default function SalonBooking() {
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Zaloguj się, a dane uzupełnią się automatycznie — nie musisz ich wpisywać za każdym razem.
                       </p>
-                      <button
+                      <a
                         className="text-sm font-semibold text-primary mt-2 inline-block hover:underline"
-                        onClick={() => navigate('/konto/logowanie')}
+                        href="/konto/logowanie"
                       >
                         Zaloguj się
-                      </button>
+                      </a>
                     </div>
                   </div>
                 </motion.div>
