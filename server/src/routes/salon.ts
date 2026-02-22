@@ -213,7 +213,7 @@ router.put("/profile", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const schema = z.object({
     name: z.string().min(2),
-    address: z.string().min(2),
+    address: z.string().min(2).or(z.literal("")),
     phone: z.string().min(6),
     hours: z.string().optional().default(""),
     description: z.string().optional().default(""),
