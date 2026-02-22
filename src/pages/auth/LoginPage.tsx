@@ -1,15 +1,22 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { login } from '@/lib/api';
 import { setActiveSalonId, setSalons } from '@/lib/auth';
 import { toast } from 'sonner';
+import ClientLoginPage from './ClientLoginPage';
 
 export default function LoginPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const isClientLogin = new URLSearchParams(location.search).get('client') === '1';
+
+  if (isClientLogin) {
+    return <ClientLoginPage />;
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

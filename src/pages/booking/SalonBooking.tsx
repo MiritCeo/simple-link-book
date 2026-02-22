@@ -897,7 +897,7 @@ export default function SalonBooking() {
                       </p>
                       <a
                         className="text-sm font-semibold text-primary mt-2 inline-block hover:underline"
-                        href="/konto/logowanie"
+                        href="/login?client=1"
                       >
                         Zaloguj się
                       </a>
