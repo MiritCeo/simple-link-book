@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { NotificationEvent } from "@prisma/client";
 import prisma from "../prisma";
 import { sendEventNotification } from "../notificationService";
 import { sendSms } from "../notifications";
@@ -13,6 +14,8 @@ router.use((req: AuthRequest, res, next) => {
   }
   return next();
 });
+
+const getSalonId = (req: AuthRequest) => req.user!.salonId as string;
 
 const requireOwner = (req: AuthRequest, res: any) => {
   if (req.user?.role !== "OWNER") {
@@ -204,7 +207,7 @@ const validateAppointmentAvailability = async ({
 };
 
 router.get("/profile", async (req: AuthRequest, res) => {
-  const salonId = req.user?.salonId;
+  const salonId = getSalonId(req);
   const salon = await prisma.salon.findUnique({ where: { id: salonId } });
   return res.json({ salon });
 });
@@ -223,7 +226,7 @@ router.put("/profile", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane profilu salonu" });
   const salon = await prisma.salon.update({
-    where: { id: req.user!.salonId },
+    where: { id: getSalonId(req) },
     data: parsed.data,
   });
   return res.json({ salon });
@@ -280,18 +283,24 @@ router.post("/user-salons", async (req: AuthRequest, res) => {
 
 router.get("/notifications/settings", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
-  const salonId = req.user!.salonId;
+  const salonId = getSalonId(req);
   let settings = await prisma.notificationSetting.findMany({ where: { salonId } });
   if (settings.length === 0) {
-    const defaults = [
-      { event: "BOOKING_CONFIRMATION", smsEnabled: true, emailEnabled: true },
-      { event: "REMINDER_24H", smsEnabled: true, emailEnabled: false, timingMinutes: 24 * 60 },
-      { event: "REMINDER_2H", smsEnabled: true, emailEnabled: false, timingMinutes: 2 * 60 },
-      { event: "CANCELLATION", smsEnabled: true, emailEnabled: true },
-      { event: "FOLLOWUP", smsEnabled: false, emailEnabled: true, timingMinutes: 60 },
+    const defaults: Array<{
+      salonId: string;
+      event: NotificationEvent;
+      smsEnabled: boolean;
+      emailEnabled: boolean;
+      timingMinutes?: number;
+    }> = [
+      { salonId, event: "BOOKING_CONFIRMATION", smsEnabled: true, emailEnabled: true },
+      { salonId, event: "REMINDER_24H", smsEnabled: true, emailEnabled: false, timingMinutes: 24 * 60 },
+      { salonId, event: "REMINDER_2H", smsEnabled: true, emailEnabled: false, timingMinutes: 2 * 60 },
+      { salonId, event: "CANCELLATION", smsEnabled: true, emailEnabled: true },
+      { salonId, event: "FOLLOWUP", smsEnabled: false, emailEnabled: true, timingMinutes: 60 },
     ];
     await prisma.notificationSetting.createMany({
-      data: defaults.map(s => ({ ...s, salonId })),
+      data: defaults,
     });
     settings = await prisma.notificationSetting.findMany({ where: { salonId } });
   }
@@ -310,7 +319,7 @@ router.put("/notifications/settings", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe ustawienia powiadomień" });
-  const salonId = req.user!.salonId;
+  const salonId = getSalonId(req);
   await Promise.all(parsed.data.settings.map(s =>
     prisma.notificationSetting.upsert({
       where: { salonId_event: { salonId, event: s.event } },
@@ -331,7 +340,7 @@ router.post("/notifications/test-sms", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane testu SMS" });
   const token = process.env.SMSAPI_API_KEY || process.env.SMSAPI_KEY;
   if (!token) return res.status(400).json({ error: "Brak konfiguracji SMS" });
-  const salon = await prisma.salon.findUnique({ where: { id: req.user!.salonId } });
+  const salon = await prisma.salon.findUnique({ where: { id: getSalonId(req) } });
   const prefix = salon?.name ? `[${salon.name}] ` : "";
   const result = await sendSms(parsed.data.to, `${prefix}${parsed.data.message || "Test SMS z purebook."}`, salon?.name);
   if (!result?.ok) {
@@ -349,7 +358,7 @@ router.post("/notifications/send-sms", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane SMS" });
   const token = process.env.SMSAPI_API_KEY || process.env.SMSAPI_KEY;
   if (!token) return res.status(400).json({ error: "Brak konfiguracji SMS" });
-  const salon = await prisma.salon.findUnique({ where: { id: req.user!.salonId } });
+  const salon = await prisma.salon.findUnique({ where: { id: getSalonId(req) } });
   const prefix = salon?.name ? `[${salon.name}] ` : "";
   const result = await sendSms(parsed.data.to, `${prefix}${parsed.data.message}`, salon?.name);
   if (!result?.ok) {
@@ -360,7 +369,7 @@ router.post("/notifications/send-sms", async (req: AuthRequest, res) => {
 
 router.get("/notifications/templates", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
-  const salonId = req.user!.salonId;
+  const salonId = getSalonId(req);
   const templates = await prisma.notificationTemplate.findMany({ where: { salonId } });
   return res.json({ templates });
 });
@@ -377,7 +386,7 @@ router.post("/notifications/templates", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane szablonu" });
   const template = await prisma.notificationTemplate.create({
-    data: { ...parsed.data, salonId: req.user!.salonId },
+    data: { ...parsed.data, salonId: getSalonId(req) },
   });
   return res.json({ template });
 });
@@ -399,7 +408,7 @@ router.put("/notifications/templates/:id", async (req: AuthRequest, res) => {
 });
 
 router.get("/services", async (req: AuthRequest, res) => {
-  const services = await prisma.service.findMany({ where: { salonId: req.user?.salonId } });
+  const services = await prisma.service.findMany({ where: { salonId: getSalonId(req) } });
   return res.json({ services });
 });
 
@@ -415,7 +424,7 @@ router.post("/services", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usługi" });
   const service = await prisma.service.create({
-    data: { ...parsed.data, salonId: req.user!.salonId },
+    data: { ...parsed.data, salonId: getSalonId(req) },
   });
   return res.json({ service });
 });
@@ -433,7 +442,7 @@ router.put("/services/:id", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usługi" });
   const existing = await prisma.service.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== req.user!.salonId) {
+  if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono usługi w tym salonie" });
   }
   const service = await prisma.service.update({
@@ -446,7 +455,7 @@ router.put("/services/:id", async (req: AuthRequest, res) => {
 router.delete("/services/:id", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const existing = await prisma.service.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== req.user!.salonId) {
+  if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono usługi w tym salonie" });
   }
   const apptCount = await prisma.appointmentService.count({
@@ -464,13 +473,13 @@ router.delete("/services/:id", async (req: AuthRequest, res) => {
 
 router.get("/staff", async (req: AuthRequest, res) => {
   const staff = await prisma.staff.findMany({
-    where: { salonId: req.user?.salonId },
+    where: { salonId: getSalonId(req) },
     include: { staffServices: { include: { service: true } }, user: true },
   });
   return res.json({
     staff: staff.map(s => ({
       ...s,
-      services: s.staffServices.map(ss => ss.service),
+      services: s.staffServices.map((ss: any) => ss.service),
     })),
   });
 });
@@ -487,7 +496,7 @@ router.post("/staff", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane pracownika" });
   if (parsed.data.serviceIds.length) {
     const services = await prisma.service.findMany({
-      where: { salonId: req.user!.salonId, id: { in: parsed.data.serviceIds }, active: true },
+      where: { salonId: getSalonId(req), id: { in: parsed.data.serviceIds }, active: true },
       select: { id: true },
     });
     if (services.length !== parsed.data.serviceIds.length) {
@@ -500,7 +509,7 @@ router.post("/staff", async (req: AuthRequest, res) => {
       role: parsed.data.role,
       phone: parsed.data.phone,
       active: true,
-      salonId: req.user!.salonId,
+      salonId: getSalonId(req),
       staffServices: {
         create: parsed.data.serviceIds.map(serviceId => ({ serviceId })),
       },
@@ -510,7 +519,7 @@ router.post("/staff", async (req: AuthRequest, res) => {
   return res.json({
     staff: {
       ...staff,
-      services: staff.staffServices.map(ss => ss.service),
+      services: staff.staffServices.map((ss: any) => ss.service),
     },
   });
 });
@@ -527,12 +536,12 @@ router.put("/staff/:id", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane pracownika" });
   const existing = await prisma.staff.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== req.user!.salonId) {
+  if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
   }
   if (parsed.data.serviceIds.length) {
     const services = await prisma.service.findMany({
-      where: { salonId: req.user!.salonId, id: { in: parsed.data.serviceIds }, active: true },
+      where: { salonId: getSalonId(req), id: { in: parsed.data.serviceIds }, active: true },
       select: { id: true },
     });
     if (services.length !== parsed.data.serviceIds.length) {
@@ -568,7 +577,7 @@ router.post("/staff/:id/account", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane konta pracownika" });
 
   const staff = await prisma.staff.findUnique({ where: { id: req.params.id } });
-  if (!staff || staff.salonId !== req.user!.salonId) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
+  if (!staff || staff.salonId !== getSalonId(req)) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
   if (staff.userId) return res.status(409).json({ error: "Konto już istnieje" });
 
   const exists = await prisma.user.findUnique({ where: { email: parsed.data.email } });
@@ -607,7 +616,7 @@ router.put("/staff/:id/account", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane konta pracownika" });
 
   const staff = await prisma.staff.findUnique({ where: { id: req.params.id }, include: { user: true } });
-  if (!staff || staff.salonId !== req.user!.salonId) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
+  if (!staff || staff.salonId !== getSalonId(req)) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
   if (!staff.userId || !staff.user) return res.status(404).json({ error: "Nie znaleziono konta pracownika" });
 
   const data: any = {};
@@ -636,7 +645,7 @@ router.put("/staff/:id/account", async (req: AuthRequest, res) => {
 router.delete("/staff/:id", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const existing = await prisma.staff.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== req.user!.salonId) {
+  if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
   }
   const apptCount = await prisma.appointment.count({
@@ -654,11 +663,11 @@ router.delete("/staff/:id", async (req: AuthRequest, res) => {
 
 router.get("/clients", async (req: AuthRequest, res) => {
   const clients = await prisma.client.findMany({
-    where: { salonId: req.user?.salonId, active: true },
+    where: { salonId: getSalonId(req), active: true },
     include: { appointments: { select: { date: true } } },
   });
   const enriched = clients.map(c => {
-    const dates = c.appointments.map(a => a.date).sort();
+    const dates = c.appointments.map((a: any) => a.date).sort();
     const lastVisit = dates.length ? dates[dates.length - 1] : null;
     return {
       ...c,
@@ -680,7 +689,7 @@ router.post("/clients", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
   const client = await prisma.client.create({
-    data: { ...parsed.data, salonId: req.user!.salonId, active: true },
+    data: { ...parsed.data, salonId: getSalonId(req), active: true },
   });
   return res.json({ client });
 });
@@ -705,7 +714,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane importu" });
 
-  const salonId = req.user!.salonId;
+  const salonId = getSalonId(req);
   const defaultService = { category: "Import", duration: 30, price: 0 };
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   const timeRegex = /^\d{2}:\d{2}$/;
@@ -871,7 +880,7 @@ router.put("/clients/:id", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
   const existing = await prisma.client.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== req.user!.salonId) {
+  if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
   }
   const client = await prisma.client.update({
@@ -883,7 +892,7 @@ router.put("/clients/:id", async (req: AuthRequest, res) => {
 
 router.get("/clients/:id/appointments", async (req: AuthRequest, res) => {
   const appointments = await prisma.appointment.findMany({
-    where: { salonId: req.user?.salonId, clientId: req.params.id },
+    where: { salonId: getSalonId(req), clientId: req.params.id },
     include: { staff: true, appointmentServices: { include: { service: true } } },
     orderBy: [{ date: "desc" }, { time: "desc" }],
   });
@@ -892,7 +901,7 @@ router.get("/clients/:id/appointments", async (req: AuthRequest, res) => {
 
 router.delete("/clients/:id", async (req: AuthRequest, res) => {
   const existing = await prisma.client.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== req.user!.salonId) {
+  if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
   }
   const apptCount = await prisma.appointment.count({
@@ -907,7 +916,7 @@ router.delete("/clients/:id", async (req: AuthRequest, res) => {
 
 router.get("/hours", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
-  const salonId = req.user!.salonId;
+  const salonId = getSalonId(req);
   let hours = await prisma.salonHour.findMany({
     where: { salonId },
     orderBy: { weekday: "asc" },
@@ -936,7 +945,7 @@ router.put("/hours", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe godziny pracy" });
-  const salonId = req.user!.salonId;
+  const salonId = getSalonId(req);
   await Promise.all(parsed.data.hours.map(h =>
     prisma.salonHour.upsert({
       where: { salonId_weekday: { salonId, weekday: h.weekday } },
@@ -950,7 +959,7 @@ router.put("/hours", async (req: AuthRequest, res) => {
 router.get("/hours/exceptions", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const exceptions = await prisma.salonException.findMany({
-    where: { salonId: req.user!.salonId },
+    where: { salonId: getSalonId(req) },
     orderBy: { date: "asc" },
   });
   return res.json({ exceptions });
@@ -968,7 +977,7 @@ router.post("/hours/exceptions", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wyjątku" });
   const exception = await prisma.salonException.create({
-    data: { ...parsed.data, salonId: req.user!.salonId },
+    data: { ...parsed.data, salonId: getSalonId(req) },
   });
   return res.json({ exception });
 });
@@ -982,7 +991,7 @@ router.delete("/hours/exceptions/:id", async (req: AuthRequest, res) => {
 router.get("/breaks", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const breaks = await prisma.salonBreak.findMany({
-    where: { salonId: req.user!.salonId },
+    where: { salonId: getSalonId(req) },
     orderBy: { label: "asc" },
   });
   return res.json({ breaks });
@@ -1001,7 +1010,7 @@ router.post("/breaks", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane przerwy" });
   const created = await prisma.salonBreak.create({
-    data: { ...parsed.data, salonId: req.user!.salonId },
+    data: { ...parsed.data, salonId: getSalonId(req) },
   });
   return res.json({ break: created });
 });
@@ -1014,7 +1023,7 @@ router.delete("/breaks/:id", async (req: AuthRequest, res) => {
 
 router.get("/appointments", async (req: AuthRequest, res) => {
   const appointments = await prisma.appointment.findMany({
-    where: { salonId: req.user?.salonId },
+    where: { salonId: getSalonId(req) },
     include: { client: true, staff: true, appointmentServices: { include: { service: true } } },
     orderBy: { date: "asc" },
   });
@@ -1037,13 +1046,13 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   if (!parsed.data.serviceIds.length) return res.status(400).json({ error: "Wybierz przynajmniej jedną usługę" });
 
   const client = await prisma.client.findFirst({
-    where: { id: parsed.data.clientId, salonId: req.user!.salonId },
+    where: { id: parsed.data.clientId, salonId: getSalonId(req) },
   });
   if (!client) return res.status(400).json({ error: "Nie znaleziono klienta w tym salonie" });
   if (client.active === false) return res.status(400).json({ error: "Klient jest nieaktywny" });
 
   const services = await prisma.service.findMany({
-    where: { salonId: req.user!.salonId, id: { in: parsed.data.serviceIds }, active: true },
+    where: { salonId: getSalonId(req), id: { in: parsed.data.serviceIds }, active: true },
   });
   if (services.length !== parsed.data.serviceIds.length) {
     return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
@@ -1052,7 +1061,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
 
   if (parsed.data.staffId) {
     const staffRec = await prisma.staff.findFirst({
-      where: { id: parsed.data.staffId, salonId: req.user!.salonId, active: true },
+      where: { id: parsed.data.staffId, salonId: getSalonId(req), active: true },
       select: { id: true },
     });
     if (!staffRec) return res.status(400).json({ error: "Nie znaleziono pracownika w tym salonie" });
@@ -1065,7 +1074,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     }
   }
   const availability = await validateAppointmentAvailability({
-    salonId: req.user!.salonId,
+    salonId: getSalonId(req),
     date: parsed.data.date,
     time: parsed.data.time,
     duration,
@@ -1076,7 +1085,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   }
   const appointment = await prisma.appointment.create({
     data: {
-      salonId: req.user!.salonId,
+      salonId: getSalonId(req),
       date: parsed.data.date,
       time: parsed.data.time,
       duration,
@@ -1091,7 +1100,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     include: { client: true, staff: true, appointmentServices: { include: { service: true } } },
   });
   const salon = await prisma.salon.findUnique({ where: { id: appointment.salonId } });
-  await sendEventNotification("BOOKING_CONFIRMATION", { ...appointment, salon });
+  await sendEventNotification("BOOKING_CONFIRMATION", { ...appointment, salon } as any);
   return res.json({ appointment });
 });
 
@@ -1110,7 +1119,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
   const appointment = await prisma.appointment.findUnique({
     where: { id: req.params.id },
   });
-  if (!appointment || appointment.salonId !== req.user!.salonId) {
+  if (!appointment || appointment.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono wizyty w tym salonie" });
   }
 
@@ -1196,7 +1205,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     await sendEventNotification("CANCELLATION", { ...updated, salon });
   } else if (isConfirmedNow || timeChanged) {
     const salon = await prisma.salon.findUnique({ where: { id: updated.salonId } });
-    await sendEventNotification("BOOKING_CONFIRMATION", { ...updated, salon });
+    await sendEventNotification("BOOKING_CONFIRMATION", { ...updated, salon } as any);
   } else if (isCompletedNow) {
     const salon = await prisma.salon.findUnique({ where: { id: updated.salonId } });
     await sendEventNotification("FOLLOWUP", { ...updated, salon });
@@ -1273,7 +1282,7 @@ router.post("/schedule/:staffId/exceptions", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wyjątku pracownika" });
 
   const staff = await prisma.staff.findUnique({ where: { id: req.params.staffId } });
-  if (!staff || staff.salonId !== req.user!.salonId) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
+  if (!staff || staff.salonId !== getSalonId(req)) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
 
   const exception = await prisma.staffException.create({
     data: {
@@ -1289,6 +1298,7 @@ router.post("/schedule/:staffId/exceptions", async (req: AuthRequest, res) => {
 });
 
 export default router;
+
 
 
 

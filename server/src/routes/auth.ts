@@ -143,7 +143,7 @@ router.post("/switch-salon", async (req, res) => {
     const link = await prisma.userSalon.findUnique({
       where: { userId_salonId: { userId: user.id, salonId: parsed.data.salonId } },
     });
-    role = link?.role || null;
+    role = link?.role === "OWNER" || link?.role === "STAFF" ? link.role : null;
   }
   if (!role) return res.status(403).json({ error: "Brak dostępu" });
 

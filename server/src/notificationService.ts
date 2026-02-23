@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { NotificationChannel } from "@prisma/client";
+import type { NotificationChannel, NotificationEvent } from "@prisma/client";
 import prisma from "./prisma";
 import { sendEmail, sendSms } from "./notifications";
 
@@ -44,7 +44,13 @@ const ensureNotificationSettings = async (salonId: string) => {
     select: { event: true },
   });
   const existingEvents = new Set(existing.map(e => e.event));
-  const defaults = [
+  const defaults: Array<{
+    salonId: string;
+    event: NotificationEvent;
+    smsEnabled: boolean;
+    emailEnabled: boolean;
+    timingMinutes?: number;
+  }> = [
     { salonId, event: "BOOKING_CONFIRMATION", smsEnabled: true, emailEnabled: true },
     { salonId, event: "REMINDER_24H", smsEnabled: true, emailEnabled: false, timingMinutes: 24 * 60 },
     { salonId, event: "REMINDER_2H", smsEnabled: true, emailEnabled: false, timingMinutes: 2 * 60 },
