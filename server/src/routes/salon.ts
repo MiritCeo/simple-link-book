@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { NotificationEvent } from "@prisma/client";
-import prisma from "../prisma";
-import { sendEventNotification } from "../notificationService";
-import { sendSms } from "../notifications";
-import type { AuthRequest } from "../middleware/auth";
+import prisma from "../prisma.js";
+import { sendEventNotification } from "../notificationService.js";
+import { sendSms } from "../notifications.js";
+import type { AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 

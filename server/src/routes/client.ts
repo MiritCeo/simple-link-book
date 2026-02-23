@@ -3,10 +3,10 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import prisma from "../prisma";
-import clientAuth, { ClientAuthRequest } from "../middleware/clientAuth";
-import { sendEmail } from "../notifications";
-import { ensureCancelToken } from "../notificationService";
+import prisma from "../prisma.js";
+import clientAuth, { ClientAuthRequest } from "../middleware/clientAuth.js";
+import { sendEmail } from "../notifications.js";
+import { ensureCancelToken } from "../notificationService.js";
 
 const router = Router();
 

@@ -6,14 +6,14 @@ import swaggerUi from "swagger-ui-express";
 import fs from "fs";
 import path from "path";
 import yaml from "yaml";
-import authRoutes from "./routes/auth";
-import publicRoutes from "./routes/public";
-import salonRoutes from "./routes/salon";
-import adminRoutes from "./routes/admin";
-import clientRoutes from "./routes/client";
-import auth from "./middleware/auth";
-import prisma from "./prisma";
-import { sendEventNotification } from "./notificationService";
+import authRoutes from "./routes/auth.js";
+import publicRoutes from "./routes/public.js";
+import salonRoutes from "./routes/salon.js";
+import adminRoutes from "./routes/admin.js";
+import clientRoutes from "./routes/client.js";
+import auth from "./middleware/auth.js";
+import prisma from "./prisma.js";
+import { sendEventNotification } from "./notificationService.js";
 
 dotenv.config();
 

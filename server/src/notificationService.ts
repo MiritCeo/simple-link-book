@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import type { NotificationChannel, NotificationEvent } from "@prisma/client";
-import prisma from "./prisma";
-import { sendEmail, sendSms } from "./notifications";
+import prisma from "./prisma.js";
+import { sendEmail, sendSms } from "./notifications.js";
 
 type AppointmentWithRelations = {
   id: string;

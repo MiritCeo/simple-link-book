@@ -2,8 +2,8 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import prisma from "../prisma";
-import { ensureCancelToken, sendEventNotification } from "../notificationService";
+import prisma from "../prisma.js";
+import { ensureCancelToken, sendEventNotification } from "../notificationService.js";
 
 const router = Router();
 
