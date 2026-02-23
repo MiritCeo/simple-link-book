@@ -685,6 +685,182 @@ router.post("/clients", async (req: AuthRequest, res) => {
   return res.json({ client });
 });
 
+router.post("/clients/import", async (req: AuthRequest, res) => {
+  const schema = z.object({
+    includeVisits: z.boolean().optional().default(true),
+    updateExisting: z.boolean().optional().default(true),
+    rows: z.array(z.object({
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+      phone: z.string().optional(),
+      email: z.string().optional(),
+      notes: z.string().optional(),
+      date: z.string().optional(),
+      time: z.string().optional(),
+      services: z.string().optional(),
+      staff: z.string().optional(),
+      status: z.string().optional(),
+    })).min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane importu" });
+
+  const salonId = req.user!.salonId;
+  const defaultService = { category: "Import", duration: 30, price: 0 };
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  const timeRegex = /^\d{2}:\d{2}$/;
+  const statusMap: Record<string, string> = {
+    zaplanowana: "SCHEDULED",
+    potwierdzona: "CONFIRMED",
+    "w trakcie": "IN_PROGRESS",
+    zakonczona: "COMPLETED",
+    zakończona: "COMPLETED",
+    anulowana: "CANCELLED",
+    nieobecnosc: "NO_SHOW",
+    nieobecność: "NO_SHOW",
+    scheduled: "SCHEDULED",
+    confirmed: "CONFIRMED",
+    "in-progress": "IN_PROGRESS",
+    completed: "COMPLETED",
+    cancelled: "CANCELLED",
+    "no-show": "NO_SHOW",
+  };
+
+  let createdServices = 0;
+  let createdAppointments = 0;
+  let createdClients = 0;
+  let updatedClients = 0;
+  let skippedRows = 0;
+  const errors: Array<{ row: number; reason: string }> = [];
+
+  for (const [idx, row] of parsed.data.rows.entries()) {
+    const phone = (row.phone || "").trim();
+    const name = `${row.firstName || ""} ${row.lastName || ""}`.trim();
+    if (!phone || !name) {
+      skippedRows += 1;
+      errors.push({ row: idx + 2, reason: "Brak imienia/nazwiska lub telefonu" });
+      continue;
+    }
+
+    const existing = await prisma.client.findFirst({
+      where: { salonId, phone },
+    });
+    let client = existing;
+    if (existing) {
+      if (parsed.data.updateExisting) {
+        client = await prisma.client.update({
+          where: { id: existing.id },
+          data: {
+            name,
+            email: row.email || existing.email || null,
+            notes: row.notes || existing.notes || null,
+            active: true,
+          },
+        });
+        updatedClients += 1;
+      }
+    } else {
+      client = await prisma.client.create({
+        data: {
+          salonId,
+          name,
+          phone,
+          email: row.email || null,
+          notes: row.notes || null,
+          active: true,
+        },
+      });
+      createdClients += 1;
+    }
+    if (!client) {
+      skippedRows += 1;
+      errors.push({ row: idx + 2, reason: "Klient już istnieje (pominięto aktualizację)" });
+      continue;
+    }
+
+    if (!parsed.data.includeVisits) continue;
+
+    const hasVisit = row.date && row.time && row.services;
+    if (!hasVisit) continue;
+
+    if (!dateRegex.test(row.date!)) {
+      skippedRows += 1;
+      errors.push({ row: idx + 2, reason: "Nieprawidłowa data (oczekiwano RRRR-MM-DD)" });
+      continue;
+    }
+    if (!timeRegex.test(row.time!)) {
+      skippedRows += 1;
+      errors.push({ row: idx + 2, reason: "Nieprawidłowa godzina (oczekiwano HH:MM)" });
+      continue;
+    }
+
+    const serviceNames = (row.services || "")
+      .split(/[+,]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (!serviceNames.length) {
+      skippedRows += 1;
+      errors.push({ row: idx + 2, reason: "Brak usług w wierszu wizyty" });
+      continue;
+    }
+
+    const services = [];
+    for (const serviceName of serviceNames) {
+      let service = await prisma.service.findFirst({
+        where: { salonId, name: serviceName },
+      });
+      if (!service) {
+        service = await prisma.service.create({
+          data: {
+            salonId,
+            name: serviceName,
+            category: defaultService.category,
+            duration: defaultService.duration,
+            price: defaultService.price,
+            active: true,
+          },
+        });
+        createdServices += 1;
+      }
+      services.push(service);
+    }
+
+    const duration = services.reduce((sum, s) => sum + s.duration, 0);
+    const staffName = (row.staff || "").trim();
+    const staff = staffName
+      ? await prisma.staff.findFirst({ where: { salonId, name: staffName, active: true } })
+      : null;
+    const statusKey = (row.status || "").toLowerCase().trim();
+    const status = (statusMap[statusKey] || "SCHEDULED") as any;
+
+    const appointment = await prisma.appointment.create({
+      data: {
+        salonId,
+        date: row.date!,
+        time: row.time!,
+        duration,
+        status,
+        clientId: client.id,
+        staffId: staff?.id,
+        appointmentServices: {
+          create: services.map(s => ({ serviceId: s.id })),
+        },
+      },
+    });
+    createdAppointments += 1;
+  }
+
+  return res.json({
+    ok: true,
+    createdClients,
+    updatedClients,
+    createdAppointments,
+    createdServices,
+    skippedRows,
+    errors,
+  });
+});
+
 router.put("/clients/:id", async (req: AuthRequest, res) => {
   const schema = z.object({
     name: z.string().min(2),

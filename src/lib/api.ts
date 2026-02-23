@@ -355,6 +355,24 @@ export async function updateClient(id: string, payload: { name: string; phone: s
   });
 }
 
+export async function importSalonClients(payload: { includeVisits?: boolean; updateExisting?: boolean; rows: Array<{
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  date?: string;
+  time?: string;
+  services?: string;
+  staff?: string;
+  status?: string;
+}> }) {
+  return apiFetch<{ ok: boolean; createdClients: number; updatedClients: number; createdAppointments: number; createdServices: number; skippedRows: number; errors?: Array<{ row: number; reason: string }> }>(
+    "/api/salon/clients/import",
+    { method: "POST", auth: true, body: JSON.stringify(payload) },
+  );
+}
+
 export async function deleteClient(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/salon/clients/${id}`, {
     method: "DELETE",

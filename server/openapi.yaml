@@ -1,0 +1,849 @@
+openapi: 3.0.3
+info:
+  title: purebook API
+  version: 0.1.0
+  description: API dla panelu salonu, klienta i publicznej rezerwacji.
+servers:
+  - url: https://purebook.pl
+    description: Production
+  - url: http://localhost:4000
+    description: Local
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        salonId: { type: string, nullable: true }
+        userId: { type: string }
+        role: { type: string }
+        salons:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              slug: { type: string }
+              role: { type: string }
+    ClientAuthResponse:
+      type: object
+      properties:
+        token: { type: string }
+        clientId: { type: string }
+        salonId: { type: string }
+    Appointment:
+      type: object
+      properties:
+        id: { type: string }
+        date: { type: string }
+        time: { type: string }
+        duration: { type: integer }
+        status: { type: string }
+        notes: { type: string, nullable: true }
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+paths:
+  /api/health:
+    get:
+      summary: Healthcheck
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/login:
+    post:
+      summary: Login (panel salonu)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+              required: [email, password]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/auth/register:
+    post:
+      summary: Rejestracja salonu (OWNER)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                phone: { type: string }
+                password: { type: string }
+                salonName: { type: string }
+                salonSlug: { type: string }
+              required: [email, phone, password, salonName, salonSlug]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+
+  /api/auth/switch-salon:
+    post:
+      summary: Zmiana aktywnego salonu
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                salonId: { type: string }
+              required: [salonId]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/login:
+    post:
+      summary: Login klienta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+              required: [email, password]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientAuthResponse' }
+
+  /api/client/password-reset:
+    post:
+      summary: Reset hasła klienta (request)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+              required: [email]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/password-reset/confirm:
+    post:
+      summary: Reset hasła klienta (confirm)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+                newPassword: { type: string }
+              required: [token, newPassword]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/me:
+    get:
+      summary: Profil klienta
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: Aktualizacja profilu klienta
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                email: { type: string }
+              required: [name, phone]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/password:
+    put:
+      summary: Zmiana hasła klienta
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string }
+              required: [currentPassword, newPassword]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/appointments:
+    get:
+      summary: Wizyty klienta (z cancelToken)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+
+  /api/public/salons/{slug}:
+    get:
+      summary: Dane publiczne salonu
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /api/public/salons/{slug}/availability:
+    get:
+      summary: Dostępne sloty
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+        - in: query
+          name: date
+          required: true
+          schema: { type: string }
+        - in: query
+          name: serviceId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: staffId
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /api/public/salons/{slug}/appointments:
+    post:
+      summary: Publiczna rezerwacja
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string }
+                time: { type: string }
+                notes: { type: string }
+                serviceId: { type: string }
+                serviceIds:
+                  type: array
+                  items: { type: string }
+                staffId: { type: string }
+                client:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    phone: { type: string }
+                    email: { type: string }
+                    notes: { type: string }
+                  required: [name, phone]
+              required: [date, time, client]
+      responses:
+        '200':
+          description: OK
+
+  /api/public/cancel/{token}:
+    get:
+      summary: Szczegóły rezerwacji po tokenie
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Odwołanie rezerwacji
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /api/public/cancel/{token}/availability:
+    get:
+      summary: Dostępne sloty do przełożenia
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+        - in: query
+          name: date
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /api/public/cancel/{token}/reschedule:
+    post:
+      summary: Przełożenie rezerwacji
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string }
+                time: { type: string }
+              required: [date, time]
+      responses:
+        '200':
+          description: OK
+
+  /api/public/client/register:
+    post:
+      summary: Rejestracja klienta po rezerwacji
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+                email: { type: string }
+                password: { type: string }
+              required: [token, password]
+      responses:
+        '200':
+          description: OK
+
+  /api/salon/profile:
+    get:
+      summary: Profil salonu
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Aktualizacja profilu salonu
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: OK }
+
+  /api/salon/services:
+    get:
+      summary: Lista usług
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie usługi
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/services/{id}:
+    put:
+      summary: Aktualizacja usługi
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Dezaktywacja usługi (soft delete)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/staff:
+    get:
+      summary: Lista pracowników
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie pracownika
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/staff/{id}:
+    put:
+      summary: Aktualizacja pracownika
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Dezaktywacja pracownika
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/staff/{id}/account:
+    post:
+      summary: Tworzenie konta pracownika
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Aktualizacja konta pracownika
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/clients:
+    get:
+      summary: Lista klientów
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie klienta
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/clients/{id}:
+    put:
+      summary: Aktualizacja klienta
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Dezaktywacja klienta
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/clients/{id}/appointments:
+    get:
+      summary: Wizyty klienta w salonie
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/clients/import:
+    post:
+      summary: Import CSV klientów + wizyt
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                includeVisits: { type: boolean }
+                updateExisting: { type: boolean }
+                rows:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200': { description: OK }
+
+  /api/salon/appointments:
+    get:
+      summary: Lista wizyt
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie wizyty
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/appointments/{id}:
+    put:
+      summary: Aktualizacja wizyty
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/hours:
+    get:
+      summary: Godziny salonu
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Zapis godzin salonu
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/hours/exceptions:
+    get:
+      summary: Wyjątki godzin salonu
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie wyjątku godzin
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/hours/exceptions/{id}:
+    delete:
+      summary: Usunięcie wyjątku godzin
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/breaks:
+    get:
+      summary: Przerwy salonu
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie przerwy
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/breaks/{id}:
+    delete:
+      summary: Usunięcie przerwy
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/schedule/{staffId}:
+    get:
+      summary: Grafik pracownika
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: staffId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Zapis grafiku pracownika
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: staffId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/schedule/{staffId}/exceptions:
+    post:
+      summary: Dodanie wyjątku grafiku pracownika
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: staffId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/notifications/settings:
+    get:
+      summary: Ustawienia powiadomień
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Zapis ustawień powiadomień
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/notifications/templates:
+    get:
+      summary: Szablony powiadomień
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie szablonu
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/notifications/templates/{id}:
+    put:
+      summary: Aktualizacja szablonu
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/notifications/test-sms:
+    post:
+      summary: Test SMS
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/salon/notifications/send-sms:
+    post:
+      summary: Wysyłka SMS
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/admin/owners:
+    get:
+      summary: Lista właścicieli (SUPER_ADMIN)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Dodanie właściciela (SUPER_ADMIN)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }
+
+  /api/admin/owners/{id}:
+    patch:
+      summary: Aktualizacja właściciela (SUPER_ADMIN)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: OK }

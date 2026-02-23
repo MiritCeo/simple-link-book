@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Phone, Mail, ChevronRight, Plus, User, Pencil, Trash2 } from 'lucide-react';
+import { useRef, useState, useMemo, useEffect } from 'react';
+import { Search, Phone, Mail, ChevronRight, Plus, User, Pencil, Trash2, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { createClient, deleteClient, getSalonClientAppointments, getSalonClients, updateClient } from '@/lib/api';
+import { createClient, deleteClient, getSalonClientAppointments, getSalonClients, importSalonClients, updateClient } from '@/lib/api';
 import { statusLabels } from '@/data/mockData';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,6 +33,10 @@ export default function ClientsPage() {
   const [clientAppointments, setClientAppointments] = useState<any[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' });
+  const [exportingClients, setExportingClients] = useState(false);
+  const [exportingWithVisits, setExportingWithVisits] = useState(false);
+  const [importingClients, setImportingClients] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -99,15 +103,291 @@ export default function ClientsPage() {
 
   const refresh = () => getSalonClients().then(res => setClients(res.clients || []));
 
+  const buildCsvValue = (value?: string) => {
+    const safe = (value ?? '').replace(/\r?\n/g, ' ').trim();
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+
+  const splitName = (full?: string) => {
+    const parts = (full || '').trim().split(/\s+/).filter(Boolean);
+    const firstName = parts.shift() || '';
+    const lastName = parts.join(' ');
+    return { firstName, lastName };
+  };
+
+  const parseCsv = (text: string) => {
+    const rows: string[][] = [];
+    let current = '';
+    let row: string[] = [];
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      const next = text[i + 1];
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push(current);
+        current = '';
+      } else if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && next === '\n') i += 1;
+        row.push(current);
+        if (row.some(cell => cell.trim().length)) rows.push(row);
+        row = [];
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    row.push(current);
+    if (row.some(cell => cell.trim().length)) rows.push(row);
+    return rows;
+  };
+
+  const normalizeHeader = (value: string) => value.replace('\uFEFF', '').trim().toLowerCase();
+
+  const handleImportCsv = async (file?: File | null, includeVisits = true, updateExisting = true) => {
+    if (!file) return;
+    setImportingClients(true);
+    try {
+      const content = await file.text();
+      const rows = parseCsv(content);
+      if (!rows.length) throw new Error('Plik CSV jest pusty');
+      const header = rows[0].map(normalizeHeader);
+      const getIdx = (name: string) => header.findIndex(h => h === name);
+      const idx = {
+        firstName: getIdx('imię'),
+        lastName: getIdx('nazwisko'),
+        phone: getIdx('telefon'),
+        email: getIdx('email'),
+        notes: getIdx('notatki'),
+        date: getIdx('data wizyty'),
+        time: getIdx('godzina'),
+        services: getIdx('usługi'),
+        staff: getIdx('pracownik'),
+        status: getIdx('status'),
+      };
+      const dataRows = rows.slice(1).map(cells => ({
+        firstName: cells[idx.firstName] || '',
+        lastName: cells[idx.lastName] || '',
+        phone: cells[idx.phone] || '',
+        email: cells[idx.email] || '',
+        notes: cells[idx.notes] || '',
+        date: cells[idx.date] || '',
+        time: cells[idx.time] || '',
+        services: cells[idx.services] || '',
+        staff: cells[idx.staff] || '',
+        status: cells[idx.status] || '',
+      }));
+
+      const res = await importSalonClients({ rows: dataRows, includeVisits, updateExisting });
+      toast.success(`Import zakończony. Klienci: +${res.createdClients}, zakt.: ${res.updatedClients}, wizyty: ${res.createdAppointments}, usługi: ${res.createdServices}, pominięte: ${res.skippedRows}`);
+      if (res.errors?.length) {
+        const errorRows = [
+          ['Wiersz', 'Powód'],
+          ...res.errors.map(e => [`${e.row}`, e.reason]),
+        ];
+        const csv = errorRows.map(r => r.map(buildCsvValue).join(',')).join('\n');
+        const content = `\uFEFF${csv}`;
+        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `import-bledy-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.error(`Niektóre wiersze zostały pominięte (${res.errors.length}). Pobrano raport błędów.`);
+      }
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.message || 'Nie udało się zaimportować CSV');
+    } finally {
+      setImportingClients(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const exportClientsCsv = () => {
+    if (exportingClients) return;
+    setExportingClients(true);
+    const rows = [
+      ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki'],
+      ...clients.map((c: any) => {
+        const { firstName, lastName } = splitName(c.name);
+        return [
+          buildCsvValue(firstName),
+          buildCsvValue(lastName),
+          buildCsvValue(c.phone),
+          buildCsvValue(c.email),
+          buildCsvValue(c.notes),
+        ];
+      }),
+    ];
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const content = `\uFEFF${csv}`;
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `klienci-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setExportingClients(false);
+  };
+
+  const exportClientsWithVisitsCsv = async () => {
+    if (exportingWithVisits) return;
+    setExportingWithVisits(true);
+    try {
+      const results = await Promise.all(
+        clients.map(async (c: any) => {
+          try {
+            const res = await getSalonClientAppointments(c.id);
+            return { client: c, appointments: res.appointments || [] };
+          } catch {
+            return { client: c, appointments: [] };
+          }
+        }),
+      );
+
+      const header = ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki', 'Data wizyty', 'Godzina', 'Usługi', 'Pracownik', 'Status'];
+      const rows = [header];
+      results.forEach(({ client, appointments }) => {
+        const { firstName, lastName } = splitName(client.name);
+        if (!appointments.length) {
+          rows.push([
+            buildCsvValue(firstName),
+            buildCsvValue(lastName),
+            buildCsvValue(client.phone),
+            buildCsvValue(client.email),
+            buildCsvValue(client.notes),
+            buildCsvValue(''),
+            buildCsvValue(''),
+            buildCsvValue(''),
+            buildCsvValue(''),
+            buildCsvValue(''),
+          ]);
+          return;
+        }
+        appointments.forEach((apt: any) => {
+          const services = apt.appointmentServices?.map((s: any) => s.service?.name).filter(Boolean).join(' + ') || '';
+          rows.push([
+            buildCsvValue(firstName),
+            buildCsvValue(lastName),
+            buildCsvValue(client.phone),
+            buildCsvValue(client.email),
+            buildCsvValue(client.notes),
+            buildCsvValue(apt.date),
+            buildCsvValue(apt.time),
+            buildCsvValue(services),
+            buildCsvValue(apt.staff?.name || 'Dowolny'),
+            buildCsvValue(statusLabels[mapStatus(apt.status) as keyof typeof statusLabels] || apt.status),
+          ]);
+        });
+      });
+
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const content = `\uFEFF${csv}`;
+      const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `klienci-wizyty-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err?.message || 'Nie udało się wyeksportować danych');
+    } finally {
+      setExportingWithVisits(false);
+    }
+  };
+
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold lg:text-2xl">Klienci</h1>
-        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-          <Button size="sm" className="rounded-xl gap-1.5 h-10 hidden lg:inline-flex" onClick={() => setAddOpen(true)}>
-            <Plus className="w-4 h-4" />Dodaj klienta
+        <div className="hidden lg:flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            data-import-visits="true"
+            onChange={e => {
+              const includeVisits = (e.currentTarget.getAttribute('data-import-visits') || 'true') === 'true';
+              const updateExisting = (e.currentTarget.getAttribute('data-update-existing') || 'true') === 'true';
+              handleImportCsv(e.target.files?.[0], includeVisits, updateExisting);
+              e.currentTarget.setAttribute('data-import-visits', 'true');
+              e.currentTarget.setAttribute('data-update-existing', 'true');
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importingClients}
+          >
+            <Download className="w-4 h-4" />{importingClients ? 'Importowanie...' : 'Import CSV'}
           </Button>
-        </motion.div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10"
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.setAttribute('data-import-visits', 'false');
+                fileInputRef.current.setAttribute('data-update-existing', 'true');
+                fileInputRef.current.click();
+              }
+            }}
+            disabled={importingClients}
+          >
+            <Download className="w-4 h-4" />{importingClients ? 'Importowanie...' : 'Import tylko klienci'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10"
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.setAttribute('data-import-visits', 'true');
+                fileInputRef.current.setAttribute('data-update-existing', 'false');
+                fileInputRef.current.click();
+              }
+            }}
+            disabled={importingClients}
+          >
+            <Download className="w-4 h-4" />{importingClients ? 'Importowanie...' : 'Import bez aktualizacji'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10"
+            onClick={exportClientsCsv}
+            disabled={clients.length === 0 || exportingClients}
+          >
+            <Download className="w-4 h-4" />{exportingClients ? 'Eksportowanie...' : 'Eksport CSV'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10"
+            onClick={exportClientsWithVisitsCsv}
+            disabled={clients.length === 0 || exportingWithVisits}
+          >
+            <Download className="w-4 h-4" />{exportingWithVisits ? 'Eksportowanie...' : 'CSV + wizyty'}
+          </Button>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button size="sm" className="rounded-xl gap-1.5 h-10" onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4" />Dodaj klienta
+            </Button>
+          </motion.div>
+        </div>
       </div>
 
       <div className="lg:flex lg:gap-6">
@@ -122,6 +402,63 @@ export default function ClientsPage() {
               className="pl-10 h-12 rounded-xl"
             />
           </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
+            onClick={exportClientsCsv}
+            disabled={clients.length === 0 || exportingClients}
+          >
+            <Download className="w-4 h-4" />{exportingClients ? 'Eksportowanie...' : 'Eksport CSV'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importingClients}
+          >
+            <Download className="w-4 h-4" />{importingClients ? 'Importowanie...' : 'Import CSV'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.setAttribute('data-import-visits', 'false');
+                fileInputRef.current.setAttribute('data-update-existing', 'true');
+                fileInputRef.current.click();
+              }
+            }}
+            disabled={importingClients}
+          >
+            <Download className="w-4 h-4" />{importingClients ? 'Importowanie...' : 'Import tylko klienci'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
+            onClick={() => {
+              if (fileInputRef.current) {
+                fileInputRef.current.setAttribute('data-import-visits', 'true');
+                fileInputRef.current.setAttribute('data-update-existing', 'false');
+                fileInputRef.current.click();
+              }
+            }}
+            disabled={importingClients}
+          >
+            <Download className="w-4 h-4" />{importingClients ? 'Importowanie...' : 'Import bez aktualizacji'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
+            onClick={exportClientsWithVisitsCsv}
+            disabled={clients.length === 0 || exportingWithVisits}
+          >
+            <Download className="w-4 h-4" />{exportingWithVisits ? 'Eksportowanie...' : 'CSV + wizyty'}
+          </Button>
 
           <p className="text-xs text-muted-foreground mb-3">{filtered.length} klientów</p>
 

@@ -2,6 +2,10 @@ import type { NotificationChannel } from "@prisma/client";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import swaggerUi from "swagger-ui-express";
+import fs from "fs";
+import path from "path";
+import yaml from "yaml";
 import authRoutes from "./routes/auth";
 import publicRoutes from "./routes/public";
 import salonRoutes from "./routes/salon";
@@ -16,6 +20,13 @@ dotenv.config();
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+const openApiPath = path.join(process.cwd(), "openapi.yaml");
+if (fs.existsSync(openApiPath)) {
+  const openApiFile = fs.readFileSync(openApiPath, "utf8");
+  const openApiDoc = yaml.parse(openApiFile);
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiDoc));
+}
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
