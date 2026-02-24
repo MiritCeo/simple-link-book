@@ -36,38 +36,45 @@ const resetConfirmSchema = z.object({
 });
 
 router.post("/login", async (req, res) => {
-  const parsed = loginSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Nieprawidłowe dane logowania" });
-  }
+  try {
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Nieprawidłowe dane logowania" });
+    }
 
-  const { email, password } = parsed.data;
-  const account = await prisma.clientAccount.findUnique({
-    where: { email },
-    include: { client: true },
-  });
-  if (!account) {
-    return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
-  }
-  if (!account.active || !account.client.active) {
-    return res.status(403).json({ error: "Konto jest nieaktywne" });
-  }
-  const ok = await bcrypt.compare(password, account.passwordHash);
-  if (!ok) {
-    return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
-  }
+    const { email, password } = parsed.data;
+    const account = await prisma.clientAccount.findUnique({
+      where: { email },
+      include: { client: true },
+    });
+    if (!account) {
+      return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
+    }
+    if (!account.client) {
+      return res.status(403).json({ error: "Brak profilu klienta" });
+    }
+    if (!account.active || !account.client.active) {
+      return res.status(403).json({ error: "Konto jest nieaktywne" });
+    }
+    const ok = await bcrypt.compare(password, account.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
+    }
 
-  const token = jwt.sign(
-    { clientId: account.clientId, salonId: account.client.salonId, role: "CLIENT" },
-    process.env.JWT_SECRET || "dev",
-    { expiresIn: "14d" },
-  );
+    const token = jwt.sign(
+      { clientId: account.clientId, salonId: account.client.salonId, role: "CLIENT" },
+      process.env.JWT_SECRET || "dev",
+      { expiresIn: "14d" },
+    );
 
-  return res.json({
-    token,
-    clientId: account.clientId,
-    salonId: account.client.salonId,
-  });
+    return res.json({
+      token,
+      clientId: account.clientId,
+      salonId: account.client.salonId,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Błąd logowania klienta" });
+  }
 });
 
 router.post("/password-reset", async (req, res) => {

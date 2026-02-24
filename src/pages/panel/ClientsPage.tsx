@@ -32,7 +32,7 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [clientAppointments, setClientAppointments] = useState<any[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' });
+  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '', allergies: '' });
   const [exportingClients, setExportingClients] = useState(false);
   const [exportingWithVisits, setExportingWithVisits] = useState(false);
   const [importingClients, setImportingClients] = useState(false);
@@ -67,6 +67,7 @@ export default function ClientsPage() {
       phone: current?.phone || '',
       email: current?.email || '',
       notes: current?.notes || '',
+      allergies: current?.allergies || '',
     });
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       setDetailOpen(true);
@@ -81,6 +82,7 @@ export default function ClientsPage() {
       phone: current?.phone || '',
       email: current?.email || '',
       notes: current?.notes || '',
+      allergies: current?.allergies || '',
     });
     setEditOpen(true);
   };
@@ -165,6 +167,7 @@ export default function ClientsPage() {
         phone: getIdx('telefon'),
         email: getIdx('email'),
         notes: getIdx('notatki'),
+        allergies: getIdx('alergie'),
         date: getIdx('data wizyty'),
         time: getIdx('godzina'),
         services: getIdx('usługi'),
@@ -177,6 +180,7 @@ export default function ClientsPage() {
         phone: cells[idx.phone] || '',
         email: cells[idx.email] || '',
         notes: cells[idx.notes] || '',
+        allergies: cells[idx.allergies] || '',
         date: cells[idx.date] || '',
         time: cells[idx.time] || '',
         services: cells[idx.services] || '',
@@ -215,7 +219,7 @@ export default function ClientsPage() {
     if (exportingClients) return;
     setExportingClients(true);
     const rows = [
-      ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki'],
+      ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki', 'Alergie'],
       ...clients.map((c: any) => {
         const { firstName, lastName } = splitName(c.name);
         return [
@@ -224,6 +228,7 @@ export default function ClientsPage() {
           buildCsvValue(c.phone),
           buildCsvValue(c.email),
           buildCsvValue(c.notes),
+          buildCsvValue(c.allergies),
         ];
       }),
     ];
@@ -254,7 +259,7 @@ export default function ClientsPage() {
         }),
       );
 
-      const header = ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki', 'Data wizyty', 'Godzina', 'Usługi', 'Pracownik', 'Status'];
+      const header = ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki', 'Alergie', 'Data wizyty', 'Godzina', 'Usługi', 'Pracownik', 'Status'];
       const rows = [header];
       results.forEach(({ client, appointments }) => {
         const { firstName, lastName } = splitName(client.name);
@@ -265,6 +270,7 @@ export default function ClientsPage() {
             buildCsvValue(client.phone),
             buildCsvValue(client.email),
             buildCsvValue(client.notes),
+            buildCsvValue(client.allergies),
             buildCsvValue(''),
             buildCsvValue(''),
             buildCsvValue(''),
@@ -281,6 +287,7 @@ export default function ClientsPage() {
             buildCsvValue(client.phone),
             buildCsvValue(client.email),
             buildCsvValue(client.notes),
+            buildCsvValue(client.allergies),
             buildCsvValue(apt.date),
             buildCsvValue(apt.time),
             buildCsvValue(services),
@@ -552,6 +559,12 @@ export default function ClientsPage() {
                     <p className="text-sm text-muted-foreground bg-muted rounded-xl p-3">{activeClient.notes}</p>
                   </div>
                 )}
+                {activeClient.allergies && (
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold mb-2">Alergie</h3>
+                    <p className="text-sm text-muted-foreground bg-muted rounded-xl p-3">{activeClient.allergies}</p>
+                  </div>
+                )}
 
                 <div className="mb-6">
                   <h3 className="text-sm font-semibold mb-2">Historia wizyt</h3>
@@ -674,7 +687,11 @@ export default function ClientsPage() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Notatka</label>
-              <Textarea placeholder="Preferencje, alergie..." value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} className="rounded-xl min-h-[90px]" />
+              <Textarea placeholder="Preferencje, ważne informacje..." value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} className="rounded-xl min-h-[90px]" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Alergie</label>
+              <Textarea placeholder="Wpisz alergie klienta..." value={form.allergies} onChange={(e) => setForm(f => ({ ...f, allergies: e.target.value }))} className="rounded-xl min-h-[80px]" />
             </div>
           </div>
           <DialogFooter className="pt-2">
@@ -688,9 +705,15 @@ export default function ClientsPage() {
                     toast.error('Uzupełnij imię i telefon');
                     return;
                   }
-                  await createClient({ name: form.name, phone: form.phone, email: form.email || undefined, notes: form.notes || undefined });
+                  await createClient({
+                    name: form.name,
+                    phone: form.phone,
+                    email: form.email || undefined,
+                    notes: form.notes || undefined,
+                    allergies: form.allergies || undefined,
+                  });
                   await refresh();
-                  setForm({ name: '', phone: '', email: '', notes: '' });
+                  setForm({ name: '', phone: '', email: '', notes: '', allergies: '' });
                   setAddOpen(false);
                 } catch (err: any) {
                   toast.error(err.message || 'Błąd zapisu');
@@ -727,6 +750,12 @@ export default function ClientsPage() {
                 <div className="pt-2">
                   <p className="text-xs text-muted-foreground mb-1">Notatki</p>
                   <p className="text-sm">{activeClient.notes}</p>
+                </div>
+              )}
+              {activeClient.allergies && (
+                <div className="pt-2">
+                  <p className="text-xs text-muted-foreground mb-1">Alergie</p>
+                  <p className="text-sm">{activeClient.allergies}</p>
                 </div>
               )}
               <div className="pt-2">
@@ -791,6 +820,10 @@ export default function ClientsPage() {
               <label className="text-sm font-medium mb-1.5 block">Notatka</label>
               <Textarea value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} className="rounded-xl min-h-[90px]" />
             </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Alergie</label>
+              <Textarea value={form.allergies} onChange={(e) => setForm(f => ({ ...f, allergies: e.target.value }))} className="rounded-xl min-h-[80px]" />
+            </div>
           </div>
           <DialogFooter className="pt-2">
             <Button variant="outline" className="rounded-xl" onClick={() => setEditOpen(false)}>Anuluj</Button>
@@ -804,7 +837,13 @@ export default function ClientsPage() {
                     toast.error('Uzupełnij imię i telefon');
                     return;
                   }
-                  await updateClient(activeClient.id, { name: form.name, phone: form.phone, email: form.email || undefined, notes: form.notes || undefined });
+                  await updateClient(activeClient.id, {
+                    name: form.name,
+                    phone: form.phone,
+                    email: form.email || undefined,
+                    notes: form.notes || undefined,
+                    allergies: form.allergies || undefined,
+                  });
                   await refresh();
                   setEditOpen(false);
                 } catch (err: any) {

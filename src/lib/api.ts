@@ -356,7 +356,7 @@ export async function updateNotificationTemplate(id: string, payload: { subject?
   });
 }
 
-export async function createClient(payload: { name: string; phone: string; email?: string; notes?: string }) {
+export async function createClient(payload: { name: string; phone: string; email?: string; notes?: string; allergies?: string }) {
   return apiFetch<{ client: any }>("/api/salon/clients", {
     method: "POST",
     auth: true,
@@ -364,7 +364,7 @@ export async function createClient(payload: { name: string; phone: string; email
   });
 }
 
-export async function updateClient(id: string, payload: { name: string; phone: string; email?: string; notes?: string }) {
+export async function updateClient(id: string, payload: { name: string; phone: string; email?: string; notes?: string; allergies?: string }) {
   return apiFetch<{ client: any }>(`/api/salon/clients/${id}`, {
     method: "PUT",
     auth: true,

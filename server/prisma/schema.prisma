@@ -200,6 +200,7 @@ model Client {
   phone     String
   email     String?
   notes     String?
+  allergies String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 

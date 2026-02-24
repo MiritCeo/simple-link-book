@@ -1386,6 +1386,7 @@ export default function CalendarPage() {
                         phone: editClientPhone,
                         email: editClientEmail || undefined,
                         notes: activeApt.client?.notes || undefined,
+                        allergies: activeApt.client?.allergies || undefined,
                       });
                     }
                     await updateAppointment(activeAptId, {

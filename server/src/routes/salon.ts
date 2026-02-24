@@ -755,6 +755,7 @@ router.post("/clients", async (req: AuthRequest, res) => {
     phone: z.string().min(6),
     email: z.string().email().optional(),
     notes: z.string().optional(),
+    allergies: z.string().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
@@ -774,6 +775,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
       phone: z.string().optional(),
       email: z.string().optional(),
       notes: z.string().optional(),
+      allergies: z.string().optional(),
       date: z.string().optional(),
       time: z.string().optional(),
       services: z.string().optional(),
@@ -833,6 +835,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
             name,
             email: row.email || existing.email || null,
             notes: row.notes || existing.notes || null,
+            allergies: row.allergies || existing.allergies || null,
             active: true,
           },
         });
@@ -846,6 +849,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
           phone,
           email: row.email || null,
           notes: row.notes || null,
+          allergies: row.allergies || null,
           active: true,
         },
       });
@@ -946,6 +950,7 @@ router.put("/clients/:id", async (req: AuthRequest, res) => {
     phone: z.string().min(6),
     email: z.string().email().optional(),
     notes: z.string().optional(),
+    allergies: z.string().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
