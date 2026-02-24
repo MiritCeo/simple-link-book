@@ -11,6 +11,7 @@ import publicRoutes from "./routes/public.js";
 import salonRoutes from "./routes/salon.js";
 import adminRoutes from "./routes/admin.js";
 import clientRoutes from "./routes/client.js";
+import inventoryRoutes from "./routes/inventory.js";
 import auth from "./middleware/auth.js";
 import prisma from "./prisma.js";
 import { sendEventNotification } from "./notificationService.js";
@@ -33,6 +34,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/public", publicRoutes);
 app.use("/api/client", clientRoutes);
 app.use("/api/salon", auth, salonRoutes);
+app.use("/api/salon/inventory", auth, inventoryRoutes);
 app.use("/api/admin", auth, adminRoutes);
 
 const toDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`);

@@ -281,6 +281,47 @@ router.post("/user-salons", async (req: AuthRequest, res) => {
   return res.json({ salon });
 });
 
+router.put("/user-salons/:id", async (req: AuthRequest, res) => {
+  const schema = z.object({
+    name: z.string().min(2).optional(),
+    slug: z.string().min(2).optional(),
+    phone: z.string().min(6).optional(),
+    address: z.string().min(2).optional(),
+    hours: z.string().optional(),
+    description: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane salonu" });
+
+  const userId = req.user?.userId;
+  if (!userId) return res.status(401).json({ error: "Brak autoryzacji" });
+
+  const salonId = req.params.id;
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const isPrimaryOwner = user?.salonId === salonId && user?.role === "OWNER";
+  const link = await prisma.userSalon.findUnique({
+    where: { userId_salonId: { userId, salonId } },
+  });
+  if (!isPrimaryOwner && link?.role !== "OWNER") {
+    return res.status(403).json({ error: "Brak dostępu" });
+  }
+
+  if (parsed.data.slug) {
+    const normalized = parsed.data.slug.trim().toLowerCase();
+    const exists = await prisma.salon.findUnique({ where: { slug: normalized } });
+    if (exists && exists.id !== salonId) {
+      return res.status(409).json({ error: "Slug jest już zajęty" });
+    }
+    parsed.data.slug = normalized;
+  }
+
+  const salon = await prisma.salon.update({
+    where: { id: salonId },
+    data: parsed.data,
+  });
+  return res.json({ salon });
+});
+
 router.get("/notifications/settings", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const salonId = getSalonId(req);
@@ -491,6 +532,9 @@ router.post("/staff", async (req: AuthRequest, res) => {
     role: z.string().min(2),
     phone: z.string().optional(),
     serviceIds: z.array(z.string()).default([]),
+    inventoryRole: z.enum(["ADMIN", "MANAGER", "STAFF"]).optional(),
+    accountEmail: z.string().email(),
+    accountPassword: z.string().min(8),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane pracownika" });
@@ -503,18 +547,42 @@ router.post("/staff", async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
     }
   }
-  const staff = await prisma.staff.create({
-    data: {
-      name: parsed.data.name,
-      role: parsed.data.role,
-      phone: parsed.data.phone,
-      active: true,
-      salonId: getSalonId(req),
-      staffServices: {
-        create: parsed.data.serviceIds.map(serviceId => ({ serviceId })),
+  const exists = await prisma.user.findUnique({ where: { email: parsed.data.accountEmail } });
+  if (exists) return res.status(409).json({ error: "Podany email jest już zajęty" });
+
+  const staff = await prisma.$transaction(async (tx) => {
+    const createdStaff = await tx.staff.create({
+      data: {
+        name: parsed.data.name,
+        role: parsed.data.role,
+        phone: parsed.data.phone,
+        active: true,
+        salonId: getSalonId(req),
+        inventoryRole: parsed.data.inventoryRole || "STAFF",
+        staffServices: {
+          create: parsed.data.serviceIds.map(serviceId => ({ serviceId })),
+        },
       },
-    },
-    include: { staffServices: { include: { service: true } }, user: true },
+    });
+    const passwordHash = await (await import("bcryptjs")).default.hash(parsed.data.accountPassword, 10);
+    const user = await tx.user.create({
+      data: {
+        email: parsed.data.accountEmail,
+        phone: createdStaff.phone || "",
+        passwordHash,
+        role: "STAFF",
+        salonId: createdStaff.salonId,
+        active: true,
+      },
+    });
+    await tx.userSalon.create({
+      data: { userId: user.id, salonId: createdStaff.salonId, role: "STAFF" },
+    });
+    return tx.staff.update({
+      where: { id: createdStaff.id },
+      data: { userId: user.id },
+      include: { staffServices: { include: { service: true } }, user: true },
+    });
   });
   return res.json({
     staff: {
@@ -532,6 +600,7 @@ router.put("/staff/:id", async (req: AuthRequest, res) => {
     phone: z.string().optional(),
     active: z.boolean().optional(),
     serviceIds: z.array(z.string()).default([]),
+    inventoryRole: z.enum(["ADMIN", "MANAGER", "STAFF"]).optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane pracownika" });
@@ -556,6 +625,7 @@ router.put("/staff/:id", async (req: AuthRequest, res) => {
       role: parsed.data.role,
       phone: parsed.data.phone,
       active: parsed.data.active,
+      inventoryRole: parsed.data.inventoryRole,
       staffServices: {
         create: parsed.data.serviceIds.map(serviceId => ({ serviceId })),
       },

@@ -24,6 +24,9 @@ import SalonsSettingsPage from "./pages/panel/settings/SalonsSettingsPage";
 import NotificationsPage from "./pages/panel/NotificationsPage";
 import StaffSchedulePage from "./pages/panel/StaffSchedulePage";
 import StaffScheduleEditPage from "./pages/panel/StaffScheduleEditPage";
+import InventoryItemsPage from "./pages/panel/inventory/InventoryItemsPage";
+import InventoryMovementsPage from "./pages/panel/inventory/InventoryMovementsPage";
+import InventorySettingsPage from "./pages/panel/inventory/InventorySettingsPage";
 import ClientLayout from "./components/layout/ClientLayout";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientAppointments from "./pages/client/ClientAppointments";
@@ -68,6 +71,9 @@ const App = () => (
             <Route path="kalendarz" element={<CalendarPage />} />
             <Route path="wizyty" element={<AppointmentsPage />} />
             <Route path="klienci" element={<ClientsPage />} />
+            <Route path="magazyn" element={<InventoryItemsPage />} />
+            <Route path="magazyn/ruchy" element={<InventoryMovementsPage />} />
+            <Route path="magazyn/ustawienia" element={<InventorySettingsPage />} />
             <Route path="grafik" element={<StaffSchedulePage />} />
             <Route path="grafik/:id" element={<StaffScheduleEditPage />} />
             <Route path="powiadomienia" element={<NotificationsPage />} />

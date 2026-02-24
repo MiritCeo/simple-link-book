@@ -23,6 +23,7 @@ export default function StaffEditPage() {
   const [accountPassword, setAccountPassword] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [accountRole, setAccountRole] = useState<'OWNER' | 'STAFF'>('STAFF');
+  const [inventoryRole, setInventoryRole] = useState<'ADMIN' | 'MANAGER' | 'STAFF'>('STAFF');
 
   const loadData = async () => {
     if (!id) return;
@@ -37,6 +38,7 @@ export default function StaffEditPage() {
         setSelectedServiceIds(staffRec.services?.map((s: any) => s.id) ?? []);
         setAccountEmail(staffRec.user?.email || '');
         setAccountRole(staffRec.user?.role || 'STAFF');
+        setInventoryRole(staffRec.inventoryRole || 'STAFF');
       }
     } finally {
       setLoading(false);
@@ -115,6 +117,19 @@ export default function StaffEditPage() {
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Telefon</label>
                 <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} className="h-11 rounded-xl" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Uprawnienia magazynowe</label>
+                <Select value={inventoryRole} onValueChange={(val) => setInventoryRole(val as 'ADMIN' | 'MANAGER' | 'STAFF')}>
+                  <SelectTrigger className="h-11 rounded-xl text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    <SelectItem value="ADMIN">Administrator (pełne zarządzanie)</SelectItem>
+                    <SelectItem value="MANAGER">Kierownik (obsługa magazynu)</SelectItem>
+                    <SelectItem value="STAFF">Pracownik (tylko odczyt)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
@@ -300,7 +315,7 @@ export default function StaffEditPage() {
                   return;
                 }
                 try {
-                  await updateStaff(staff.id, { ...form, serviceIds: selectedServiceIds });
+                  await updateStaff(staff.id, { ...form, serviceIds: selectedServiceIds, inventoryRole });
                   await loadData();
                   toast.success('Pracownik zaktualizowany');
                 } catch (err: any) {

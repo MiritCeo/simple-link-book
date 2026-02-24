@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +32,9 @@ export default function StaffSettingsPage() {
   const [staff, setStaff] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accountEmail, setAccountEmail] = useState('');
+  const [accountPassword, setAccountPassword] = useState('');
+  const [inventoryRole, setInventoryRole] = useState<'ADMIN' | 'MANAGER' | 'STAFF'>('STAFF');
 
   useEffect(() => {
     let mounted = true;
@@ -62,6 +66,9 @@ export default function StaffSettingsPage() {
     setSelectedServiceIds([]); 
     setServiceSearch(''); 
     setForm({ name: '', role: '', phone: '' });
+    setAccountEmail('');
+    setAccountPassword('');
+    setInventoryRole('STAFF');
     setDialogOpen(true); 
   };
   const openEdit = (id: string) => navigate(`/panel/ustawienia/pracownicy/${id}`);
@@ -226,6 +233,32 @@ export default function StaffSettingsPage() {
               <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+48 500 000 000" className="h-11 rounded-xl" />
             </div>
             <div>
+              <label className="text-sm font-medium mb-1.5 block">Uprawnienia magazynowe</label>
+              <Select value={inventoryRole} onValueChange={(val) => setInventoryRole(val as 'ADMIN' | 'MANAGER' | 'STAFF')}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="ADMIN">Administrator (pełne zarządzanie)</SelectItem>
+                  <SelectItem value="MANAGER">Kierownik (obsługa magazynu)</SelectItem>
+                  <SelectItem value="STAFF">Pracownik (tylko odczyt)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="rounded-xl border border-border p-3">
+              <label className="text-sm font-medium mb-2 block">Konto logowania (wymagane)</label>
+              <div className="space-y-2">
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Email</label>
+                  <Input type="email" value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="pracownik@example.com" className="h-10 rounded-xl" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Hasło</label>
+                  <Input type="password" value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="••••••••" className="h-10 rounded-xl" />
+                </div>
+              </div>
+            </div>
+            <div>
               <label className="text-sm font-medium mb-1.5 block">Usługi</label>
               <Input
                 placeholder="Szukaj usługi..."
@@ -269,7 +302,21 @@ export default function StaffSettingsPage() {
               className="rounded-xl"
               onClick={async () => {
                 try {
-                  await createStaff({ ...form, serviceIds: selectedServiceIds });
+                  if (!form.name.trim() || !form.role.trim()) {
+                    toast.error('Uzupełnij imię i rolę');
+                    return;
+                  }
+                  if (!accountEmail.trim() || accountPassword.length < 8) {
+                    toast.error('Podaj email i hasło (min. 8 znaków)');
+                    return;
+                  }
+                  await createStaff({
+                    ...form,
+                    serviceIds: selectedServiceIds,
+                    inventoryRole,
+                    accountEmail: accountEmail.trim(),
+                    accountPassword,
+                  });
                   toast.success('Pracownik dodany');
                   const res = await getSalonStaff();
                   setStaff(res.staff || []);

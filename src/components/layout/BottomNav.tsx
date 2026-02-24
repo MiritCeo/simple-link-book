@@ -1,12 +1,16 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { clearAuth, getRole } from '@/lib/auth';
-import { LayoutDashboard, CalendarDays, ClipboardList, Users, Bell, Settings, CalendarClock, LogOut } from 'lucide-react';
+import { clearAuth, getActiveSalonId, getRole, getSalons, setActiveSalonId } from '@/lib/auth';
+import { LayoutDashboard, CalendarDays, ClipboardList, Users, Bell, Settings, CalendarClock, LogOut, Boxes } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { switchSalon } from '@/lib/api';
 
 const navItems = [
   { path: '/panel/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/panel/kalendarz', label: 'Kalendarz', icon: CalendarDays },
   { path: '/panel/wizyty', label: 'Wizyty', icon: ClipboardList },
   { path: '/panel/klienci', label: 'Klienci', icon: Users },
+  { path: '/panel/magazyn', label: 'Magazyn', icon: Boxes },
   { path: '/panel/grafik', label: 'Grafik', icon: CalendarClock },
   { path: '/panel/powiadomienia', label: 'Powiadomienia', icon: Bell },
   { path: '/panel/ustawienia', label: 'Ustawienia', icon: Settings },
@@ -14,10 +18,10 @@ const navItems = [
 
 // Bottom nav shows fewer items on mobile
 const mobileNavItems = [
-  navItems[0], // Dashboard
-  navItems[1], // Kalendarz
-  navItems[2], // Wizyty
-  navItems[4], // Grafik
+  navItems.find(item => item.path === '/panel/dashboard')!,
+  navItems.find(item => item.path === '/panel/kalendarz')!,
+  navItems.find(item => item.path === '/panel/wizyty')!,
+  navItems.find(item => item.path === '/panel/grafik')!,
 ];
 
 export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salonName?: string | null }) {
@@ -26,6 +30,8 @@ export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salon
   const role = getRole();
   const logoSrc = logoUrl || '/purebooklogo.svg';
   const name = salonName || 'Salon';
+  const [salons, setSalonsList] = useState(getSalons());
+  const [activeSalon, setActiveSalon] = useState(getActiveSalonId());
   const handleLogout = () => {
     clearAuth();
     navigate('/login');
@@ -33,6 +39,18 @@ export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salon
   const visibleItems = role === 'STAFF'
     ? navItems.filter(item => !['/panel/ustawienia', '/panel/powiadomienia', '/panel/grafik', '/panel/dashboard'].includes(item.path))
     : navItems;
+
+  useEffect(() => {
+    const refresh = () => {
+      setSalonsList(getSalons());
+      setActiveSalon(getActiveSalonId());
+    };
+    refresh();
+    window.addEventListener("salonsUpdated", refresh);
+    return () => {
+      window.removeEventListener("salonsUpdated", refresh);
+    };
+  }, []);
 
   return (
     <aside className="hidden lg:flex flex-col w-60 border-r border-border bg-card h-screen sticky top-0">
@@ -42,6 +60,35 @@ export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salon
         </div>
         <span className="font-bold text-sm">{name}</span>
       </div>
+      {salons.length > 1 && (
+        <div className="px-4 pt-3">
+          <Select
+            value={activeSalon || ''}
+            onValueChange={async (value) => {
+              try {
+                await switchSalon(value);
+                setActiveSalonId(value);
+                setActiveSalon(value);
+                window.dispatchEvent(new Event("salonChanged"));
+                navigate('/panel/kalendarz', { replace: true });
+              } catch {
+                // ignore errors; toasts are handled elsewhere
+              }
+            }}
+          >
+            <SelectTrigger className="h-9 rounded-xl text-xs">
+              <SelectValue placeholder="Wybierz salon" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover z-50">
+              {salons.map((salon) => (
+                <SelectItem key={salon.id} value={salon.id}>
+                  {salon.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {visibleItems.map(item => {
           const isActive = location.pathname.startsWith(item.path);

@@ -50,12 +50,13 @@ async function clientApiFetch<T>(path: string, options: FetchOptions = {}): Prom
 }
 
 export async function login(email: string, password: string) {
-  const data = await apiFetch<{ token: string; salonId: string | null; userId: string; role: "SUPER_ADMIN" | "OWNER" | "STAFF"; salons: any[] }>(
+  const data = await apiFetch<{ token: string; salonId: string | null; userId: string; role: "SUPER_ADMIN" | "OWNER" | "STAFF"; salons: any[]; inventoryRole?: "ADMIN" | "MANAGER" | "STAFF" }>(
     "/api/auth/login",
     { method: "POST", body: JSON.stringify({ email, password }) },
   );
   setToken(data.token);
   localStorage.setItem("auth_role", data.role);
+  if (data.inventoryRole) localStorage.setItem("inventory_role", data.inventoryRole);
   if (data.salonId) localStorage.setItem("auth_salon_id", data.salonId);
   if (data.salons) localStorage.setItem("auth_salons", JSON.stringify(data.salons));
   return data;
@@ -109,12 +110,13 @@ export async function confirmClientPasswordReset(payload: { token: string; newPa
 }
 
 export async function switchSalon(salonId: string) {
-  const data = await apiFetch<{ token: string; salonId: string; role: "OWNER" | "STAFF" }>(
+  const data = await apiFetch<{ token: string; salonId: string; role: "OWNER" | "STAFF"; inventoryRole?: "ADMIN" | "MANAGER" | "STAFF" }>(
     "/api/auth/switch-salon",
     { method: "POST", auth: true, body: JSON.stringify({ salonId }) },
   );
   setToken(data.token);
   localStorage.setItem("auth_role", data.role);
+  if (data.inventoryRole) localStorage.setItem("inventory_role", data.inventoryRole);
   localStorage.setItem("auth_salon_id", data.salonId);
   return data;
 }
@@ -213,6 +215,21 @@ export async function createUserSalon(payload: {
 }) {
   return apiFetch<{ salon: any }>("/api/salon/user-salons", {
     method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateUserSalon(id: string, payload: {
+  name?: string;
+  slug?: string;
+  phone?: string;
+  address?: string;
+  hours?: string;
+  description?: string;
+}) {
+  return apiFetch<{ salon: any }>(`/api/salon/user-salons/${id}`, {
+    method: "PUT",
     auth: true,
     body: JSON.stringify(payload),
   });
@@ -439,7 +456,15 @@ export async function deleteService(id: string) {
   });
 }
 
-export async function createStaff(payload: { name: string; role: string; phone?: string; serviceIds: string[] }) {
+export async function createStaff(payload: {
+  name: string;
+  role: string;
+  phone?: string;
+  serviceIds: string[];
+  inventoryRole?: "ADMIN" | "MANAGER" | "STAFF";
+  accountEmail: string;
+  accountPassword: string;
+}) {
   return apiFetch<{ staff: any }>("/api/salon/staff", {
     method: "POST",
     auth: true,
@@ -447,7 +472,7 @@ export async function createStaff(payload: { name: string; role: string; phone?:
   });
 }
 
-export async function updateStaff(id: string, payload: { name: string; role: string; phone?: string; serviceIds: string[] }) {
+export async function updateStaff(id: string, payload: { name: string; role: string; phone?: string; serviceIds: string[]; inventoryRole?: "ADMIN" | "MANAGER" | "STAFF" }) {
   return apiFetch<{ staff: any }>(`/api/salon/staff/${id}`, {
     method: "PUT",
     auth: true,
@@ -459,6 +484,106 @@ export async function deleteStaff(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/salon/staff/${id}`, {
     method: "DELETE",
     auth: true,
+  });
+}
+
+export async function getInventoryItems() {
+  return apiFetch<{ items: any[] }>("/api/salon/inventory/items", {
+    method: "GET",
+    auth: true,
+  });
+}
+
+export async function createInventoryItem(payload: {
+  name: string;
+  category: string;
+  unit: string;
+  stock?: number;
+  minStock?: number;
+  purchasePrice?: number;
+  salePrice?: number;
+  active?: boolean;
+}) {
+  return apiFetch<{ item: any }>("/api/salon/inventory/items", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInventoryItem(id: string, payload: Partial<{
+  name: string;
+  category: string;
+  unit: string;
+  stock: number;
+  minStock: number;
+  purchasePrice: number;
+  salePrice: number;
+  active: boolean;
+}>) {
+  return apiFetch<{ item: any }>(`/api/salon/inventory/items/${id}`, {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deactivateInventoryItem(id: string) {
+  return apiFetch<{ item: any }>(`/api/salon/inventory/items/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
+export async function getInventoryMovements() {
+  return apiFetch<{ movements: any[] }>("/api/salon/inventory/movements", {
+    method: "GET",
+    auth: true,
+  });
+}
+
+export async function createInventoryMovement(payload: { itemId: string; type: "IN" | "OUT" | "ADJUST"; quantity: number; note?: string }) {
+  return apiFetch<{ movement: any; stock: number }>("/api/salon/inventory/movements", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getInventoryUnits() {
+  return apiFetch<{ units: any[] }>("/api/salon/inventory/units", {
+    method: "GET",
+    auth: true,
+  });
+}
+
+export async function createInventoryUnit(payload: { name: string }) {
+  return apiFetch<{ unit: any }>("/api/salon/inventory/units", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteInventoryUnit(id: string) {
+  return apiFetch<{ unit: any }>(`/api/salon/inventory/units/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
+export async function getInventorySettings() {
+  return apiFetch<{ setting: { defaultMinStock: number } | null }>("/api/salon/inventory/settings", {
+    method: "GET",
+    auth: true,
+  });
+}
+
+export async function updateInventorySettings(payload: { defaultMinStock: number }) {
+  return apiFetch<{ setting: any }>("/api/salon/inventory/settings", {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify(payload),
   });
 }
 

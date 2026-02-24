@@ -92,11 +92,17 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
   }
 
+  const inventoryRole = user.role === "OWNER"
+    ? "ADMIN"
+    : user.role === "STAFF"
+      ? (await prisma.staff.findFirst({ where: { userId: user.id } }))?.inventoryRole || "STAFF"
+      : "ADMIN";
+
   if (user.role === "SUPER_ADMIN") {
     const token = jwt.sign({ userId: user.id, role: user.role, salonId: null }, process.env.JWT_SECRET || "dev", {
       expiresIn: "7d",
     });
-    return res.json({ token, salonId: null, userId: user.id, role: user.role, salons: [] });
+    return res.json({ token, salonId: null, userId: user.id, role: user.role, salons: [], inventoryRole });
   }
 
   const extraSalons = await prisma.userSalon.findMany({
@@ -115,7 +121,7 @@ router.post("/login", async (req, res) => {
     expiresIn: "7d",
   });
 
-  return res.json({ token, salonId: user.salonId, userId: user.id, role: user.role, salons });
+  return res.json({ token, salonId: user.salonId, userId: user.id, role: user.role, salons, inventoryRole });
 });
 
 router.post("/switch-salon", async (req, res) => {
@@ -152,7 +158,10 @@ router.post("/switch-salon", async (req, res) => {
     process.env.JWT_SECRET || "dev",
     { expiresIn: "7d" },
   );
-  return res.json({ token: newToken, salonId: parsed.data.salonId, role });
+  const inventoryRole = role === "OWNER"
+    ? "ADMIN"
+    : (await prisma.staff.findFirst({ where: { userId: user.id, salonId: parsed.data.salonId } }))?.inventoryRole || "STAFF";
+  return res.json({ token: newToken, salonId: parsed.data.salonId, role, inventoryRole });
 });
 
 export default router;

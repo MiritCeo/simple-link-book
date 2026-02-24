@@ -29,7 +29,7 @@ export default function PanelLayout() {
       return;
     }
     if (role === 'STAFF') {
-      const allowed = ['/panel/kalendarz', '/panel/wizyty', '/panel/klienci'];
+      const allowed = ['/panel/kalendarz', '/panel/wizyty', '/panel/klienci', '/panel/magazyn'];
       const isAllowed = allowed.some(path => location.pathname.startsWith(path));
       if (!isAllowed) {
         navigate('/panel/kalendarz', { replace: true });
@@ -39,14 +39,22 @@ export default function PanelLayout() {
 
   useEffect(() => {
     let active = true;
-    getSalonProfile()
-      .then(res => {
-        if (!active) return;
-        setLogoUrl(res.salon?.logoUrl || null);
-        setSalonName(res.salon?.name || null);
-      })
-      .catch(() => {});
-    return () => { active = false; };
+    const loadProfile = () => {
+      getSalonProfile()
+        .then(res => {
+          if (!active) return;
+          setLogoUrl(res.salon?.logoUrl || null);
+          setSalonName(res.salon?.name || null);
+        })
+        .catch(() => {});
+    };
+    loadProfile();
+    const handleSalonChanged = () => loadProfile();
+    window.addEventListener("salonChanged", handleSalonChanged);
+    return () => {
+      active = false;
+      window.removeEventListener("salonChanged", handleSalonChanged);
+    };
   }, []);
 
   return (
