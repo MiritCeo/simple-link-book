@@ -92,6 +92,7 @@ model User {
 
   userSalons UserSalon[]
   staff      Staff?
+  inventoryMovements InventoryMovement[]
 }
 
 model Service {
