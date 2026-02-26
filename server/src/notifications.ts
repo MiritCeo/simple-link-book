@@ -39,6 +39,17 @@ const sendSmsRequest = async (to: string, message: string, from?: string | null)
   });
 
   const text = await res.text().catch(() => "");
+  let parsed: any = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+  }
+  if (parsed && typeof parsed === "object" && "error" in parsed) {
+    return { ok: false, error: parsed.message || "Błąd SMSAPI" };
+  }
   if (!res.ok) {
     return { ok: false, error: text || `Błąd SMSAPI: ${res.status}` };
   }
