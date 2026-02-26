@@ -42,6 +42,15 @@ async function clientApiFetch<T>(path: string, options: FetchOptions = {}): Prom
     ...options,
     headers,
   });
+  if (res.status === 401) {
+    localStorage.removeItem("client_token");
+    localStorage.removeItem("client_id");
+    localStorage.removeItem("client_salon_id");
+    if (typeof window !== "undefined") {
+      window.location.assign("/konto/logowanie");
+    }
+    throw new Error("UNAUTHORIZED");
+  }
   if (!res.ok) {
     const payload = await res.json().catch(() => ({}));
     throw new Error(payload.error || `Request failed: ${res.status}`);
@@ -326,6 +335,14 @@ export async function getNotificationTemplates() {
 
 export async function sendTestSms(payload: { to: string; message?: string }) {
   return apiFetch<{ ok: boolean }>("/api/salon/notifications/test-sms", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function sendTestEmail(payload: { to: string; subject?: string; body?: string }) {
+  return apiFetch<{ ok: boolean }>("/api/salon/notifications/test-email", {
     method: "POST",
     auth: true,
     body: JSON.stringify(payload),

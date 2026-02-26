@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bell, Mail, MessageSquare, Clock, ChevronRight, Check, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -41,6 +42,10 @@ export default function NotificationsPage() {
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Test SMS z purebook.');
   const [sendingTest, setSendingTest] = useState(false);
+  const [testEmail, setTestEmail] = useState('');
+  const [testEmailSubject, setTestEmailSubject] = useState('Test email z purebook');
+  const [testEmailBody, setTestEmailBody] = useState('To jest testowa wiadomość email z purebook.');
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
   const eventIcon = (id: string) => eventMeta.find(e => e.id === id)?.icon || Bell;
   const eventLabel = (id: string) => eventMeta.find(e => e.id === id)?.label || id;
@@ -313,6 +318,46 @@ export default function NotificationsPage() {
                 {sendingTest ? 'Wysyłanie...' : 'Wyślij test SMS'}
               </Button>
               <p className="text-[10px] text-muted-foreground">Wymaga aktywnego klucza SMSAPI w backendzie.</p>
+            </div>
+          </div>
+
+          <div className="bg-card rounded-2xl p-5 border border-border">
+            <h2 className="font-semibold mb-4">Test email</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Adres email</label>
+                <Input value={testEmail} onChange={e => setTestEmail(e.target.value)} className="h-11 rounded-xl" placeholder="klient@example.com" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Temat</label>
+                <Input value={testEmailSubject} onChange={e => setTestEmailSubject(e.target.value)} className="h-11 rounded-xl" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Treść</label>
+                <Textarea value={testEmailBody} onChange={e => setTestEmailBody(e.target.value)} className="rounded-xl min-h-[100px]" />
+              </div>
+              <Button
+                className="rounded-xl h-10"
+                disabled={sendingTestEmail || !testEmail.trim()}
+                onClick={async () => {
+                  try {
+                    setSendingTestEmail(true);
+                    await import('@/lib/api').then(m => m.sendTestEmail({
+                      to: testEmail.trim(),
+                      subject: testEmailSubject.trim() || undefined,
+                      body: testEmailBody.trim() || undefined,
+                    }));
+                    toast.success('Email testowy wysłany');
+                  } catch (err: any) {
+                    toast.error(err.message || 'Nie udało się wysłać emaila');
+                  } finally {
+                    setSendingTestEmail(false);
+                  }
+                }}
+              >
+                {sendingTestEmail ? 'Wysyłanie...' : 'Wyślij test email'}
+              </Button>
+              <p className="text-[10px] text-muted-foreground">Wymaga aktywnego klucza SendGrid w backendzie.</p>
             </div>
           </div>
 

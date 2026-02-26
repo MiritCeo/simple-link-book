@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { NotificationEvent } from "@prisma/client";
 import prisma from "../prisma.js";
 import { sendEventNotification } from "../notificationService.js";
-import { sendSms } from "../notifications.js";
+import { sendEmail, sendSms } from "../notifications.js";
 import type { AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
@@ -387,6 +387,26 @@ router.post("/notifications/test-sms", async (req: AuthRequest, res) => {
   if (!result?.ok) {
     return res.status(400).json({ error: result?.error || "Błąd SMSAPI" });
   }
+  return res.json({ ok: true });
+});
+
+router.post("/notifications/test-email", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const schema = z.object({
+    to: z.string().email(),
+    subject: z.string().min(1).max(140).optional(),
+    body: z.string().min(1).max(5000).optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane testu email" });
+  if (!process.env.SENDGRID_API_KEY || !process.env.SENDGRID_FROM) {
+    return res.status(400).json({ error: "Brak konfiguracji email" });
+  }
+  const salon = await prisma.salon.findUnique({ where: { id: getSalonId(req) } });
+  const subject = parsed.data.subject || "Test email z purebook";
+  const prefix = salon?.name ? `[${salon.name}] ` : "";
+  const body = parsed.data.body || "To jest testowa wiadomość email z purebook.";
+  await sendEmail(parsed.data.to, `${prefix}${subject}`, body);
   return res.json({ ok: true });
 });
 
