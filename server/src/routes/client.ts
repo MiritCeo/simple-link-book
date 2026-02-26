@@ -39,7 +39,7 @@ router.post("/login", async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: "Nieprawidłowe dane logowania" });
+      return res.status(400).json({ error: "INVALID_PAYLOAD" });
     }
 
     const { email, password } = parsed.data;
@@ -48,17 +48,17 @@ router.post("/login", async (req, res) => {
       include: { client: true },
     });
     if (!account) {
-      return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
+      return res.status(401).json({ error: "INVALID_CREDENTIALS" });
     }
     if (!account.client) {
-      return res.status(403).json({ error: "Brak profilu klienta" });
+      return res.status(403).json({ error: "CLIENT_PROFILE_MISSING" });
     }
     if (!account.active || !account.client.active) {
-      return res.status(403).json({ error: "Konto jest nieaktywne" });
+      return res.status(403).json({ error: "ACCOUNT_INACTIVE" });
     }
     const ok = await bcrypt.compare(password, account.passwordHash);
     if (!ok) {
-      return res.status(401).json({ error: "Nieprawidłowy email lub hasło" });
+      return res.status(401).json({ error: "INVALID_CREDENTIALS" });
     }
 
     const token = jwt.sign(
@@ -73,13 +73,13 @@ router.post("/login", async (req, res) => {
       salonId: account.client.salonId,
     });
   } catch (err) {
-    return res.status(500).json({ error: "Błąd logowania klienta" });
+    return res.status(500).json({ error: "INTERNAL_ERROR" });
   }
 });
 
 router.post("/password-reset", async (req, res) => {
   const parsed = resetRequestSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowy email" });
+  if (!parsed.success) return res.status(400).json({ error: "INVALID_PAYLOAD" });
 
   const account = await prisma.clientAccount.findUnique({ where: { email: parsed.data.email } });
   if (!account || !account.active) {
@@ -101,13 +101,13 @@ router.post("/password-reset", async (req, res) => {
 
 router.post("/password-reset/confirm", async (req, res) => {
   const parsed = resetConfirmSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane resetu hasła" });
+  if (!parsed.success) return res.status(400).json({ error: "INVALID_PAYLOAD" });
 
   const reset = await prisma.clientPasswordReset.findFirst({
     where: { token: parsed.data.token, usedAt: null, expiresAt: { gt: new Date() } },
     include: { clientAccount: true },
   });
-  if (!reset) return res.status(400).json({ error: "Link jest nieprawidłowy lub wygasł" });
+  if (!reset) return res.status(400).json({ error: "TOKEN_INVALID" });
 
   const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
   await prisma.clientAccount.update({
