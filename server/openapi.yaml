@@ -111,16 +111,25 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
         '401':
           description: Unauthorized
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_credentials:
+                  value: { error: invalid_credentials }
         '403':
           description: Forbidden
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                account_inactive:
+                  value: { error: account_inactive }
 
   /api/auth/register:
     post:
@@ -149,11 +158,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
         '409':
           description: Email taken
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                email_taken:
+                  value: { error: email_taken }
 
   /api/auth/switch-salon:
     post:
@@ -176,16 +191,25 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
         '401':
           description: Unauthorized
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                unauthorized:
+                  value: { error: unauthorized }
         '403':
           description: Forbidden
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                forbidden:
+                  value: { error: forbidden }
 
   /api/client/login:
     post:
@@ -211,21 +235,33 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
         '401':
           description: Unauthorized
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_credentials:
+                  value: { error: invalid_credentials }
         '403':
           description: Forbidden
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                account_inactive:
+                  value: { error: account_inactive }
         '500':
           description: Internal error
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                internal_error:
+                  value: { error: internal_error }
 
   /api/client/password-reset:
     post:
@@ -247,6 +283,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
 
   /api/client/password-reset/confirm:
     post:
@@ -269,6 +308,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
+                token_invalid:
+                  value: { error: token_invalid }
 
   /api/client/me:
     get:
