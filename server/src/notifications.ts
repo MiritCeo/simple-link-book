@@ -85,7 +85,7 @@ export async function sendEmail(to: string, subject: string, html: string) {
   };
 
   try {
-    await fetchFn("https://api.sendgrid.com/v3/mail/send", {
+    const res = await fetchFn("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -93,6 +93,11 @@ export async function sendEmail(to: string, subject: string, html: string) {
       },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      // eslint-disable-next-line no-console
+      console.warn("SendGrid error", { status: res.status, body: text });
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("SendGrid error", err);
