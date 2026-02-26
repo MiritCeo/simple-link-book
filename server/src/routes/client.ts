@@ -39,7 +39,7 @@ router.post("/login", async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: "INVALID_PAYLOAD" });
+      return res.status(400).json({ error: "invalid_payload" });
     }
 
     const { email, password } = parsed.data;
@@ -48,17 +48,17 @@ router.post("/login", async (req, res) => {
       include: { client: true },
     });
     if (!account) {
-      return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+      return res.status(401).json({ error: "invalid_credentials" });
     }
     if (!account.client) {
-      return res.status(403).json({ error: "CLIENT_PROFILE_MISSING" });
+      return res.status(403).json({ error: "client_profile_missing" });
     }
     if (!account.active || !account.client.active) {
-      return res.status(403).json({ error: "ACCOUNT_INACTIVE" });
+      return res.status(403).json({ error: "account_inactive" });
     }
     const ok = await bcrypt.compare(password, account.passwordHash);
     if (!ok) {
-      return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+      return res.status(401).json({ error: "invalid_credentials" });
     }
 
     const token = jwt.sign(
@@ -73,13 +73,13 @@ router.post("/login", async (req, res) => {
       salonId: account.client.salonId,
     });
   } catch (err) {
-    return res.status(500).json({ error: "INTERNAL_ERROR" });
+    return res.status(500).json({ error: "internal_error" });
   }
 });
 
 router.post("/password-reset", async (req, res) => {
   const parsed = resetRequestSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "INVALID_PAYLOAD" });
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
 
   const account = await prisma.clientAccount.findUnique({ where: { email: parsed.data.email } });
   if (!account || !account.active) {
@@ -101,13 +101,13 @@ router.post("/password-reset", async (req, res) => {
 
 router.post("/password-reset/confirm", async (req, res) => {
   const parsed = resetConfirmSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "INVALID_PAYLOAD" });
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
 
   const reset = await prisma.clientPasswordReset.findFirst({
     where: { token: parsed.data.token, usedAt: null, expiresAt: { gt: new Date() } },
     include: { clientAccount: true },
   });
-  if (!reset) return res.status(400).json({ error: "TOKEN_INVALID" });
+  if (!reset) return res.status(400).json({ error: "token_invalid" });
 
   const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
   await prisma.clientAccount.update({
@@ -128,7 +128,7 @@ router.get("/me", async (req: ClientAuthRequest, res) => {
   const client = await prisma.client.findUnique({
     where: { id: req.client!.clientId },
   });
-  if (!client) return res.status(404).json({ error: "Nie znaleziono profilu klienta" });
+  if (!client) return res.status(404).json({ error: "profile_not_found" });
   return res.json({ client });
 });
 
@@ -155,7 +155,7 @@ router.get("/appointments", async (req: ClientAuthRequest, res) => {
 router.put("/me", async (req: ClientAuthRequest, res) => {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.errors[0]?.message || "Nieprawidłowe dane profilu" });
+    return res.status(400).json({ error: "invalid_payload" });
   }
 
   const { name, phone, email } = parsed.data;
@@ -166,7 +166,7 @@ router.put("/me", async (req: ClientAuthRequest, res) => {
   if (email && account) {
     const existing = await prisma.clientAccount.findUnique({ where: { email } });
     if (existing && existing.clientId !== account.clientId) {
-        return res.status(409).json({ error: "Podany email jest już zajęty" });
+        return res.status(409).json({ error: "email_taken" });
     }
   }
 
@@ -188,7 +188,7 @@ router.put("/me", async (req: ClientAuthRequest, res) => {
 router.put("/password", async (req: ClientAuthRequest, res) => {
   const parsed = passwordSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Nieprawidłowe dane hasła" });
+    return res.status(400).json({ error: "invalid_payload" });
   }
 
   const { currentPassword, newPassword } = parsed.data;
@@ -196,12 +196,12 @@ router.put("/password", async (req: ClientAuthRequest, res) => {
     where: { clientId: req.client!.clientId },
   });
   if (!account) {
-    return res.status(404).json({ error: "Nie znaleziono konta klienta" });
+    return res.status(404).json({ error: "account_not_found" });
   }
 
   const ok = await bcrypt.compare(currentPassword, account.passwordHash);
   if (!ok) {
-    return res.status(401).json({ error: "Obecne hasło jest nieprawidłowe" });
+    return res.status(401).json({ error: "invalid_current_password" });
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 10);

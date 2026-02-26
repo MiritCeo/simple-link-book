@@ -28,15 +28,18 @@ components:
         error:
           type: string
           enum:
-            - INVALID_PAYLOAD
-            - INVALID_CREDENTIALS
-            - ACCOUNT_INACTIVE
-            - CLIENT_PROFILE_MISSING
-            - TOKEN_INVALID
-            - UNAUTHORIZED
-            - FORBIDDEN
-            - EMAIL_TAKEN
-            - INTERNAL_ERROR
+            - invalid_payload
+            - invalid_credentials
+            - account_inactive
+            - client_profile_missing
+            - token_invalid
+            - unauthorized
+            - forbidden
+            - email_taken
+            - internal_error
+            - profile_not_found
+            - account_not_found
+            - invalid_current_password
       required: [error]
     AuthResponse:
       type: object
