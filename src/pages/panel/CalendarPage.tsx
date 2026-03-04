@@ -18,7 +18,52 @@ const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [view, setView] = useState<'day-list' | 'day-timeline' | 'week' | 'month'>('day-list');
-  const [selectedSpecialist, setSelectedSpecialist] = useState<string>('all');
+  const [selectedSpecialist, setSelectedSpecialist] = useState<string>(() => {
+    try {
+      return localStorage.getItem('calendar_selected_specialist') || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const [staffFilterIds, setStaffFilterIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('calendar_staff_filters');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [staffFilterActiveOnly, setStaffFilterActiveOnly] = useState(() => {
+    try {
+      return localStorage.getItem('calendar_staff_active_only') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [showStaffFilter, setShowStaffFilter] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | Appointment['status']>(() => {
+    try {
+      const raw = localStorage.getItem('calendar_status_filter');
+      return (raw as 'all' | Appointment['status']) || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const [compactTimeline, setCompactTimeline] = useState(() => {
+    try {
+      return localStorage.getItem('calendar_compact_timeline') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [timelineScale, setTimelineScale] = useState<15 | 30 | 60>(() => {
+    try {
+      const raw = Number(localStorage.getItem('calendar_timeline_scale'));
+      return raw === 15 || raw === 30 || raw === 60 ? raw : 30;
+    } catch {
+      return 30;
+    }
+  });
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeAptId, setActiveAptId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -127,13 +172,40 @@ export default function CalendarPage() {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('calendar_staff_filters', JSON.stringify(staffFilterIds));
+  }, [staffFilterIds]);
+  useEffect(() => {
+    localStorage.setItem('calendar_staff_active_only', staffFilterActiveOnly ? '1' : '0');
+  }, [staffFilterActiveOnly]);
+  useEffect(() => {
+    localStorage.setItem('calendar_status_filter', statusFilter);
+  }, [statusFilter]);
+  useEffect(() => {
+    localStorage.setItem('calendar_compact_timeline', compactTimeline ? '1' : '0');
+  }, [compactTimeline]);
+  useEffect(() => {
+    localStorage.setItem('calendar_timeline_scale', String(timelineScale));
+  }, [timelineScale]);
+  useEffect(() => {
+    localStorage.setItem('calendar_selected_specialist', selectedSpecialist);
+  }, [selectedSpecialist]);
+
   const dayAppointments = useMemo(() => {
     let appts = appointments.filter((a: any) => a.date === selectedDate);
-    if (selectedSpecialist !== 'all') {
+    if (staffFilterIds.length > 0) {
+      appts = appts.filter((a: any) => {
+        if (!a.staff?.id) return staffFilterIds.includes('any');
+        return staffFilterIds.includes(a.staff.id);
+      });
+    } else if (selectedSpecialist !== 'all') {
       appts = appts.filter((a: any) => a.staff?.name === selectedSpecialist);
     }
+    if (statusFilter !== 'all') {
+      appts = appts.filter((a: any) => mapStatus(a.status) === statusFilter);
+    }
     return appts;
-  }, [appointments, selectedDate, selectedSpecialist]);
+  }, [appointments, selectedDate, selectedSpecialist, staffFilterIds, statusFilter]);
   const filteredClients = useMemo(() => {
     if (!clientSearch) return clients;
     const q = clientSearch.toLowerCase();
@@ -499,11 +571,62 @@ export default function CalendarPage() {
       setSaving(false);
     }
   };
+  const hourHeight = useMemo(() => {
+    const map: Record<15 | 30 | 60, number> = { 15: 96, 30: 64, 60: 48 };
+    return map[timelineScale];
+  }, [timelineScale]);
+  const slotPxPerMinute = hourHeight / 60;
   const getAppointmentPosition = (apt: Appointment) => {
     const [h, m] = apt.time.split(':').map(Number);
-    const top = ((h - 8) * 60 + m) * (64 / 60);
-    const height = apt.duration * (64 / 60);
-    return { top, height: Math.max(height, 24) };
+    const top = ((h - 8) * 60 + m) * slotPxPerMinute;
+    const height = apt.duration * slotPxPerMinute;
+    return { top, height: Math.max(height, 20) };
+  };
+
+  const buildLaneLayout = (appts: any[]) => {
+    const items = appts
+      .map(apt => {
+        const start = toMinutes(apt.time);
+        return { apt, start, end: start + (apt.duration || 0) };
+      })
+      .sort((a, b) => a.start - b.start || a.end - b.end);
+    const layout = new Map<string, { lane: number; laneCount: number }>();
+    let cluster: Array<{ apt: any; start: number; end: number }> = [];
+    let clusterEnd = -1;
+    const flushCluster = () => {
+      if (!cluster.length) return;
+      const lanesEnd: number[] = [];
+      const laneAssignments = new Map<string, number>();
+      let maxLanes = 0;
+      cluster.forEach(item => {
+        let laneIndex = lanesEnd.findIndex(end => end <= item.start);
+        if (laneIndex === -1) {
+          laneIndex = lanesEnd.length;
+          lanesEnd.push(item.end);
+        } else {
+          lanesEnd[laneIndex] = item.end;
+        }
+        laneAssignments.set(item.apt.id, laneIndex);
+        maxLanes = Math.max(maxLanes, lanesEnd.length);
+      });
+      cluster.forEach(item => {
+        layout.set(item.apt.id, { lane: laneAssignments.get(item.apt.id) || 0, laneCount: maxLanes || 1 });
+      });
+      cluster = [];
+      clusterEnd = -1;
+    };
+    items.forEach(item => {
+      if (!cluster.length || item.start < clusterEnd) {
+        cluster.push(item);
+        clusterEnd = Math.max(clusterEnd, item.end);
+        return;
+      }
+      flushCluster();
+      cluster.push(item);
+      clusterEnd = item.end;
+    });
+    flushCluster();
+    return layout;
   };
 
   const specialistAvailability = useMemo(() => {
@@ -525,6 +648,44 @@ export default function CalendarPage() {
     if (!showAvailableOnly) return base;
     return base.filter(sp => availabilityById.get(sp.id)?.available !== false);
   }, [filteredSpecialists, showAvailableOnly, availabilityById]);
+
+  const timelineColumns = useMemo(() => {
+    const columns: Array<{ id: string; name: string; staffId?: string | null }> = [];
+    const hasUnassigned = dayAppointments.some((a: any) => !a.staff?.id);
+    if (staffFilterIds.length > 0) {
+      staffFilterIds.forEach(id => {
+        if (id === 'any') {
+          columns.push({ id: 'any', name: 'Dowolny', staffId: null });
+          return;
+        }
+        const sp = staff.find((s: any) => s.id === id);
+        if (sp) columns.push({ id: sp.id, name: sp.name, staffId: sp.id });
+      });
+      return columns;
+    }
+    if (selectedSpecialist !== 'all') {
+      const sp = staff.find((s: any) => s.name === selectedSpecialist);
+      if (sp) {
+        columns.push({ id: sp.id, name: sp.name, staffId: sp.id });
+      } else if (hasUnassigned) {
+        columns.push({ id: 'any', name: 'Dowolny', staffId: null });
+      }
+      return columns;
+    }
+    const base = staffFilterActiveOnly ? visibleSpecialists.filter(sp => sp.active !== false) : visibleSpecialists;
+    base.forEach(sp => columns.push({ id: sp.id, name: sp.name, staffId: sp.id }));
+    if (hasUnassigned) columns.push({ id: 'any', name: 'Dowolny', staffId: null });
+    return columns;
+  }, [selectedSpecialist, staffFilterIds, staffFilterActiveOnly, visibleSpecialists, staff, dayAppointments]);
+
+  const getColumnLoadPct = (staffId?: string | null) => {
+    const dayAppts = appointments.filter((a: any) => a.date === selectedDate && (
+      staffId ? a.staff?.id === staffId : !a.staff?.id
+    ));
+    const minutes = dayAppts.reduce((sum: number, a: any) => sum + (a.duration || 0), 0);
+    const capacity = 8 * 60;
+    return Math.min(Math.round((minutes / capacity) * 100), 100);
+  };
 
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6">
@@ -1032,7 +1193,7 @@ export default function CalendarPage() {
 
       {/* Specialist filter */}
       {view !== 'month' && (
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
           <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
           <Select value={selectedSpecialist} onValueChange={setSelectedSpecialist}>
             <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-56">
@@ -1045,6 +1206,49 @@ export default function CalendarPage() {
               ))}
             </SelectContent>
           </Select>
+          <Button
+            variant={staffFilterIds.length > 0 ? 'secondary' : 'outline'}
+            size="sm"
+            className="rounded-xl h-9 text-xs"
+            onClick={() => setShowStaffFilter(v => !v)}
+          >
+            Pracownicy {staffFilterIds.length > 0 ? `(${staffFilterIds.length})` : ''}
+          </Button>
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | Appointment['status'])}>
+            <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-48">
+              <SelectValue placeholder="Wszystkie statusy" />
+            </SelectTrigger>
+            <SelectContent className="bg-popover z-50">
+              <SelectItem value="all">Wszystkie statusy</SelectItem>
+              {Object.keys(statusLabels).map(status => (
+                <SelectItem key={status} value={status}>
+                  {statusLabels[status as keyof typeof statusLabels]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {view === 'day-timeline' && (
+            <Select value={String(timelineScale)} onValueChange={(value) => setTimelineScale(Number(value) as 15 | 30 | 60)}>
+              <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-28">
+                <SelectValue placeholder="Skala" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="15">15 min</SelectItem>
+                <SelectItem value="30">30 min</SelectItem>
+                <SelectItem value="60">60 min</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          {view === 'day-timeline' && (
+            <Button
+              variant={compactTimeline ? 'secondary' : 'outline'}
+              size="sm"
+              className="rounded-xl h-9 text-xs"
+              onClick={() => setCompactTimeline(v => !v)}
+            >
+              {compactTimeline ? 'Tryb normalny' : 'Tryb kompaktowy'}
+            </Button>
+          )}
           <AnimatePresence>
             {selectedSpecialist !== 'all' && (
               <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
@@ -1054,6 +1258,68 @@ export default function CalendarPage() {
               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+      )}
+      {view !== 'month' && showStaffFilter && (
+        <div className="mb-4 rounded-2xl border border-border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Filtr pracowników</h3>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl h-8 text-xs"
+                onClick={() => setStaffFilterIds(staff.filter((sp: any) => sp.active !== false).map((sp: any) => sp.id))}
+              >
+                Zaznacz wszystkich
+              </Button>
+              <Button
+                variant={staffFilterActiveOnly ? 'secondary' : 'outline'}
+                size="sm"
+                className="rounded-xl h-8 text-xs"
+                onClick={() => setStaffFilterActiveOnly(v => !v)}
+              >
+                Tylko aktywni
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-xl h-8 text-xs"
+                onClick={() => setStaffFilterIds([])}
+              >
+                Wyczyść
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(staffFilterActiveOnly ? staff.filter((sp: any) => sp.active !== false) : staff).map((sp: any) => (
+              <label key={sp.id} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={staffFilterIds.includes(sp.id)}
+                  onCheckedChange={(checked) => {
+                    setStaffFilterIds(prev => checked ? [...prev, sp.id] : prev.filter(id => id !== sp.id));
+                  }}
+                />
+                <span className="flex items-center gap-2">
+                  {sp.name}
+                  {sp.active === false && (
+                    <Badge variant="secondary" className="text-[10px] h-5 px-2">
+                      nieaktywny
+                    </Badge>
+                  )}
+                </span>
+              </label>
+            ))}
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={staffFilterIds.includes('any')}
+                onCheckedChange={(checked) => {
+                  setStaffFilterIds(prev => checked ? [...prev, 'any'] : prev.filter(id => id !== 'any'));
+                }}
+              />
+              <span>Dowolny</span>
+            </label>
+          </div>
         </div>
       )}
 
@@ -1074,32 +1340,88 @@ export default function CalendarPage() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="relative border border-border rounded-2xl bg-card overflow-hidden">
-            {HOURS.map(hour => (
-              <div key={hour} className="flex items-start border-b border-border last:border-0" style={{ height: 64 }}>
-                <div className="w-16 shrink-0 text-xs text-muted-foreground py-1 px-3 text-right border-r border-border">
-                  {String(hour).padStart(2, '0')}:00
+          <div className="border border-border rounded-2xl bg-card overflow-hidden">
+            <div
+              className="grid border-b border-border bg-muted/40"
+              style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(180px, 1fr))` }}
+            >
+              <div className="py-2 px-3 text-[10px] uppercase text-muted-foreground">Godzina</div>
+              {timelineColumns.length === 0 && (
+                <div className="py-2 px-3 text-xs text-muted-foreground">Brak specjalistów</div>
+              )}
+              {timelineColumns.map(col => (
+                <div key={col.id} className="py-2 px-3 text-xs font-medium border-l border-border">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate">{col.name}</span>
+                    <span className="text-[10px] text-muted-foreground">{getColumnLoadPct(col.staffId)}%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-primary" style={{ width: `${getColumnLoadPct(col.staffId)}%` }} />
+                  </div>
                 </div>
-                <div className="flex-1 relative" />
+              ))}
+            </div>
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(180px, 1fr))` }}
+            >
+              <div className="border-r border-border" style={{ height: HOURS.length * hourHeight }}>
+                {HOURS.map(hour => (
+                  <div key={hour} className="border-b border-border last:border-0 px-3 py-1 text-xs text-muted-foreground text-right" style={{ height: hourHeight }}>
+                    {String(hour).padStart(2, '0')}:00
+                  </div>
+                ))}
               </div>
-            ))}
-            <div className="absolute top-0 left-16 right-0 bottom-0">
-              {dayAppointments.map((apt: any, i: number) => {
-                const pos = getAppointmentPosition(apt as Appointment);
-                const statusKey = mapStatus(apt.status);
+              {timelineColumns.map(col => {
+                const columnAppts = dayAppointments.filter((a: any) =>
+                  col.staffId ? a.staff?.id === col.staffId : !a.staff?.id,
+                );
+                const layout = buildLaneLayout(columnAppts);
                 return (
-                  <motion.div
-                    key={apt.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05, duration: 0.3 }}
-                    className={`absolute left-1 right-1 rounded-lg px-3 py-1.5 border cursor-pointer hover:opacity-90 transition-opacity overflow-hidden ${statusColors[statusKey as keyof typeof statusColors]} border-current/10`}
-                    style={{ top: pos.top, height: pos.height }}
-                    onClick={() => openDetails(apt.id)}
-                  >
-                    <p className="text-xs font-semibold truncate">{apt.time} — {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}</p>
-                    <p className="text-[10px] truncate opacity-70">{apt.client?.name} • {apt.staff?.name || 'Dowolny'}</p>
-                  </motion.div>
+                  <div key={col.id} className="relative border-l border-border" style={{ height: HOURS.length * hourHeight }}>
+                    {HOURS.map(hour => (
+                      <div key={hour} className="border-b border-border last:border-0 relative" style={{ height: hourHeight }}>
+                        {timelineScale !== 60 && (
+                          <>
+                            <div className="absolute left-0 right-0 border-t border-border/30" style={{ top: hourHeight / 2 }} />
+                            {timelineScale === 15 && (
+                              <>
+                                <div className="absolute left-0 right-0 border-t border-border/20" style={{ top: hourHeight / 4 }} />
+                                <div className="absolute left-0 right-0 border-t border-border/20" style={{ top: (hourHeight / 4) * 3 }} />
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                    {columnAppts.map((apt: any, i: number) => {
+                      const pos = getAppointmentPosition(apt as Appointment);
+                      const statusKey = mapStatus(apt.status);
+                      const laneInfo = layout.get(apt.id) || { lane: 0, laneCount: 1 };
+                      const width = `calc(${100 / laneInfo.laneCount}% - 6px)`;
+                      const left = `calc(${(100 / laneInfo.laneCount) * laneInfo.lane}% + 3px)`;
+                      return (
+                        <motion.div
+                          key={apt.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.03, duration: 0.3 }}
+                          className={`absolute rounded-lg border cursor-pointer hover:opacity-90 transition-opacity overflow-hidden ${statusColors[statusKey as keyof typeof statusColors]} border-current/10 ${
+                            compactTimeline ? 'px-2 py-1' : 'px-3 py-1.5'
+                          }`}
+                          style={{ top: pos.top, height: pos.height, width, left }}
+                          onClick={() => openDetails(apt.id)}
+                        >
+                          <p className={`font-semibold truncate ${compactTimeline ? 'text-[10px]' : 'text-xs'}`}>
+                            {apt.time} — {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}
+                          </p>
+                          {!compactTimeline && (
+                            <p className="text-[10px] truncate opacity-70">{apt.client?.name}</p>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
                 );
               })}
             </div>
