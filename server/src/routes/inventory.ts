@@ -90,6 +90,25 @@ router.put("/categories/:id", async (req: AuthRequest, res) => {
   return res.json({ category });
 });
 
+router.delete("/categories/:id", async (req: AuthRequest, res) => {
+  const role = await getInventoryRole(req);
+  if (!canManageItems(role)) return res.status(403).json({ error: "Brak dostępu do edycji magazynu" });
+  const existing = await prisma.inventoryCategory.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.salonId !== getSalonId(req)) {
+    return res.status(404).json({ error: "Nie znaleziono kategorii" });
+  }
+  const children = await prisma.inventoryCategory.count({ where: { parentId: existing.id } });
+  if (children > 0) {
+    return res.status(400).json({ error: "Kategoria ma podkategorie. Usuń je najpierw." });
+  }
+  const assigned = await prisma.inventoryItem.count({ where: { categoryId: existing.id } });
+  if (assigned > 0) {
+    return res.status(400).json({ error: "Kategoria jest używana w produktach." });
+  }
+  await prisma.inventoryCategory.delete({ where: { id: existing.id } });
+  return res.json({ ok: true });
+});
+
 router.post("/items", async (req: AuthRequest, res) => {
   const role = await getInventoryRole(req);
   if (!canManageItems(role)) return res.status(403).json({ error: "Brak dostępu do edycji magazynu" });

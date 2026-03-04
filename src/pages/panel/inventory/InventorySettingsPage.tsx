@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageTransition } from "@/components/motion";
 import { toast } from "sonner";
-import { createInventoryCategory, createInventoryUnit, deleteInventoryUnit, getInventoryCategories, getInventorySettings, getInventoryUnits, updateInventorySettings } from "@/lib/api";
+import { createInventoryCategory, createInventoryUnit, deleteInventoryCategory, deleteInventoryUnit, getInventoryCategories, getInventorySettings, getInventoryUnits, updateInventoryCategory, updateInventorySettings } from "@/lib/api";
 import { getInventoryRole } from "@/lib/auth";
 
 const navTabs = [
@@ -25,6 +25,7 @@ export default function InventorySettingsPage() {
   const [defaultMinStock, setDefaultMinStock] = useState(0);
   const [unitName, setUnitName] = useState("");
   const [categoryForm, setCategoryForm] = useState({ name: "", parentId: "root" });
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -101,15 +102,47 @@ export default function InventorySettingsPage() {
       return;
     }
     try {
-      await createInventoryCategory({
-        name: categoryForm.name.trim(),
-        parentId: categoryForm.parentId === "root" ? null : categoryForm.parentId,
-      });
+      if (editingCategoryId) {
+        await updateInventoryCategory(editingCategoryId, {
+          name: categoryForm.name.trim(),
+          parentId: categoryForm.parentId === "root" ? null : categoryForm.parentId,
+        });
+        toast.success("Kategoria zaktualizowana");
+      } else {
+        await createInventoryCategory({
+          name: categoryForm.name.trim(),
+          parentId: categoryForm.parentId === "root" ? null : categoryForm.parentId,
+        });
+        toast.success("Kategoria dodana");
+      }
       setCategoryForm({ name: "", parentId: "root" });
+      setEditingCategoryId(null);
       await loadData();
-      toast.success("Kategoria dodana");
     } catch (err: any) {
       toast.error(err.message || "Błąd zapisu kategorii");
+    }
+  };
+
+  const startEditCategory = (category: any) => {
+    setEditingCategoryId(category.id);
+    setCategoryForm({
+      name: category.name || "",
+      parentId: category.parentId || "root",
+    });
+  };
+
+  const cancelEditCategory = () => {
+    setEditingCategoryId(null);
+    setCategoryForm({ name: "", parentId: "root" });
+  };
+
+  const removeCategory = async (id: string) => {
+    try {
+      await deleteInventoryCategory(id);
+      toast.success("Kategoria usunięta");
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Błąd usuwania kategorii");
     }
   };
 
@@ -146,8 +179,18 @@ export default function InventorySettingsPage() {
             {!loading && categories.length > 0 && (
               <div className="max-h-64 overflow-auto border border-border rounded-xl mb-3">
                 {categoryOptions.map((cat) => (
-                  <div key={cat.id} className="px-3 py-2 text-sm border-b border-border last:border-b-0">
-                    {cat.name}
+                  <div key={cat.id} className="px-3 py-2 text-sm border-b border-border last:border-b-0 flex items-center justify-between gap-2">
+                    <span>{cat.name}</span>
+                    {canManage && (
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" className="rounded-lg h-8" onClick={() => startEditCategory(cat)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="outline" size="sm" className="rounded-lg h-8 text-destructive" onClick={() => removeCategory(cat.id)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -179,10 +222,17 @@ export default function InventorySettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button size="sm" className="rounded-xl" onClick={addCategory}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Dodaj kategorię
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" className="rounded-xl" onClick={addCategory}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    {editingCategoryId ? "Zapisz zmiany" : "Dodaj kategorię"}
+                  </Button>
+                  {editingCategoryId && (
+                    <Button variant="outline" size="sm" className="rounded-xl" onClick={cancelEditCategory}>
+                      Anuluj
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>

@@ -557,6 +557,13 @@ export async function updateInventoryCategory(id: string, payload: { name?: stri
   });
 }
 
+export async function deleteInventoryCategory(id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/salon/inventory/categories/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
 export async function createInventoryItem(payload: {
   name: string;
   category?: string;
