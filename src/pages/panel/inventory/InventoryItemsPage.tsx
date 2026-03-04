@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageTransition } from "@/components/motion";
 import { toast } from "sonner";
-import { getInventoryItems, createInventoryItem, updateInventoryItem, deactivateInventoryItem, getInventorySettings, getInventoryUnits, getInventoryMovements, getInventoryCategories, createInventoryCategory } from "@/lib/api";
+import { getInventoryItems, createInventoryItem, updateInventoryItem, deactivateInventoryItem, getInventorySettings, getInventoryUnits, getInventoryMovements, getInventoryCategories } from "@/lib/api";
 import { getInventoryRole } from "@/lib/auth";
 
 const navTabs = [
@@ -56,8 +56,6 @@ export default function InventoryItemsPage() {
   const [onlyLow, setOnlyLow] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
-  const [categoryForm, setCategoryForm] = useState({ name: "", parentId: "root" });
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItem, setHistoryItem] = useState<any | null>(null);
   const [form, setForm] = useState<InventoryItemForm>({
@@ -161,25 +159,6 @@ export default function InventoryItemsPage() {
     };
     return walk(null, 0);
   }, [categories]);
-
-  const saveCategory = async () => {
-    if (!categoryForm.name.trim()) {
-      toast.error("Podaj nazwę kategorii");
-      return;
-    }
-    try {
-      await createInventoryCategory({
-        name: categoryForm.name.trim(),
-        parentId: categoryForm.parentId === "root" ? null : categoryForm.parentId,
-      });
-      setCategoryForm({ name: "", parentId: "root" });
-      setCategoryDialogOpen(false);
-      await loadData();
-      toast.success("Kategoria dodana");
-    } catch (err: any) {
-      toast.error(err.message || "Błąd zapisu kategorii");
-    }
-  };
 
   const openHistory = (item: any) => {
     setHistoryItem(item);
@@ -397,11 +376,6 @@ export default function InventoryItemsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {canManage && (
-                <Button variant="outline" size="sm" className="rounded-xl mt-2" onClick={() => setCategoryDialogOpen(true)}>
-                  Dodaj kategorię
-                </Button>
-              )}
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Jednostka</label>
@@ -466,44 +440,6 @@ export default function InventoryItemsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
-        <DialogContent className="bg-card">
-          <DialogHeader>
-            <DialogTitle>Nowa kategoria</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <label className="text-xs font-medium mb-1 block">Nazwa</label>
-              <Input
-                value={categoryForm.name}
-                onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))}
-                className="h-10 rounded-xl"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Nadrzędna</label>
-              <Select
-                value={categoryForm.parentId}
-                onValueChange={(value) => setCategoryForm((prev) => ({ ...prev, parentId: value }))}
-              >
-                <SelectTrigger className="h-10 rounded-xl">
-                  <SelectValue placeholder="Brak" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  <SelectItem value="root">Brak (poziom główny)</SelectItem>
-                  {categoryOptions.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCategoryDialogOpen(false)}>Anuluj</Button>
-            <Button onClick={saveCategory}>Zapisz</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </PageTransition>
   );
 }

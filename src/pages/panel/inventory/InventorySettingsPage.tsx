@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageTransition } from "@/components/motion";
 import { toast } from "sonner";
-import { createInventoryUnit, deleteInventoryUnit, getInventorySettings, getInventoryUnits, updateInventorySettings } from "@/lib/api";
+import { createInventoryCategory, createInventoryUnit, deleteInventoryUnit, getInventoryCategories, getInventorySettings, getInventoryUnits, updateInventorySettings } from "@/lib/api";
 import { getInventoryRole } from "@/lib/auth";
 
 const navTabs = [
@@ -21,15 +21,17 @@ export default function InventorySettingsPage() {
   const canManage = inventoryRole === "ADMIN";
   const [loading, setLoading] = useState(true);
   const [units, setUnits] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [defaultMinStock, setDefaultMinStock] = useState(0);
-  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitName, setUnitName] = useState("");
+  const [categoryForm, setCategoryForm] = useState({ name: "", parentId: "root" });
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [unitsRes, settingsRes] = await Promise.all([getInventoryUnits(), getInventorySettings()]);
+      const [unitsRes, settingsRes, categoriesRes] = await Promise.all([getInventoryUnits(), getInventorySettings(), getInventoryCategories()]);
       setUnits(unitsRes.units || []);
+      setCategories(categoriesRes.categories || []);
       setDefaultMinStock(settingsRes.setting?.defaultMinStock ?? 0);
     } finally {
       setLoading(false);
@@ -58,7 +60,6 @@ export default function InventorySettingsPage() {
     try {
       await createInventoryUnit({ name: unitName.trim() });
       setUnitName("");
-      setUnitDialogOpen(false);
       await loadData();
       toast.success("Jednostka dodana");
     } catch (err: any) {
@@ -73,6 +74,42 @@ export default function InventorySettingsPage() {
       toast.success("Jednostka usunięta");
     } catch (err: any) {
       toast.error(err.message || "Błąd usuwania");
+    }
+  };
+
+  const categoryOptions = useMemo(() => {
+    const byParent = new Map<string | null, any[]>();
+    categories.forEach((cat: any) => {
+      const key = cat.parentId || null;
+      const list = byParent.get(key) || [];
+      list.push(cat);
+      byParent.set(key, list);
+    });
+    const walk = (parentId: string | null, depth: number): Array<{ id: string; name: string }> => {
+      const list = (byParent.get(parentId) || []).sort((a, b) => a.name.localeCompare(b.name));
+      return list.flatMap((cat) => [
+        { id: cat.id, name: `${"— ".repeat(depth)}${cat.name}` },
+        ...walk(cat.id, depth + 1),
+      ]);
+    };
+    return walk(null, 0);
+  }, [categories]);
+
+  const addCategory = async () => {
+    if (!categoryForm.name.trim()) {
+      toast.error("Podaj nazwę kategorii");
+      return;
+    }
+    try {
+      await createInventoryCategory({
+        name: categoryForm.name.trim(),
+        parentId: categoryForm.parentId === "root" ? null : categoryForm.parentId,
+      });
+      setCategoryForm({ name: "", parentId: "root" });
+      await loadData();
+      toast.success("Kategoria dodana");
+    } catch (err: any) {
+      toast.error(err.message || "Błąd zapisu kategorii");
     }
   };
 
@@ -100,8 +137,59 @@ export default function InventorySettingsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <div className="bg-card rounded-2xl border border-border p-4">
-          <h2 className="text-sm font-semibold mb-3">Jednostki</h2>
+        <div className="space-y-4">
+          <div className="bg-card rounded-2xl border border-border p-4">
+            <h2 className="text-sm font-semibold mb-1">Kategorie produktów</h2>
+            <p className="text-xs text-muted-foreground mb-3">Zbuduj drzewko kategorii i wybieraj je w produktach.</p>
+            {loading && <p className="text-xs text-muted-foreground">Ładowanie kategorii...</p>}
+            {!loading && categories.length === 0 && <p className="text-xs text-muted-foreground">Brak kategorii.</p>}
+            {!loading && categories.length > 0 && (
+              <div className="max-h-64 overflow-auto border border-border rounded-xl mb-3">
+                {categoryOptions.map((cat) => (
+                  <div key={cat.id} className="px-3 py-2 text-sm border-b border-border last:border-b-0">
+                    {cat.name}
+                  </div>
+                ))}
+              </div>
+            )}
+            {canManage && (
+              <div className="grid gap-2">
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Nazwa</label>
+                  <Input
+                    value={categoryForm.name}
+                    onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))}
+                    className="h-10 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Nadrzędna</label>
+                  <Select
+                    value={categoryForm.parentId}
+                    onValueChange={(value) => setCategoryForm((prev) => ({ ...prev, parentId: value }))}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl">
+                      <SelectValue placeholder="Brak" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="root">Brak (poziom główny)</SelectItem>
+                      {categoryOptions.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button size="sm" className="rounded-xl" onClick={addCategory}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Dodaj kategorię
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-card rounded-2xl border border-border p-4">
+            <h2 className="text-sm font-semibold mb-1">Jednostki</h2>
+            <p className="text-xs text-muted-foreground mb-3">Zdefiniuj jednostki miary używane w produktach.</p>
           {loading && <p className="text-xs text-muted-foreground">Ładowanie jednostek...</p>}
           {!loading && units.length === 0 && <p className="text-xs text-muted-foreground">Brak jednostek.</p>}
           {!loading && units.map((unit) => (
@@ -115,11 +203,15 @@ export default function InventorySettingsPage() {
             </div>
           ))}
           {canManage && (
-            <Button variant="outline" size="sm" className="rounded-xl mt-3" onClick={() => setUnitDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Dodaj jednostkę
-            </Button>
+            <div className="flex items-center gap-2 mt-3">
+              <Input value={unitName} onChange={(e) => setUnitName(e.target.value)} className="h-10 rounded-xl" placeholder="np. szt / ml / g" />
+              <Button size="sm" className="rounded-xl" onClick={addUnit}>
+                <Plus className="w-4 h-4 mr-2" />
+                Dodaj
+              </Button>
+            </div>
           )}
+        </div>
         </div>
 
         <div className="bg-card rounded-2xl border border-border p-4">
@@ -146,21 +238,6 @@ export default function InventorySettingsPage() {
         </div>
       </div>
 
-      <Dialog open={unitDialogOpen} onOpenChange={setUnitDialogOpen}>
-        <DialogContent className="bg-card">
-          <DialogHeader>
-            <DialogTitle>Dodaj jednostkę</DialogTitle>
-          </DialogHeader>
-          <div>
-            <label className="text-xs font-medium mb-1 block">Nazwa jednostki</label>
-            <Input value={unitName} onChange={(e) => setUnitName(e.target.value)} className="h-10 rounded-xl" placeholder="szt / ml / g" />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUnitDialogOpen(false)}>Anuluj</Button>
-            <Button onClick={addUnit}>Zapisz</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </PageTransition>
   );
 }
