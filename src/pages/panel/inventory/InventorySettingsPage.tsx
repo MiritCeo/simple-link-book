@@ -11,7 +11,7 @@ import { getInventoryRole } from "@/lib/auth";
 
 const navTabs = [
   { label: "Asortyment", path: "/panel/magazyn" },
-  { label: "Ruchy", path: "/panel/magazyn/ruchy" },
+  { label: "Aktywności", path: "/panel/magazyn/ruchy" },
   { label: "Ustawienia", path: "/panel/magazyn/ustawienia" },
 ];
 

@@ -24,8 +24,70 @@ router.get("/items", async (req: AuthRequest, res) => {
   const items = await prisma.inventoryItem.findMany({
     where: { salonId: getSalonId(req) },
     orderBy: { name: "asc" },
+    include: { categoryRef: true },
   });
   return res.json({ items });
+});
+
+router.get("/categories", async (req: AuthRequest, res) => {
+  const categories = await prisma.inventoryCategory.findMany({
+    where: { salonId: getSalonId(req) },
+    orderBy: [{ name: "asc" }],
+  });
+  return res.json({ categories });
+});
+
+router.post("/categories", async (req: AuthRequest, res) => {
+  const role = await getInventoryRole(req);
+  if (!canManageItems(role)) return res.status(403).json({ error: "Brak dostępu do edycji magazynu" });
+  const schema = z.object({
+    name: z.string().min(2),
+    parentId: z.string().optional().nullable(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane kategorii" });
+  const parentId = parsed.data.parentId || null;
+  if (parentId) {
+    const parent = await prisma.inventoryCategory.findUnique({ where: { id: parentId } });
+    if (!parent || parent.salonId !== getSalonId(req)) {
+      return res.status(404).json({ error: "Nie znaleziono kategorii nadrzędnej" });
+    }
+  }
+  const category = await prisma.inventoryCategory.create({
+    data: {
+      salonId: getSalonId(req),
+      name: parsed.data.name,
+      parentId,
+    },
+  });
+  return res.json({ category });
+});
+
+router.put("/categories/:id", async (req: AuthRequest, res) => {
+  const role = await getInventoryRole(req);
+  if (!canManageItems(role)) return res.status(403).json({ error: "Brak dostępu do edycji magazynu" });
+  const schema = z.object({
+    name: z.string().min(2).optional(),
+    parentId: z.string().optional().nullable(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane kategorii" });
+  const existing = await prisma.inventoryCategory.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.salonId !== getSalonId(req)) {
+    return res.status(404).json({ error: "Nie znaleziono kategorii" });
+  }
+  const parentId = parsed.data.parentId ?? existing.parentId;
+  if (parentId) {
+    const parent = await prisma.inventoryCategory.findUnique({ where: { id: parentId } });
+    if (!parent || parent.salonId !== getSalonId(req)) {
+      return res.status(404).json({ error: "Nie znaleziono kategorii nadrzędnej" });
+    }
+  }
+  const category = await prisma.inventoryCategory.update({
+    where: { id: req.params.id },
+    data: { ...parsed.data, parentId },
+  });
+  return res.json({ category });
 });
 
 router.post("/items", async (req: AuthRequest, res) => {
@@ -34,7 +96,8 @@ router.post("/items", async (req: AuthRequest, res) => {
 
   const schema = z.object({
     name: z.string().min(2),
-    category: z.string().min(2),
+    category: z.string().min(2).optional(),
+    categoryId: z.string().optional().nullable(),
     unit: z.string().min(1),
     stock: z.number().int().optional().default(0),
     minStock: z.number().int().optional().default(0),
@@ -45,8 +108,30 @@ router.post("/items", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane produktu" });
 
+  let categoryName = parsed.data.category || "";
+  let categoryId: string | null = parsed.data.categoryId || null;
+  if (categoryId) {
+    const category = await prisma.inventoryCategory.findUnique({ where: { id: categoryId } });
+    if (!category || category.salonId !== getSalonId(req)) {
+      return res.status(404).json({ error: "Nie znaleziono kategorii" });
+    }
+    categoryName = category.name;
+  }
+  if (!categoryName) return res.status(400).json({ error: "Wybierz kategorię" });
+
   const item = await prisma.inventoryItem.create({
-    data: { ...parsed.data, salonId: getSalonId(req) },
+    data: {
+      salonId: getSalonId(req),
+      name: parsed.data.name,
+      category: categoryName,
+      categoryId,
+      unit: parsed.data.unit,
+      stock: parsed.data.stock,
+      minStock: parsed.data.minStock,
+      purchasePrice: parsed.data.purchasePrice,
+      salePrice: parsed.data.salePrice,
+      active: parsed.data.active,
+    },
   });
   return res.json({ item });
 });
@@ -58,6 +143,7 @@ router.put("/items/:id", async (req: AuthRequest, res) => {
   const schema = z.object({
     name: z.string().min(2).optional(),
     category: z.string().min(2).optional(),
+    categoryId: z.string().optional().nullable(),
     unit: z.string().min(1).optional(),
     stock: z.number().int().optional(),
     minStock: z.number().int().optional(),
@@ -72,9 +158,27 @@ router.put("/items/:id", async (req: AuthRequest, res) => {
   if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono produktu" });
   }
+  let categoryName = parsed.data.category ?? existing.category;
+  let categoryId: string | null = parsed.data.categoryId ?? existing.categoryId ?? null;
+  if (parsed.data.categoryId !== undefined) {
+    if (parsed.data.categoryId) {
+      const category = await prisma.inventoryCategory.findUnique({ where: { id: parsed.data.categoryId } });
+      if (!category || category.salonId !== getSalonId(req)) {
+        return res.status(404).json({ error: "Nie znaleziono kategorii" });
+      }
+      categoryName = category.name;
+      categoryId = category.id;
+    } else {
+      categoryId = null;
+    }
+  }
   const item = await prisma.inventoryItem.update({
     where: { id: req.params.id },
-    data: parsed.data,
+    data: {
+      ...parsed.data,
+      category: categoryName,
+      categoryId,
+    },
   });
   return res.json({ item });
 });
@@ -97,7 +201,7 @@ router.get("/movements", async (req: AuthRequest, res) => {
   const movements = await prisma.inventoryMovement.findMany({
     where: { item: { salonId: getSalonId(req) } },
     orderBy: { createdAt: "desc" },
-    include: { item: true, createdBy: true },
+    include: { item: true, createdBy: true, client: true },
   });
   return res.json({ movements });
 });
@@ -109,6 +213,8 @@ router.post("/movements", async (req: AuthRequest, res) => {
   const schema = z.object({
     itemId: z.string(),
     type: z.enum(["IN", "OUT", "ADJUST"]),
+    usageType: z.enum(["SALON_USE", "CLIENT_SALE", "LOSS", "PURCHASE", "RETURN"]).optional(),
+    clientId: z.string().optional().nullable(),
     quantity: z.number().int().min(1),
     note: z.string().optional(),
   });
@@ -118,6 +224,19 @@ router.post("/movements", async (req: AuthRequest, res) => {
   const item = await prisma.inventoryItem.findUnique({ where: { id: parsed.data.itemId } });
   if (!item || item.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono produktu" });
+  }
+
+  if (parsed.data.type === "OUT") {
+    const usage = parsed.data.usageType || "SALON_USE";
+    if (usage === "CLIENT_SALE") {
+      if (!parsed.data.clientId) {
+        return res.status(400).json({ error: "Wybierz klienta dla sprzedaży" });
+      }
+      const client = await prisma.client.findUnique({ where: { id: parsed.data.clientId } });
+      if (!client || client.salonId !== getSalonId(req)) {
+        return res.status(404).json({ error: "Nie znaleziono klienta" });
+      }
+    }
   }
 
   let newStock = item.stock;
@@ -132,11 +251,13 @@ router.post("/movements", async (req: AuthRequest, res) => {
     data: {
       itemId: item.id,
       type: parsed.data.type,
+      usageType: parsed.data.usageType,
+      clientId: parsed.data.clientId || null,
       quantity: parsed.data.quantity,
       note: parsed.data.note,
       createdByUserId: req.user?.userId,
     },
-    include: { item: true, createdBy: true },
+    include: { item: true, createdBy: true, client: true },
   });
 
   await prisma.inventoryItem.update({

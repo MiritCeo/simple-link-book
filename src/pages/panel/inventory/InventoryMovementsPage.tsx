@@ -7,12 +7,12 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageTransition } from "@/components/motion";
 import { toast } from "sonner";
-import { getInventoryItems, getInventoryMovements, createInventoryMovement } from "@/lib/api";
+import { getInventoryItems, getInventoryMovements, createInventoryMovement, getSalonClients } from "@/lib/api";
 import { getInventoryRole } from "@/lib/auth";
 
 const navTabs = [
   { label: "Asortyment", path: "/panel/magazyn" },
-  { label: "Ruchy", path: "/panel/magazyn/ruchy" },
+  { label: "Aktywności", path: "/panel/magazyn/ruchy" },
   { label: "Ustawienia", path: "/panel/magazyn/ustawienia" },
 ];
 
@@ -23,19 +23,23 @@ export default function InventoryMovementsPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<any[]>([]);
   const [movements, setMovements] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "IN" | "OUT" | "ADJUST">("ALL");
+  const [usageFilter, setUsageFilter] = useState<"ALL" | "SALON_USE" | "CLIENT_SALE" | "LOSS" | "PURCHASE" | "RETURN">("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ itemId: "", type: "IN", quantity: 1, note: "" });
+  const [form, setForm] = useState({ itemId: "", type: "IN", usageType: "PURCHASE", clientId: "", quantity: 1, note: "" });
+  const [clientSearch, setClientSearch] = useState("");
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [itemsRes, movementsRes] = await Promise.all([getInventoryItems(), getInventoryMovements()]);
+      const [itemsRes, movementsRes, clientsRes] = await Promise.all([getInventoryItems(), getInventoryMovements(), getSalonClients()]);
       setItems(itemsRes.items || []);
       setMovements(movementsRes.movements || []);
+      setClients(clientsRes.clients || []);
     } finally {
       setLoading(false);
     }
@@ -45,18 +49,39 @@ export default function InventoryMovementsPage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (form.type === "IN" && !["PURCHASE", "RETURN"].includes(form.usageType)) {
+      setForm((prev) => ({ ...prev, usageType: "PURCHASE" }));
+    }
+    if (form.type === "OUT" && !["SALON_USE", "CLIENT_SALE", "LOSS"].includes(form.usageType)) {
+      setForm((prev) => ({ ...prev, usageType: "SALON_USE" }));
+    }
+    if (form.type === "ADJUST") {
+      setForm((prev) => ({ ...prev, usageType: "PURCHASE", clientId: "" }));
+    }
+  }, [form.type]);
+
+  useEffect(() => {
+    if (form.usageType !== "CLIENT_SALE" && form.clientId) {
+      setForm((prev) => ({ ...prev, clientId: "" }));
+    }
+  }, [form.usageType, form.clientId]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return movements.filter((m: any) => {
       const name = m.item?.name || "";
-      const matchesQuery = !search || name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q);
+      const usage = (m.usageType || "").toLowerCase();
+      const clientName = (m.client?.name || "").toLowerCase();
+      const matchesQuery = !search || name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q) || usage.includes(q) || clientName.includes(q);
       const matchesType = typeFilter === "ALL" || m.type === typeFilter;
+      const matchesUsage = usageFilter === "ALL" || m.usageType === usageFilter;
       const created = new Date(m.createdAt);
       const fromOk = !dateFrom || created >= new Date(`${dateFrom}T00:00:00`);
       const toOk = !dateTo || created <= new Date(`${dateTo}T23:59:59`);
-      return matchesQuery && matchesType && fromOk && toOk;
+      return matchesQuery && matchesType && matchesUsage && fromOk && toOk;
     });
-  }, [movements, search, typeFilter, dateFrom, dateTo]);
+  }, [movements, search, typeFilter, usageFilter, dateFrom, dateTo]);
 
   const usageReport = useMemo(() => {
     const map = new Map<string, { id: string; name: string; quantity: number; cost: number }>();
@@ -73,7 +98,7 @@ export default function InventoryMovementsPage() {
   }, [filtered]);
 
   const openCreate = () => {
-    setForm({ itemId: items[0]?.id || "", type: "IN", quantity: 1, note: "" });
+    setForm({ itemId: items[0]?.id || "", type: "IN", usageType: "PURCHASE", clientId: "", quantity: 1, note: "" });
     setDialogOpen(true);
   };
 
@@ -82,14 +107,20 @@ export default function InventoryMovementsPage() {
       toast.error("Wybierz produkt");
       return;
     }
+    if (form.type === "OUT" && form.usageType === "CLIENT_SALE" && !form.clientId) {
+      toast.error("Wybierz klienta");
+      return;
+    }
     try {
       await createInventoryMovement({
         itemId: form.itemId,
         type: form.type as "IN" | "OUT" | "ADJUST",
+        usageType: form.usageType as any,
+        clientId: form.clientId || undefined,
         quantity: Number(form.quantity),
         note: form.note || undefined,
       });
-      toast.success("Ruch dodany");
+      toast.success("Aktywność dodana");
       setDialogOpen(false);
       await loadData();
     } catch (err: any) {
@@ -102,7 +133,7 @@ export default function InventoryMovementsPage() {
       <div className="flex items-center gap-2 mb-4">
         <div>
           <h1 className="text-xl font-bold lg:text-2xl">Magazyn</h1>
-          <p className="text-sm text-muted-foreground">Ruchy magazynowe</p>
+          <p className="text-sm text-muted-foreground">Aktywności magazynowe i historia wydań</p>
         </div>
       </div>
 
@@ -143,12 +174,25 @@ export default function InventoryMovementsPage() {
                 <SelectItem value="ADJUST">Korekty</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={usageFilter} onValueChange={(value) => setUsageFilter(value as any)}>
+              <SelectTrigger className="h-10 rounded-xl text-xs w-40">
+                <SelectValue placeholder="Powód" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="ALL">Wszystkie powody</SelectItem>
+                <SelectItem value="SALON_USE">Użytek salonu</SelectItem>
+                <SelectItem value="CLIENT_SALE">Sprzedaż klientowi</SelectItem>
+                <SelectItem value="LOSS">Strata / ubytek</SelectItem>
+                <SelectItem value="PURCHASE">Dostawa</SelectItem>
+                <SelectItem value="RETURN">Zwrot</SelectItem>
+              </SelectContent>
+            </Select>
             <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-10 rounded-xl text-xs" />
             <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-10 rounded-xl text-xs" />
             {canManage && (
               <Button size="sm" className="rounded-xl" onClick={openCreate}>
                 <Plus className="w-4 h-4 mr-2" />
-                Dodaj ruch
+                Dodaj aktywność
               </Button>
             )}
           </div>
@@ -156,7 +200,7 @@ export default function InventoryMovementsPage() {
       </div>
 
       <div className="bg-card rounded-2xl border border-border p-4 mb-4">
-        <h2 className="text-sm font-semibold mb-3">Raport zużycia (wydania)</h2>
+        <h2 className="text-sm font-semibold mb-3">Podsumowanie wydań</h2>
         {usageReport.length === 0 && (
           <p className="text-xs text-muted-foreground">Brak wydań w wybranym zakresie.</p>
         )}
@@ -182,7 +226,11 @@ export default function InventoryMovementsPage() {
             <div>
               <p className="font-medium">{movement.item?.name || "Produkt"}</p>
               <p className="text-xs text-muted-foreground">
-                {movement.type === "IN" ? "Przyjęcie" : movement.type === "OUT" ? "Wydanie" : "Korekta"} • {new Date(movement.createdAt).toLocaleString()}
+                {movement.type === "IN" ? "Przyjęcie" : movement.type === "OUT" ? "Wydanie" : "Korekta"}
+                {movement.usageType && ` • ${movement.usageType === "SALON_USE" ? "Użytek salonu" : movement.usageType === "CLIENT_SALE" ? "Sprzedaż klientowi" : movement.usageType === "LOSS" ? "Strata" : movement.usageType === "PURCHASE" ? "Dostawa" : "Zwrot"}`}
+                {movement.client?.name && ` • ${movement.client.name}`}
+                {" • "}
+                {new Date(movement.createdAt).toLocaleString()}
               </p>
             </div>
             <div className="text-xs text-muted-foreground">
@@ -196,7 +244,7 @@ export default function InventoryMovementsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="bg-card">
           <DialogHeader>
-            <DialogTitle>Dodaj ruch magazynowy</DialogTitle>
+            <DialogTitle>Dodaj aktywność magazynową</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
@@ -238,6 +286,60 @@ export default function InventoryMovementsPage() {
                 />
               </div>
             </div>
+            {form.type === "OUT" && (
+              <div className="grid gap-3">
+                <div>
+                  <label className="text-xs font-medium mb-1 block">Powód wydania</label>
+                  <Select value={form.usageType} onValueChange={(value) => setForm((prev) => ({ ...prev, usageType: value }))}>
+                    <SelectTrigger className="h-10 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="SALON_USE">Użytek salonu</SelectItem>
+                      <SelectItem value="CLIENT_SALE">Sprzedaż klientowi</SelectItem>
+                      <SelectItem value="LOSS">Strata / ubytek</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {form.usageType === "CLIENT_SALE" && (
+                  <div>
+                    <label className="text-xs font-medium mb-1 block">Klient</label>
+                    <Input
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      placeholder="Szukaj klienta..."
+                      className="h-10 rounded-xl mb-2"
+                    />
+                    <Select value={form.clientId} onValueChange={(value) => setForm((prev) => ({ ...prev, clientId: value }))}>
+                      <SelectTrigger className="h-10 rounded-xl">
+                        <SelectValue placeholder="Wybierz klienta" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover z-50 max-h-60">
+                        {clients
+                          .filter((c: any) => !clientSearch || c.name.toLowerCase().includes(clientSearch.toLowerCase()) || (c.phone || "").includes(clientSearch))
+                          .map((client: any) => (
+                            <SelectItem key={client.id} value={client.id}>{client.name} • {client.phone}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+            {form.type === "IN" && (
+              <div>
+                <label className="text-xs font-medium mb-1 block">Powód przyjęcia</label>
+                <Select value={form.usageType} onValueChange={(value) => setForm((prev) => ({ ...prev, usageType: value }))}>
+                  <SelectTrigger className="h-10 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    <SelectItem value="PURCHASE">Dostawa</SelectItem>
+                    <SelectItem value="RETURN">Zwrot</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium mb-1 block">Notatka</label>
               <Input value={form.note} onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))} className="h-10 rounded-xl" />

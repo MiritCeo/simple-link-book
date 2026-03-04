@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,18 +19,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PageTransition } from "@/components/motion";
 import { toast } from "sonner";
-import { getInventoryItems, createInventoryItem, updateInventoryItem, deactivateInventoryItem, getInventorySettings, getInventoryUnits, getInventoryMovements } from "@/lib/api";
+import { getInventoryItems, createInventoryItem, updateInventoryItem, deactivateInventoryItem, getInventorySettings, getInventoryUnits, getInventoryMovements, getInventoryCategories, createInventoryCategory } from "@/lib/api";
 import { getInventoryRole } from "@/lib/auth";
 
 const navTabs = [
   { label: "Asortyment", path: "/panel/magazyn" },
-  { label: "Ruchy", path: "/panel/magazyn/ruchy" },
+  { label: "Aktywności", path: "/panel/magazyn/ruchy" },
   { label: "Ustawienia", path: "/panel/magazyn/ustawienia" },
 ];
 
 type InventoryItemForm = {
   id?: string;
   name: string;
+  categoryId?: string | null;
   category: string;
   unit: string;
   stock: number;
@@ -48,10 +50,14 @@ export default function InventoryItemsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [units, setUnits] = useState<any[]>([]);
   const [movements, setMovements] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [defaultMinStock, setDefaultMinStock] = useState(0);
   const [search, setSearch] = useState("");
   const [onlyLow, setOnlyLow] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ name: "", parentId: "root" });
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItem, setHistoryItem] = useState<any | null>(null);
   const [form, setForm] = useState<InventoryItemForm>({
@@ -68,15 +74,17 @@ export default function InventoryItemsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [itemsRes, settingsRes, unitsRes, movementsRes] = await Promise.all([
+      const [itemsRes, settingsRes, unitsRes, movementsRes, categoriesRes] = await Promise.all([
         getInventoryItems(),
         getInventorySettings(),
         getInventoryUnits(),
         getInventoryMovements(),
+        getInventoryCategories(),
       ]);
       setItems(itemsRes.items || []);
       setUnits(unitsRes.units || []);
       setMovements(movementsRes.movements || []);
+      setCategories(categoriesRes.categories || []);
       setDefaultMinStock(settingsRes.setting?.defaultMinStock ?? 0);
     } finally {
       setLoading(false);
@@ -90,11 +98,12 @@ export default function InventoryItemsPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return items.filter((item) => {
-      const match = !search || item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q);
+      const match = !search || item.name.toLowerCase().includes(q) || (item.category || "").toLowerCase().includes(q);
       const low = item.stock <= item.minStock;
-      return match && (!onlyLow || low);
+      const categoryMatch = categoryFilter === "all" || item.categoryId === categoryFilter;
+      return match && categoryMatch && (!onlyLow || low);
     });
-  }, [items, onlyLow, search]);
+  }, [items, onlyLow, search, categoryFilter]);
 
   const totals = useMemo(() => {
     const totalItems = items.length;
@@ -107,6 +116,7 @@ export default function InventoryItemsPage() {
   const openCreate = () => {
     setForm({
       name: "",
+      categoryId: categories[0]?.id || null,
       category: "",
       unit: units[0]?.name || "",
       stock: 0,
@@ -122,10 +132,47 @@ export default function InventoryItemsPage() {
     setForm({
       id: item.id,
       name: item.name || "",
+      categoryId: item.categoryId || null,
       category: item.category || "",
       unit: item.unit || "",
       stock: item.stock || 0,
       minStock: item.minStock || 0,
+  const categoryOptions = useMemo(() => {
+    const byParent = new Map<string | null, any[]>();
+    categories.forEach((cat: any) => {
+      const key = cat.parentId || null;
+      const list = byParent.get(key) || [];
+      list.push(cat);
+      byParent.set(key, list);
+    });
+    const walk = (parentId: string | null, depth: number): Array<{ id: string; name: string }> => {
+      const list = (byParent.get(parentId) || []).sort((a, b) => a.name.localeCompare(b.name));
+      return list.flatMap((cat) => [
+        { id: cat.id, name: `${"— ".repeat(depth)}${cat.name}` },
+        ...walk(cat.id, depth + 1),
+      ]);
+    };
+    return walk(null, 0);
+  }, [categories]);
+
+  const saveCategory = async () => {
+    if (!categoryForm.name.trim()) {
+      toast.error("Podaj nazwę kategorii");
+      return;
+    }
+    try {
+      await createInventoryCategory({
+        name: categoryForm.name.trim(),
+        parentId: categoryForm.parentId === "root" ? null : categoryForm.parentId,
+      });
+      setCategoryForm({ name: "", parentId: "root" });
+      setCategoryDialogOpen(false);
+      await loadData();
+      toast.success("Kategoria dodana");
+    } catch (err: any) {
+      toast.error(err.message || "Błąd zapisu kategorii");
+    }
+  };
       purchasePrice: item.purchasePrice || 0,
       salePrice: item.salePrice || 0,
       active: item.active !== false,
@@ -140,15 +187,33 @@ export default function InventoryItemsPage() {
 
   const saveItem = async () => {
     try {
-      if (!form.name || !form.category || !form.unit) {
+      if (!form.name || !form.categoryId || !form.unit) {
         toast.error("Uzupełnij wymagane pola");
         return;
       }
       if (form.id) {
-        await updateInventoryItem(form.id, form);
+        await updateInventoryItem(form.id, {
+          name: form.name,
+          categoryId: form.categoryId,
+          unit: form.unit,
+          stock: form.stock,
+          minStock: form.minStock,
+          purchasePrice: form.purchasePrice,
+          salePrice: form.salePrice,
+          active: form.active,
+        });
         toast.success("Produkt zaktualizowany");
       } else {
-        await createInventoryItem(form);
+        await createInventoryItem({
+          name: form.name,
+          categoryId: form.categoryId,
+          unit: form.unit,
+          stock: form.stock,
+          minStock: form.minStock,
+          purchasePrice: form.purchasePrice,
+          salePrice: form.salePrice,
+          active: form.active,
+        });
         toast.success("Produkt dodany");
       }
       setDialogOpen(false);
@@ -222,6 +287,17 @@ export default function InventoryItemsPage() {
             />
           </div>
           <div className="flex items-center gap-2">
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="h-10 rounded-xl text-xs w-48">
+                <SelectValue placeholder="Wszystkie kategorie" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover z-50">
+                <SelectItem value="all">Wszystkie kategorie</SelectItem>
+                {categoryOptions.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button variant={onlyLow ? "default" : "outline"} size="sm" className="rounded-xl" onClick={() => setOnlyLow(!onlyLow)}>
               <AlertTriangle className="w-4 h-4 mr-2" />
               Niski stan
@@ -251,7 +327,7 @@ export default function InventoryItemsPage() {
                   {!item.active && <Badge variant="outline" className="text-[10px]">Nieaktywny</Badge>}
                   {lowStock && item.active && <Badge variant="destructive" className="text-[10px]">Niski stan</Badge>}
                 </div>
-                <p className="text-xs text-muted-foreground">{item.category} • {item.unit}</p>
+                <p className="text-xs text-muted-foreground">{item.category || "Brak kategorii"} • {item.unit}</p>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>Stan: <strong className="text-foreground">{item.stock}</strong></span>
@@ -307,7 +383,24 @@ export default function InventoryItemsPage() {
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Kategoria</label>
-              <Input value={form.category} onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))} className="h-10 rounded-xl" />
+              <Select
+                value={form.categoryId || "none"}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, categoryId: value === "none" ? null : value }))}
+              >
+                <SelectTrigger className="h-10 rounded-xl">
+                  <SelectValue placeholder="Wybierz kategorię" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {categoryOptions.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {canManage && (
+                <Button variant="outline" size="sm" className="rounded-xl mt-2" onClick={() => setCategoryDialogOpen(true)}>
+                  Dodaj kategorię
+                </Button>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Jednostka</label>
@@ -368,6 +461,45 @@ export default function InventoryItemsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setHistoryOpen(false)}>Zamknij</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="bg-card">
+          <DialogHeader>
+            <DialogTitle>Nowa kategoria</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <label className="text-xs font-medium mb-1 block">Nazwa</label>
+              <Input
+                value={categoryForm.name}
+                onChange={(e) => setCategoryForm((prev) => ({ ...prev, name: e.target.value }))}
+                className="h-10 rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Nadrzędna</label>
+              <Select
+                value={categoryForm.parentId}
+                onValueChange={(value) => setCategoryForm((prev) => ({ ...prev, parentId: value }))}
+              >
+                <SelectTrigger className="h-10 rounded-xl">
+                  <SelectValue placeholder="Brak" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="root">Brak (poziom główny)</SelectItem>
+                  {categoryOptions.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoryDialogOpen(false)}>Anuluj</Button>
+            <Button onClick={saveCategory}>Zapisz</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

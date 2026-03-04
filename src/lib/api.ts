@@ -534,9 +534,33 @@ export async function getInventoryItems() {
   });
 }
 
+export async function getInventoryCategories() {
+  return apiFetch<{ categories: any[] }>("/api/salon/inventory/categories", {
+    method: "GET",
+    auth: true,
+  });
+}
+
+export async function createInventoryCategory(payload: { name: string; parentId?: string | null }) {
+  return apiFetch<{ category: any }>("/api/salon/inventory/categories", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateInventoryCategory(id: string, payload: { name?: string; parentId?: string | null }) {
+  return apiFetch<{ category: any }>(`/api/salon/inventory/categories/${id}`, {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function createInventoryItem(payload: {
   name: string;
-  category: string;
+  category?: string;
+  categoryId?: string | null;
   unit: string;
   stock?: number;
   minStock?: number;
@@ -554,6 +578,7 @@ export async function createInventoryItem(payload: {
 export async function updateInventoryItem(id: string, payload: Partial<{
   name: string;
   category: string;
+  categoryId: string | null;
   unit: string;
   stock: number;
   minStock: number;
@@ -582,7 +607,14 @@ export async function getInventoryMovements() {
   });
 }
 
-export async function createInventoryMovement(payload: { itemId: string; type: "IN" | "OUT" | "ADJUST"; quantity: number; note?: string }) {
+export async function createInventoryMovement(payload: {
+  itemId: string;
+  type: "IN" | "OUT" | "ADJUST";
+  usageType?: "SALON_USE" | "CLIENT_SALE" | "LOSS" | "PURCHASE" | "RETURN";
+  clientId?: string | null;
+  quantity: number;
+  note?: string;
+}) {
   return apiFetch<{ movement: any; stock: number }>("/api/salon/inventory/movements", {
     method: "POST",
     auth: true,

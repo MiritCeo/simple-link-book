@@ -136,6 +136,7 @@ model InventoryItem {
   id            String   @id @default(cuid())
   name          String
   category      String
+  categoryId    String?
   unit          String
   stock         Int      @default(0)
   minStock      Int      @default(0)
@@ -147,7 +148,26 @@ model InventoryItem {
   salon   Salon  @relation(fields: [salonId], references: [id])
   salonId String
 
+  categoryRef InventoryCategory? @relation(fields: [categoryId], references: [id])
   movements InventoryMovement[]
+}
+
+model InventoryCategory {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  createdAt DateTime @default(now())
+
+  salon   Salon  @relation(fields: [salonId], references: [id])
+  salonId String
+
+  parent   InventoryCategory? @relation("InventoryCategoryParent", fields: [parentId], references: [id])
+  children InventoryCategory[] @relation("InventoryCategoryParent")
+  items    InventoryItem[]
+
+  @@unique([salonId, name, parentId])
+  @@index([salonId])
+  @@index([parentId])
 }
 
 model InventoryUnit {
@@ -173,6 +193,7 @@ model InventorySetting {
 model InventoryMovement {
   id        String   @id @default(cuid())
   type      String
+  usageType String?
   quantity  Int
   note      String?
   createdAt DateTime @default(now())
@@ -182,8 +203,11 @@ model InventoryMovement {
 
   createdBy   User?   @relation(fields: [createdByUserId], references: [id])
   createdByUserId String?
+  client   Client? @relation(fields: [clientId], references: [id])
+  clientId String?
 
   @@index([itemId])
+  @@index([clientId])
 }
 
 model StaffService {
@@ -212,6 +236,7 @@ model Client {
   appointments Appointment[]
   account      ClientAccount?
   accountSalons ClientAccountSalon[]
+  inventoryMovements InventoryMovement[]
 }
 
 model ClientAccount {
