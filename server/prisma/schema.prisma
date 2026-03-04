@@ -76,6 +76,7 @@ model Salon {
   inventoryItems InventoryItem[]
   inventoryUnits InventoryUnit[]
   inventorySetting InventorySetting?
+  inventoryCategories InventoryCategory[]
   clientAccountSalons ClientAccountSalon[]
 }
 
