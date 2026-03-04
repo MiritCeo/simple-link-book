@@ -727,7 +727,34 @@ router.post("/client/register", async (req, res) => {
 
   const emailExists = await prisma.clientAccount.findUnique({ where: { email: finalEmail } });
   if (emailExists) {
-    return res.status(409).json({ error: "Podany email jest już zajęty" });
+    if (!emailExists.active) {
+      return res.status(403).json({ error: "Konto jest nieaktywne" });
+    }
+    const ok = await bcrypt.compare(parsed.data.password, emailExists.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: "Nieprawidłowe dane logowania" });
+    }
+    const existingLink = await prisma.clientAccountSalon.findFirst({
+      where: { clientAccountId: emailExists.id, salonId: client.salonId },
+    });
+    if (!existingLink) {
+      await prisma.clientAccountSalon.create({
+        data: { clientAccountId: emailExists.id, salonId: client.salonId, clientId: client.id },
+      });
+    }
+    if (client.email !== finalEmail) {
+      await prisma.client.update({
+        where: { id: client.id },
+        data: { email: finalEmail },
+      });
+    }
+
+    const token = jwt.sign(
+      { clientId: client.id, salonId: client.salonId, role: "CLIENT" },
+      process.env.JWT_SECRET || "dev",
+      { expiresIn: "14d" },
+    );
+    return res.json({ ok: true, token, clientId: client.id, salonId: client.salonId });
   }
 
   if (client.email !== finalEmail) {
@@ -738,8 +765,11 @@ router.post("/client/register", async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  await prisma.clientAccount.create({
+  const account = await prisma.clientAccount.create({
     data: { clientId: client.id, email: finalEmail, passwordHash, active: true },
+  });
+  await prisma.clientAccountSalon.create({
+    data: { clientAccountId: account.id, salonId: client.salonId, clientId: client.id },
   });
 
   const token = jwt.sign(

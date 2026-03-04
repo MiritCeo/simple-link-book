@@ -76,6 +76,7 @@ model Salon {
   inventoryItems InventoryItem[]
   inventoryUnits InventoryUnit[]
   inventorySetting InventorySetting?
+  clientAccountSalons ClientAccountSalon[]
 }
 
 model User {
@@ -223,6 +224,24 @@ model ClientAccount {
   clientId String @unique
 
   resets ClientPasswordReset[]
+  salons ClientAccountSalon[]
+}
+
+model ClientAccountSalon {
+  id              String   @id @default(cuid())
+  clientAccountId String
+  salonId         String
+  clientId        String
+  createdAt       DateTime @default(now())
+
+  clientAccount ClientAccount @relation(fields: [clientAccountId], references: [id])
+  salon         Salon         @relation(fields: [salonId], references: [id])
+  client        Client        @relation(fields: [clientId], references: [id])
+
+  @@unique([clientAccountId, salonId])
+  @@unique([clientId])
+  @@index([clientAccountId])
+  @@index([salonId])
 }
 
 model ClientPasswordReset {

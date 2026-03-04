@@ -1,13 +1,25 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, CalendarDays, User, LogOut } from 'lucide-react';
+import { Home, CalendarDays, LogOut, Store } from 'lucide-react';
 
 const navItems = [
   { path: '/konto', label: 'Start', icon: Home, exact: true },
   { path: '/konto/wizyty', label: 'Moje wizyty', icon: CalendarDays },
-  { path: '/konto/profil', label: 'Profil', icon: User },
+  { path: '/konto/salony', label: 'Moje salony', icon: Store },
 ];
 
-export function ClientSidebar() {
+type ClientSalon = { id: string; name: string; slug: string; clientId: string };
+
+export function ClientSidebar({
+  salons,
+  activeSalonId,
+  onSwitchSalon,
+  clientName,
+}: {
+  salons: ClientSalon[];
+  activeSalonId?: string | null;
+  onSwitchSalon: (salonId: string) => void;
+  clientName?: string;
+}) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -21,10 +33,24 @@ export function ClientSidebar() {
           <img src="/purebooklogo.svg" alt="purebook" className="w-7 h-7" />
         </div>
         <div>
-          <span className="font-bold text-sm block leading-tight">Joanna</span>
+          <span className="font-bold text-sm block leading-tight">{clientName || 'Klient'}</span>
           <span className="text-[10px] text-muted-foreground">Moje konto</span>
         </div>
       </div>
+      {salons.length > 1 && (
+        <div className="px-4 py-3 border-b border-border">
+          <label className="text-[10px] uppercase tracking-wide text-muted-foreground block mb-2">Salon</label>
+          <select
+            value={activeSalonId || ''}
+            onChange={(e) => e.target.value && onSwitchSalon(e.target.value)}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+          >
+            {salons.map(salon => (
+              <option key={salon.id} value={salon.id}>{salon.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map(item => {
           const active = isActive(item.path, item.exact);
@@ -46,7 +72,13 @@ export function ClientSidebar() {
       </nav>
       <div className="px-3 py-4 border-t border-border">
         <button
-          onClick={() => navigate('/s/studio-bella')}
+          onClick={() => {
+            localStorage.removeItem('client_token');
+            localStorage.removeItem('client_id');
+            localStorage.removeItem('client_salon_id');
+            localStorage.removeItem('client_salons');
+            navigate('/konto/logowanie');
+          }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         >
           <LogOut className="w-5 h-5" />

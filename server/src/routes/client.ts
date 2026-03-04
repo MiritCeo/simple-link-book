@@ -35,6 +35,81 @@ const resetConfirmSchema = z.object({
   newPassword: z.string().min(8),
 });
 
+const buildClientSalons = async (account: { id: string; clientId: string }) => {
+  const [primaryClient, links] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: account.clientId },
+      include: { salon: true },
+    }),
+    prisma.clientAccountSalon.findMany({
+      where: { clientAccountId: account.id },
+      include: { salon: true, client: true },
+    }),
+  ]);
+
+  const salons: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    clientId: string;
+    address?: string;
+    phone?: string;
+    hours?: string;
+    description?: string;
+  }> = [];
+  if (primaryClient?.salon) {
+    salons.push({
+      id: primaryClient.salon.id,
+      name: primaryClient.salon.name,
+      slug: primaryClient.salon.slug,
+      clientId: primaryClient.id,
+      address: primaryClient.salon.address,
+      phone: primaryClient.salon.phone,
+      hours: primaryClient.salon.hours,
+      description: primaryClient.salon.description,
+    });
+  }
+
+  links.forEach(link => {
+    if (!link.salon) return;
+    if (salons.some(s => s.id === link.salonId)) return;
+    salons.push({
+      id: link.salon.id,
+      name: link.salon.name,
+      slug: link.salon.slug,
+      clientId: link.clientId,
+      address: link.salon.address,
+      phone: link.salon.phone,
+      hours: link.salon.hours,
+      description: link.salon.description,
+    });
+  });
+
+  return salons;
+};
+
+const ensureAccountSalonLink = async (accountId: string, clientId: string) => {
+  const client = await prisma.client.findUnique({ where: { id: clientId } });
+  if (!client) return;
+  const existing = await prisma.clientAccountSalon.findFirst({
+    where: { clientAccountId: accountId, salonId: client.salonId },
+  });
+  if (existing) return;
+  await prisma.clientAccountSalon.create({
+    data: { clientAccountId: accountId, salonId: client.salonId, clientId },
+  });
+};
+
+const getAccountForClient = async (clientId: string) => {
+  const direct = await prisma.clientAccount.findUnique({ where: { clientId } });
+  if (direct) return direct;
+  const link = await prisma.clientAccountSalon.findFirst({
+    where: { clientId },
+    include: { clientAccount: true },
+  });
+  return link?.clientAccount || null;
+};
+
 router.post("/login", async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
@@ -61,16 +136,24 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "invalid_credentials" });
     }
 
+    await ensureAccountSalonLink(account.id, account.clientId);
+    const primaryClient = await prisma.client.findUnique({ where: { id: account.clientId } });
+    if (!primaryClient) {
+      return res.status(403).json({ error: "client_profile_missing" });
+    }
+
     const token = jwt.sign(
-      { clientId: account.clientId, salonId: account.client.salonId, role: "CLIENT" },
+      { clientId: account.clientId, salonId: primaryClient.salonId, role: "CLIENT" },
       process.env.JWT_SECRET || "dev",
       { expiresIn: "14d" },
     );
 
+    const salons = await buildClientSalons(account);
     return res.json({
       token,
       clientId: account.clientId,
-      salonId: account.client.salonId,
+      salonId: primaryClient.salonId,
+      salons,
     });
   } catch (err) {
     return res.status(500).json({ error: "internal_error" });
@@ -123,6 +206,92 @@ router.post("/password-reset/confirm", async (req, res) => {
 });
 
 router.use(clientAuth);
+
+router.get("/salons", async (req: ClientAuthRequest, res) => {
+  const account = await getAccountForClient(req.client!.clientId);
+  if (!account) return res.status(404).json({ error: "account_not_found" });
+  await ensureAccountSalonLink(account.id, account.clientId);
+  const salons = await buildClientSalons(account);
+  return res.json({ salons, activeSalonId: req.client!.salonId });
+});
+
+router.post("/switch-salon", async (req: ClientAuthRequest, res) => {
+  const schema = z.object({ salonId: z.string() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const account = await getAccountForClient(req.client!.clientId);
+  if (!account) return res.status(404).json({ error: "account_not_found" });
+  await ensureAccountSalonLink(account.id, account.clientId);
+
+  const primaryClient = await prisma.client.findUnique({ where: { id: account.clientId } });
+  if (!primaryClient) return res.status(404).json({ error: "client_profile_missing" });
+
+  let targetClientId: string | null = null;
+  if (primaryClient.salonId === parsed.data.salonId) {
+    targetClientId = account.clientId;
+  } else {
+    const link = await prisma.clientAccountSalon.findFirst({
+      where: { clientAccountId: account.id, salonId: parsed.data.salonId },
+    });
+    targetClientId = link?.clientId || null;
+  }
+
+  if (!targetClientId) {
+    return res.status(404).json({ error: "salon_not_linked" });
+  }
+
+  const token = jwt.sign(
+    { clientId: targetClientId, salonId: parsed.data.salonId, role: "CLIENT" },
+    process.env.JWT_SECRET || "dev",
+    { expiresIn: "14d" },
+  );
+
+  return res.json({ token, clientId: targetClientId, salonId: parsed.data.salonId });
+});
+
+router.post("/salons/attach", async (req: ClientAuthRequest, res) => {
+  const schema = z.object({ token: z.string().min(10) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const record = await prisma.appointmentToken.findFirst({
+    where: {
+      token: parsed.data.token,
+      type: "CANCEL",
+      expiresAt: { gt: new Date() },
+    },
+    include: { appointment: { include: { client: true, salon: true } } },
+  });
+  if (!record?.appointment) return res.status(404).json({ error: "token_invalid" });
+
+  const account = await getAccountForClient(req.client!.clientId);
+  if (!account) return res.status(404).json({ error: "account_not_found" });
+
+  await ensureAccountSalonLink(account.id, account.clientId);
+  const existing = await prisma.clientAccountSalon.findFirst({
+    where: { clientAccountId: account.id, salonId: record.appointment.salonId },
+  });
+  if (!existing) {
+    await prisma.clientAccountSalon.create({
+      data: {
+        clientAccountId: account.id,
+        salonId: record.appointment.salonId,
+        clientId: record.appointment.clientId,
+      },
+    });
+  }
+
+  if (record.appointment.client.email == null && account.email) {
+    await prisma.client.update({
+      where: { id: record.appointment.clientId },
+      data: { email: account.email },
+    });
+  }
+
+  const salons = await buildClientSalons(account);
+  return res.json({ ok: true, salons });
+});
 
 router.get("/me", async (req: ClientAuthRequest, res) => {
   const client = await prisma.client.findUnique({

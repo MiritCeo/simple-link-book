@@ -72,13 +72,14 @@ export async function login(email: string, password: string) {
 }
 
 export async function clientLogin(email: string, password: string) {
-  const data = await apiFetch<{ token: string; clientId: string; salonId: string }>(
+  const data = await apiFetch<{ token: string; clientId: string; salonId: string; salons?: any[] }>(
     "/api/client/login",
     { method: "POST", body: JSON.stringify({ email, password }) },
   );
   setClientToken(data.token);
   localStorage.setItem("client_id", data.clientId);
   localStorage.setItem("client_salon_id", data.salonId);
+  if (data.salons) localStorage.setItem("client_salons", JSON.stringify(data.salons));
   return data;
 }
 
@@ -88,6 +89,28 @@ export async function getClientMe() {
 
 export async function getClientAppointments() {
   return clientApiFetch<{ appointments: any[] }>("/api/client/appointments");
+}
+
+export async function getClientSalons() {
+  return clientApiFetch<{ salons: any[]; activeSalonId?: string }>("/api/client/salons");
+}
+
+export async function switchClientSalon(salonId: string) {
+  const data = await clientApiFetch<{ token: string; clientId: string; salonId: string }>("/api/client/switch-salon", {
+    method: "POST",
+    body: JSON.stringify({ salonId }),
+  });
+  setClientToken(data.token);
+  localStorage.setItem("client_id", data.clientId);
+  localStorage.setItem("client_salon_id", data.salonId);
+  return data;
+}
+
+export async function attachClientSalon(token: string) {
+  return clientApiFetch<{ ok: boolean; salons?: any[] }>("/api/client/salons/attach", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
 }
 
 export async function updateClientProfile(payload: { name: string; phone: string; email?: string }) {

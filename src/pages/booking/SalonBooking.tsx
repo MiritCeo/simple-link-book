@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Phone, ArrowLeft, Check, Search, User, CalendarDays, ChevronLeft, ChevronRight, CalendarPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,8 @@ const scaleIn = {
 
 export default function SalonBooking() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preselectServiceId = searchParams.get('serviceId');
   const { slug } = useParams();
   const normalizedSlug = slug?.toLowerCase();
   const [step, setStep] = useState(0);
@@ -131,6 +133,17 @@ export default function SalonBooking() {
       .finally(() => mounted && setLoadingSalon(false));
     return () => { mounted = false; };
   }, [slug, normalizedSlug, navigate]);
+
+  useEffect(() => {
+    if (!preselectServiceId || selectedService || services.length === 0) return;
+    const match = services.find(s => s.id === preselectServiceId);
+    if (match) {
+      setSelectedService(match);
+      setAnySpecialist(true);
+      setSelectedSpecialist(null);
+      setStep(1);
+    }
+  }, [preselectServiceId, selectedService, services]);
 
   const filteredServices = useMemo(() => {
     if (!searchQuery) return services;

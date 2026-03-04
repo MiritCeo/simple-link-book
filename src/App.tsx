@@ -31,6 +31,7 @@ import ClientLayout from "./components/layout/ClientLayout";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientAppointments from "./pages/client/ClientAppointments";
 import ClientProfile from "./pages/client/ClientProfile";
+import ClientSalons from "./pages/client/ClientSalons";
 import SuperAdminPage from "./pages/admin/SuperAdminPage";
 import NotFound from "./pages/NotFound";
 
@@ -58,6 +59,7 @@ const App = () => (
           <Route path="/konto" element={<ClientLayout />}>
             <Route index element={<ClientDashboard />} />
             <Route path="wizyty" element={<ClientAppointments />} />
+            <Route path="salony" element={<ClientSalons />} />
             <Route path="profil" element={<ClientProfile />} />
           </Route>
 

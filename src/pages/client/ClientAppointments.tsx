@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CalendarDays, Clock, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,11 +36,25 @@ const mapStatus = (status?: string): Appointment['status'] => {
 
 const toDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`);
 
-type ClientAppointment = Appointment & { cancelToken?: string | null };
+type ClientAppointment = Appointment & { cancelToken?: string | null; salonSlug?: string | null; serviceId?: string | null; salonId?: string | null; salonName?: string | null };
 
 export default function ClientAppointments() {
-  const [activeTab, setActiveTab] = useState('upcoming');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+  const initialTab = query.get('tab') === 'past' ? 'past' : 'upcoming';
+  const initialSalonId = query.get('salonId');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [appointments, setAppointments] = useState<ClientAppointment[]>([]);
+  const [salonFilter, setSalonFilter] = useState<string | null>(initialSalonId);
+
+  useEffect(() => {
+    const nextQuery = new URLSearchParams(location.search);
+    const nextTab = nextQuery.get('tab') === 'past' ? 'past' : 'upcoming';
+    const nextSalonId = nextQuery.get('salonId');
+    setActiveTab(nextTab);
+    setSalonFilter(nextSalonId);
+  }, [location.search]);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -62,6 +77,10 @@ export default function ClientAppointments() {
           duration: apt.duration || 0,
           status: mapStatus(apt.status),
           cancelToken: apt.cancelToken || null,
+          salonSlug: apt.salon?.slug || null,
+          salonId: apt.salon?.id || null,
+          salonName: apt.salon?.name || null,
+          serviceId: apt.appointmentServices?.[0]?.service?.id || null,
         })) as ClientAppointment[];
         setAppointments(mapped);
       })
@@ -73,18 +92,23 @@ export default function ClientAppointments() {
   }, []);
 
   const now = new Date();
+  const filtered = useMemo(
+    () => (salonFilter ? appointments.filter(a => a.salonId === salonFilter) : appointments),
+    [appointments, salonFilter],
+  );
+
   const upcoming = useMemo(
-    () => appointments
+    () => filtered
       .filter(a => ['scheduled', 'confirmed', 'in-progress'].includes(a.status))
       .filter(a => toDateTime(a.date, a.time) >= now)
       .sort((a, b) => toDateTime(a.date, a.time).getTime() - toDateTime(b.date, b.time).getTime()),
-    [appointments],
+    [filtered],
   );
   const past = useMemo(
-    () => appointments
+    () => filtered
       .filter(a => ['completed', 'cancelled', 'no-show'].includes(a.status) || toDateTime(a.date, a.time) < now)
       .sort((a, b) => toDateTime(b.date, b.time).getTime() - toDateTime(a.date, a.time).getTime()),
-    [appointments],
+    [filtered],
   );
   const visibleAppointments = activeTab === 'upcoming' ? upcoming : past;
 
@@ -163,8 +187,17 @@ export default function ClientAppointments() {
                   </Button>
                 </div>
               )}
-              {activeTab === 'past' && apt.status === 'completed' && (
-                <Button variant="secondary" size="sm" className="rounded-xl h-9 text-xs gap-1.5">
+                {activeTab === 'past' && apt.status === 'completed' && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-xl h-9 text-xs gap-1.5"
+                  onClick={() => {
+                    if (!apt.salonSlug) return;
+                    const qs = apt.serviceId ? `?serviceId=${apt.serviceId}` : '';
+                    navigate(`/s/${apt.salonSlug}${qs}`);
+                  }}
+                >
                   Umów ponownie
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Button>

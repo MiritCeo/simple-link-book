@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { statusLabels, statusColors, type Appointment } from '@/data/mockData';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
-import { getClientAppointments, getClientMe } from '@/lib/api';
+import { getClientAppointments, getClientMe, getClientSalons } from '@/lib/api';
 
 const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
 const monthNames = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
@@ -38,6 +38,8 @@ export default function ClientDashboard() {
   const [client, setClient] = useState<{ name: string; phone: string; email?: string } | null>(null);
   const [appointments, setAppointments] = useState<ClientAppointment[]>([]);
   const [rawAppointments, setRawAppointments] = useState<any[]>([]);
+  const [salons, setSalons] = useState<Array<{ id: string; name: string; slug: string; address?: string; phone?: string; hours?: string; description?: string }>>([]);
+  const [activeSalonId, setActiveSalonId] = useState<string | null>(localStorage.getItem('client_salon_id'));
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -46,11 +48,16 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([getClientMe(), getClientAppointments()])
-      .then(([meRes, apptRes]) => {
+    Promise.all([getClientMe(), getClientAppointments(), getClientSalons()])
+      .then(([meRes, apptRes, salonsRes]) => {
         if (!mounted) return;
         setClient(meRes.client);
         setRawAppointments(apptRes.appointments || []);
+        setSalons(salonsRes.salons || []);
+        if (salonsRes.activeSalonId) {
+          setActiveSalonId(salonsRes.activeSalonId);
+          localStorage.setItem('client_salon_id', salonsRes.activeSalonId);
+        }
         const mapped = (apptRes.appointments || []).map((apt: any) => ({
           id: apt.id,
           clientName: meRes.client?.name || '',
@@ -112,6 +119,7 @@ export default function ClientDashboard() {
   }, [rawAppointments]);
 
   const salonInfo = rawAppointments[0]?.salon;
+  const activeSalon = salons.find(s => s.id === activeSalonId) || salonInfo;
   const totalSpent = rawAppointments
     .filter(a => a.status === 'COMPLETED')
     .reduce((sum, a) => sum + (a.appointmentServices || []).reduce((s: number, svc: any) => s + (svc.service?.price || 0), 0), 0);
@@ -254,31 +262,31 @@ export default function ClientDashboard() {
             <div className="flex items-start gap-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="font-bold text-primary text-sm">
-                  {salonInfo?.name ? salonInfo.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2) : 'PB'}
+                  {activeSalon?.name ? activeSalon.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2) : 'PB'}
                 </span>
               </div>
               <div>
-                <p className="font-bold">{salonInfo?.name || 'Salon'}</p>
-                <p className="text-xs text-muted-foreground">{salonInfo?.description || '—'}</p>
+                <p className="font-bold">{activeSalon?.name || 'Salon'}</p>
+                <p className="text-xs text-muted-foreground">{activeSalon?.description || '—'}</p>
               </div>
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="w-4 h-4 shrink-0" />
-                <span>{salonInfo?.address || '—'}</span>
+                <span>{activeSalon?.address || '—'}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="w-4 h-4 shrink-0" />
-                <span>{salonInfo?.hours || '—'}</span>
+                <span>{activeSalon?.hours || '—'}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Phone className="w-4 h-4 shrink-0" />
-                <span>{salonInfo?.phone || '—'}</span>
+                <span>{activeSalon?.phone || '—'}</span>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="flex-1">
-                <Button onClick={() => salonInfo?.slug && navigate(`/s/${salonInfo.slug}`)} className="w-full rounded-xl h-10 gap-1.5">
+                <Button onClick={() => activeSalon?.slug && navigate(`/s/${activeSalon.slug}`)} className="w-full rounded-xl h-10 gap-1.5">
                   <CalendarDays className="w-4 h-4" />Umów wizytę
                 </Button>
               </motion.div>

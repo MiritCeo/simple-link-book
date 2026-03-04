@@ -33,6 +33,7 @@ components:
             - account_inactive
             - client_profile_missing
             - token_invalid
+            - salon_not_linked
             - unauthorized
             - forbidden
             - email_taken
@@ -63,6 +64,21 @@ components:
         token: { type: string }
         clientId: { type: string }
         salonId: { type: string }
+        salons:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientSalon'
+    ClientSalon:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        clientId: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        hours: { type: string }
+        description: { type: string }
     Appointment:
       type: object
       properties:
@@ -230,6 +246,29 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ClientAuthResponse' }
+              examples:
+                success:
+                  value:
+                    token: eyJhbGciOi...
+                    clientId: c_123
+                    salonId: s_123
+                    salons:
+                      - id: s_123
+                        name: Studio Bella
+                        slug: studio-bella
+                        clientId: c_123
+                        address: "ul. Kwiatowa 1, Warszawa"
+                        phone: "+48 123 456 789"
+                        hours: "Pn-Pt 9:00-18:00"
+                        description: "Salon fryzjerski"
+                      - id: s_456
+                        name: Beauty House
+                        slug: beauty-house
+                        clientId: c_456
+                        address: "ul. Lipowa 5, Warszawa"
+                        phone: "+48 222 333 444"
+                        hours: "Pn-Sb 10:00-20:00"
+                        description: "Salon kosmetyczny"
         '400':
           description: Invalid payload
           content:
@@ -262,6 +301,189 @@ paths:
               examples:
                 internal_error:
                   value: { error: internal_error }
+
+  /api/client/salons:
+    get:
+      summary: Lista salonów klienta
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  salons:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClientSalon'
+                  activeSalonId:
+                    type: string
+              examples:
+                success:
+                  value:
+                    activeSalonId: s_123
+                    salons:
+                      - id: s_123
+                        name: Studio Bella
+                        slug: studio-bella
+                        clientId: c_123
+                        address: "ul. Kwiatowa 1, Warszawa"
+                        phone: "+48 123 456 789"
+                        hours: "Pn-Pt 9:00-18:00"
+                        description: "Salon fryzjerski"
+                      - id: s_456
+                        name: Beauty House
+                        slug: beauty-house
+                        clientId: c_456
+                        address: "ul. Lipowa 5, Warszawa"
+                        phone: "+48 222 333 444"
+                        hours: "Pn-Sb 10:00-20:00"
+                        description: "Salon kosmetyczny"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                unauthorized:
+                  value: { error: unauthorized }
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                account_not_found:
+                  value: { error: account_not_found }
+
+  /api/client/switch-salon:
+    post:
+      summary: Zmiana aktywnego salonu klienta
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                salonId: { type: string }
+              required: [salonId]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  clientId: { type: string }
+                  salonId: { type: string }
+              examples:
+                success:
+                  value:
+                    token: eyJhbGciOi...
+                    clientId: c_456
+                    salonId: s_456
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                unauthorized:
+                  value: { error: unauthorized }
+        '404':
+          description: Salon not linked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                salon_not_linked:
+                  value: { error: salon_not_linked }
+
+  /api/client/salons/attach:
+    post:
+      summary: Dodanie salonu klienta po tokenie
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+              required: [token]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  salons:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClientSalon'
+              examples:
+                success:
+                  value:
+                    ok: true
+                    salons:
+                      - id: s_123
+                        name: Studio Bella
+                        slug: studio-bella
+                        clientId: c_123
+                        address: "ul. Kwiatowa 1, Warszawa"
+                        phone: "+48 123 456 789"
+                        hours: "Pn-Pt 9:00-18:00"
+                        description: "Salon fryzjerski"
+                      - id: s_456
+                        name: Beauty House
+                        slug: beauty-house
+                        clientId: c_456
+                        address: "ul. Lipowa 5, Warszawa"
+                        phone: "+48 222 333 444"
+                        hours: "Pn-Sb 10:00-20:00"
+                        description: "Salon kosmetyczny"
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                unauthorized:
+                  value: { error: unauthorized }
+        '404':
+          description: Token invalid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                token_invalid:
+                  value: { error: token_invalid }
 
   /api/client/password-reset:
     post:
