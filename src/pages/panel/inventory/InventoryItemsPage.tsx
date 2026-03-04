@@ -137,6 +137,13 @@ export default function InventoryItemsPage() {
       unit: item.unit || "",
       stock: item.stock || 0,
       minStock: item.minStock || 0,
+      purchasePrice: item.purchasePrice || 0,
+      salePrice: item.salePrice || 0,
+      active: item.active !== false,
+    });
+    setDialogOpen(true);
+  };
+
   const categoryOptions = useMemo(() => {
     const byParent = new Map<string | null, any[]>();
     categories.forEach((cat: any) => {
@@ -172,12 +179,6 @@ export default function InventoryItemsPage() {
     } catch (err: any) {
       toast.error(err.message || "Błąd zapisu kategorii");
     }
-  };
-      purchasePrice: item.purchasePrice || 0,
-      salePrice: item.salePrice || 0,
-      active: item.active !== false,
-    });
-    setDialogOpen(true);
   };
 
   const openHistory = (item: any) => {
