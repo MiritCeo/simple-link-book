@@ -79,6 +79,26 @@ components:
         phone: { type: string }
         hours: { type: string }
         description: { type: string }
+    PublicBookingError:
+      type: object
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_payload
+            - salon_not_found
+            - service_missing
+            - service_not_found
+            - staff_not_found
+            - staff_service_mismatch
+            - salon_closed
+            - time_unavailable
+            - break_time
+            - staff_unavailable
+            - staff_busy
+        message:
+          type: string
+      required: [error]
     Appointment:
       type: object
       properties:
@@ -658,6 +678,46 @@ paths:
       responses:
         '200':
           description: OK
+        '400':
+          description: Validation or data error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicBookingError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload, message: "Nieprawidłowe dane rezerwacji" }
+                service_missing:
+                  value: { error: service_missing, message: "Wybierz przynajmniej jedną usługę" }
+                service_not_found:
+                  value: { error: service_not_found, message: "Nie znaleziono usług w tym salonie" }
+                staff_not_found:
+                  value: { error: staff_not_found, message: "Nie znaleziono pracownika w tym salonie" }
+                staff_service_mismatch:
+                  value: { error: staff_service_mismatch, message: "Pracownik nie wykonuje wybranych usług" }
+        '404':
+          description: Salon not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicBookingError' }
+              examples:
+                salon_not_found:
+                  value: { error: salon_not_found, message: "Nie znaleziono salonu o podanym linku" }
+        '409':
+          description: Availability conflict
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicBookingError' }
+              examples:
+                salon_closed:
+                  value: { error: salon_closed, message: "Salon jest zamknięty w tym dniu" }
+                time_unavailable:
+                  value: { error: time_unavailable, message: "Termin jest niedostępny" }
+                break_time:
+                  value: { error: break_time, message: "Termin wypada w czasie przerwy" }
+                staff_unavailable:
+                  value: { error: staff_unavailable, message: "Pracownik jest niedostępny w tym terminie" }
+                staff_busy:
+                  value: { error: staff_busy, message: "Pracownik jest zajęty w tym terminie" }
 
   /api/public/cancel/{token}:
     get:
@@ -736,6 +796,30 @@ paths:
       responses:
         '200':
           description: OK
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                invalid_payload:
+                  value: { error: invalid_payload }
+        '404':
+          description: Token invalid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                token_invalid:
+                  value: { error: token_invalid }
+        '409':
+          description: Email taken or account exists
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthError' }
+              examples:
+                email_taken:
+                  value: { error: email_taken }
 
   /api/salon/profile:
     get:

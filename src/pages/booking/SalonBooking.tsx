@@ -215,6 +215,20 @@ export default function SalonBooking() {
     return { day: d.getDate(), weekday: dayNames[d.getDay()], month: monthNames[d.getMonth()] };
   };
 
+  const bookingErrorMessages: Record<string, string> = {
+    invalid_payload: "Nieprawidłowe dane rezerwacji",
+    salon_not_found: "Nie znaleziono salonu o podanym linku",
+    service_missing: "Wybierz przynajmniej jedną usługę",
+    service_not_found: "Nie znaleziono usług w tym salonie",
+    staff_not_found: "Nie znaleziono pracownika w tym salonie",
+    staff_service_mismatch: "Pracownik nie wykonuje wybranych usług",
+    salon_closed: "Salon jest zamknięty w tym dniu",
+    time_unavailable: "Termin jest niedostępny",
+    break_time: "Termin wypada w czasie przerwy",
+    staff_unavailable: "Pracownik jest niedostępny w tym terminie",
+    staff_busy: "Pracownik jest zajęty w tym terminie",
+  };
+
   const shiftWeek = (dir: number) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + dir * 7);
@@ -249,7 +263,8 @@ export default function SalonBooking() {
       setBookingComplete(true);
       setStep(6);
     } catch (err: any) {
-      setBookingError(err.message || 'Nie udało się zapisać wizyty.');
+      const code = err?.message;
+      setBookingError(bookingErrorMessages[code] || err.message || 'Nie udało się zapisać wizyty.');
     } finally {
       setBookingLoading(false);
     }

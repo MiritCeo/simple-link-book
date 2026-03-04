@@ -99,7 +99,7 @@ const validateAppointmentAvailability = async ({
 
   const exception = salonExceptions.find(ex => ex.date === date);
   if (exception?.closed) {
-    return { ok: false, error: "Salon jest zamknięty w tym dniu" };
+    return { ok: false, error: "salon_closed", message: "Salon jest zamknięty w tym dniu" };
   }
 
   const weekday = (new Date(date).getDay() + 6) % 7;
@@ -119,13 +119,13 @@ const validateAppointmentAvailability = async ({
     const staffException = staffExceptions.find(ex => ex.date === date);
     if (staffException) {
       if (!staffException.start || !staffException.end) {
-        return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
+        return { ok: false, error: "staff_unavailable", message: "Pracownik jest niedostępny w tym terminie" };
       }
       staffWindow = { start: staffException.start, end: staffException.end };
     } else if (availability.length > 0) {
       const day = availability.find(a => a.weekday === weekday);
       if (!day || !day.active || !day.start || !day.end) {
-        return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
+        return { ok: false, error: "staff_unavailable", message: "Pracownik jest niedostępny w tym terminie" };
       }
       staffWindow = { start: day.start, end: day.end };
     }
@@ -133,7 +133,7 @@ const validateAppointmentAvailability = async ({
 
   const window = staffWindow || salonWindow;
   if (!window) {
-    return { ok: false, error: "Termin jest niedostępny" };
+    return { ok: false, error: "time_unavailable", message: "Termin jest niedostępny" };
   }
 
   const buffers = getBufferMinutes(salonBreaks as any);
@@ -143,13 +143,13 @@ const validateAppointmentAvailability = async ({
   const windowStart = toMinutes(window.start);
   const windowEnd = toMinutes(window.end);
   if (start < windowStart || end > windowEnd) {
-    return { ok: false, error: "Termin jest niedostępny" };
+    return { ok: false, error: "time_unavailable", message: "Termin jest niedostępny" };
   }
 
   const breakWindows = getBreakWindowsForDate(date, salonBreaks as any);
   const breakOverlap = breakWindows.some(w => hasOverlap(start, end, w.start, w.end));
   if (breakOverlap) {
-    return { ok: false, error: "Termin wypada w czasie przerwy" };
+    return { ok: false, error: "break_time", message: "Termin wypada w czasie przerwy" };
   }
 
   if (staffId) {
@@ -168,7 +168,7 @@ const validateAppointmentAvailability = async ({
       return hasOverlap(start, end, s, e);
     });
     if (hasConflict) {
-      return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
+      return { ok: false, error: "staff_busy", message: "Pracownik jest niedostępny w tym terminie" };
     }
   }
 
@@ -435,23 +435,31 @@ router.post("/salons/:slug/appointments", async (req, res) => {
     }),
   });
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane rezerwacji" });
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_payload", message: "Nieprawidłowe dane rezerwacji" });
+  }
 
   const slug = req.params.slug.toLowerCase();
   const salon = await prisma.salon.findUnique({ where: { slug } });
-  if (!salon) return res.status(404).json({ error: "Nie znaleziono salonu o podanym linku" });
+  if (!salon) {
+    return res.status(404).json({ error: "salon_not_found", message: "Nie znaleziono salonu o podanym linku" });
+  }
 
   const ids = parsed.data.serviceIds?.length
     ? parsed.data.serviceIds
     : parsed.data.serviceId
       ? [parsed.data.serviceId]
       : [];
-  if (!ids.length) return res.status(400).json({ error: "Wybierz przynajmniej jedną usługę" });
+  if (!ids.length) {
+    return res.status(400).json({ error: "service_missing", message: "Wybierz przynajmniej jedną usługę" });
+  }
 
   const services = await prisma.service.findMany({
     where: { salonId: salon.id, id: { in: ids }, active: true },
   });
-  if (services.length !== ids.length) return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
+  if (services.length !== ids.length) {
+    return res.status(400).json({ error: "service_not_found", message: "Nie znaleziono usług w tym salonie" });
+  }
 
   const duration = services.reduce((sum, s) => sum + s.duration, 0);
 
@@ -483,13 +491,15 @@ router.post("/salons/:slug/appointments", async (req, res) => {
       where: { id: parsed.data.staffId, salonId: salon.id, active: true },
       select: { id: true },
     });
-    if (!staffExists) return res.status(400).json({ error: "Nie znaleziono pracownika w tym salonie" });
+    if (!staffExists) {
+      return res.status(400).json({ error: "staff_not_found", message: "Nie znaleziono pracownika w tym salonie" });
+    }
 
     const staffServiceCount = await prisma.staffService.count({
       where: { staffId: parsed.data.staffId, serviceId: { in: ids } },
     });
     if (staffServiceCount !== ids.length) {
-      return res.status(400).json({ error: "Pracownik nie wykonuje wybranych usług" });
+      return res.status(400).json({ error: "staff_service_mismatch", message: "Pracownik nie wykonuje wybranych usług" });
     }
   }
 
@@ -501,7 +511,7 @@ router.post("/salons/:slug/appointments", async (req, res) => {
     staffId: parsed.data.staffId,
   });
   if (!availability.ok) {
-    return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
+    return res.status(409).json({ error: availability.error || "time_unavailable", message: availability.message || "Termin jest niedostępny" });
   }
 
   const appointment = await prisma.appointment.create({

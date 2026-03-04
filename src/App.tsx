@@ -9,6 +9,7 @@ import LoginPage from "./pages/auth/LoginPage";
 import SalonSelectPage from "./pages/auth/SalonSelectPage";
 import ClientLoginPage from "./pages/auth/ClientLoginPage";
 import ClientResetPasswordPage from "./pages/auth/ClientResetPasswordPage";
+import ClientRegisterPage from "./pages/auth/ClientRegisterPage";
 import PanelLayout from "./components/layout/PanelLayout";
 import DashboardPage from "./pages/panel/DashboardPage";
 import CalendarPage from "./pages/panel/CalendarPage";
@@ -52,6 +53,7 @@ const App = () => (
           <Route path="/login" element={<LoginPage />} />
           <Route path="/logowanie" element={<Navigate to="/login" replace />} />
           <Route path="/konto/logowanie" element={<ClientLoginPage />} />
+          <Route path="/konto/rejestracja" element={<ClientRegisterPage />} />
           <Route path="/konto/reset-hasla" element={<ClientResetPasswordPage />} />
           <Route path="/wybierz-salon" element={<SalonSelectPage />} />
 
