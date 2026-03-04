@@ -211,6 +211,7 @@ model Client {
 
   appointments Appointment[]
   account      ClientAccount?
+  accountSalons ClientAccountSalon[]
 }
 
 model ClientAccount {
