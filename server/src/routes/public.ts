@@ -486,6 +486,20 @@ router.post("/salons/:slug/appointments", async (req, res) => {
         },
       });
 
+  if (client.email) {
+    const account = await prisma.clientAccount.findUnique({ where: { email: client.email } });
+    if (account) {
+      const existingLink = await prisma.clientAccountSalon.findFirst({
+        where: { clientAccountId: account.id, salonId: client.salonId },
+      });
+      if (!existingLink) {
+        await prisma.clientAccountSalon.create({
+          data: { clientAccountId: account.id, salonId: client.salonId, clientId: client.id },
+        });
+      }
+    }
+  }
+
   if (parsed.data.staffId) {
     const staffExists = await prisma.staff.findFirst({
       where: { id: parsed.data.staffId, salonId: salon.id, active: true },

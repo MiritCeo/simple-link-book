@@ -302,8 +302,19 @@ router.get("/me", async (req: ClientAuthRequest, res) => {
 });
 
 router.get("/appointments", async (req: ClientAuthRequest, res) => {
+  const account = await getAccountForClient(req.client!.clientId);
+  if (!account) return res.status(404).json({ error: "account_not_found" });
+  await ensureAccountSalonLink(account.id, account.clientId);
+  const links = await prisma.clientAccountSalon.findMany({
+    where: { clientAccountId: account.id },
+    select: { clientId: true },
+  });
+  const clientIds = Array.from(new Set([account.clientId, ...links.map(l => l.clientId)]));
+
   const appointments = await prisma.appointment.findMany({
-    where: { clientId: req.client!.clientId },
+    where: {
+      clientId: { in: clientIds },
+    },
     orderBy: [{ date: "desc" }, { time: "desc" }],
     include: {
       staff: true,
