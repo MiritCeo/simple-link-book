@@ -631,173 +631,173 @@ export default function AppointmentsPage() {
             </Button>
           </div>
           {activeApt ? (
-            <div>
+            <>
               {detailTab === 'visit' ? (
                 editMode ? (
                   <div className="space-y-3 mt-4">
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Data</label>
-                  <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-10 rounded-xl" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Godzina</label>
-                  {editStaffId === 'any' ? (
-                    <Input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} className="h-10 rounded-xl" />
-                  ) : (
-                    <Select value={editTime} onValueChange={setEditTime}>
-                      <SelectTrigger className="h-10 rounded-xl text-sm">
-                        <SelectValue placeholder="Wybierz godzinę" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover z-50">
-                        {editTimeOptions.map(t => (
-                          <SelectItem key={t} value={t}>{t}</SelectItem>
-                        ))}
-                        {editTimeOptions.length === 0 && (
-                          <SelectItem value="-" disabled>Brak dostępnych godzin</SelectItem>
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Data</label>
+                      <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-10 rounded-xl" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Godzina</label>
+                      {editStaffId === 'any' ? (
+                        <Input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} className="h-10 rounded-xl" />
+                      ) : (
+                        <Select value={editTime} onValueChange={setEditTime}>
+                          <SelectTrigger className="h-10 rounded-xl text-sm">
+                            <SelectValue placeholder="Wybierz godzinę" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover z-50">
+                            {editTimeOptions.map(t => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                            {editTimeOptions.length === 0 && (
+                              <SelectItem value="-" disabled>Brak dostępnych godzin</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Status</label>
+                      <Select value={editStatus} onValueChange={(val) => setEditStatus(val as Appointment['status'])}>
+                        <SelectTrigger className="h-10 rounded-xl text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover z-50">
+                          {Object.entries(statusLabels).map(([key, label]) => (
+                            <SelectItem key={key} value={key}>{label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Specjalista</label>
+                      <Select value={editStaffId} onValueChange={setEditStaffId}>
+                        <SelectTrigger className="h-10 rounded-xl text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover z-50">
+                          <SelectItem value="any">Dowolny</SelectItem>
+                          {staff.filter((sp: any) => sp.active !== false).map((sp: any) => (
+                            <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Usługi</label>
+                      <Input
+                        placeholder="Szukaj usługi..."
+                        value={editServiceSearch}
+                        onChange={e => setEditServiceSearch(e.target.value)}
+                        className="h-10 rounded-xl mb-2"
+                      />
+                      <div className="max-h-36 overflow-auto rounded-xl border border-border bg-card">
+                        {editFilteredServices.map(service => {
+                          const checked = editServiceIds.includes(service.id);
+                          return (
+                            <label key={service.id} className="flex items-start gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-muted">
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(value) => {
+                                  setEditServiceIds(prev =>
+                                    value ? [...prev, service.id] : prev.filter(id => id !== service.id),
+                                  );
+                                }}
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">{service.name}</p>
+                                <p className="text-xs text-muted-foreground">{service.duration} min • {service.price} zł</p>
+                              </div>
+                            </label>
+                          );
+                        })}
+                        {editFilteredServices.length === 0 && (
+                          <p className="text-xs text-muted-foreground px-3 py-4 text-center">Brak wyników</p>
                         )}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Status</label>
-                  <Select value={editStatus} onValueChange={(val) => setEditStatus(val as Appointment['status'])}>
-                    <SelectTrigger className="h-10 rounded-xl text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      {Object.entries(statusLabels).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Specjalista</label>
-                  <Select value={editStaffId} onValueChange={setEditStaffId}>
-                    <SelectTrigger className="h-10 rounded-xl text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover z-50">
-                      <SelectItem value="any">Dowolny</SelectItem>
-                      {staff.filter((sp: any) => sp.active !== false).map((sp: any) => (
-                        <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Usługi</label>
-                  <Input
-                    placeholder="Szukaj usługi..."
-                    value={editServiceSearch}
-                    onChange={e => setEditServiceSearch(e.target.value)}
-                    className="h-10 rounded-xl mb-2"
-                  />
-                  <div className="max-h-36 overflow-auto rounded-xl border border-border bg-card">
-                    {editFilteredServices.map(service => {
-                      const checked = editServiceIds.includes(service.id);
-                      return (
-                        <label key={service.id} className="flex items-start gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-muted">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(value) => {
-                              setEditServiceIds(prev =>
-                                value ? [...prev, service.id] : prev.filter(id => id !== service.id),
-                              );
-                            }}
-                          />
-                          <div className="flex-1">
-                            <p className="font-medium">{service.name}</p>
-                            <p className="text-xs text-muted-foreground">{service.duration} min • {service.price} zł</p>
-                          </div>
-                        </label>
-                      );
-                    })}
-                    {editFilteredServices.length === 0 && (
-                      <p className="text-xs text-muted-foreground px-3 py-4 text-center">Brak wyników</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">Czas: {effectiveEditDuration} min</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-sm font-medium mb-1.5 block">Czas trwania (min)</label>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder={`${editDuration || activeApt?.duration || 30}`}
+                          value={editCustomDuration}
+                          onChange={(e) => setEditCustomDuration(e.target.value ? Number(e.target.value) : '')}
+                          className="h-10 rounded-xl"
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Domyślnie z usług: {editDuration || activeApt?.duration || 30} min
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium mb-1.5 block">Zakończenie</label>
+                        <Input value={editEndTime || '—'} readOnly className="h-10 rounded-xl bg-muted/40" />
+                      </div>
+                    </div>
+                    {editStaffId !== 'any' && (
+                      <label className="flex items-start gap-2 text-sm">
+                        <Checkbox
+                          checked={editAllowConflict}
+                          onCheckedChange={(checked) => setEditAllowConflict(Boolean(checked))}
+                        />
+                        <span>
+                          Zezwól na konflikt z innymi wizytami tego specjalisty
+                        </span>
+                      </label>
+                    )}
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Klient</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        <Input value={editClientName} onChange={(e) => setEditClientName(e.target.value)} placeholder="Imię i nazwisko" className="h-10 rounded-xl" />
+                        <Input value={editClientPhone} onChange={(e) => setEditClientPhone(e.target.value)} placeholder="+48 500 000 000" className="h-10 rounded-xl" />
+                        <Input value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} placeholder="email@domain.pl" className="h-10 rounded-xl" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1.5 block">Notatka</label>
+                      <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className="h-10 rounded-xl" />
+                    </div>
+                    {editConflict && (
+                      <p className="text-xs text-destructive">Wybrany specjalista ma już wizytę w tym czasie.</p>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">Czas: {effectiveEditDuration} min</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm font-medium mb-1.5 block">Czas trwania (min)</label>
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder={`${editDuration || activeApt?.duration || 30}`}
-                      value={editCustomDuration}
-                      onChange={(e) => setEditCustomDuration(e.target.value ? Number(e.target.value) : '')}
-                      className="h-10 rounded-xl"
-                    />
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Domyślnie z usług: {editDuration || activeApt?.duration || 30} min
-                    </p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Klient</span>
+                      <span className="text-sm font-medium">{activeApt.client?.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground">Usługa</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {getServiceBadges(activeApt)}
+                      </div>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Specjalista</span>
+                      <span className="text-sm font-medium">{activeApt.staff?.name || 'Dowolny'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Data</span>
+                      <span className="text-sm font-medium">{activeApt.date}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Godzina</span>
+                      <span className="text-sm font-medium">{activeApt.time}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Status</span>
+                      <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1.5 block">Zakończenie</label>
-                    <Input value={editEndTime || '—'} readOnly className="h-10 rounded-xl bg-muted/40" />
-                  </div>
-                </div>
-                {editStaffId !== 'any' && (
-                  <label className="flex items-start gap-2 text-sm">
-                    <Checkbox
-                      checked={editAllowConflict}
-                      onCheckedChange={(checked) => setEditAllowConflict(Boolean(checked))}
-                    />
-                    <span>
-                      Zezwól na konflikt z innymi wizytami tego specjalisty
-                    </span>
-                  </label>
-                )}
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Klient</label>
-                  <div className="grid grid-cols-1 gap-2">
-                    <Input value={editClientName} onChange={(e) => setEditClientName(e.target.value)} placeholder="Imię i nazwisko" className="h-10 rounded-xl" />
-                    <Input value={editClientPhone} onChange={(e) => setEditClientPhone(e.target.value)} placeholder="+48 500 000 000" className="h-10 rounded-xl" />
-                    <Input value={editClientEmail} onChange={(e) => setEditClientEmail(e.target.value)} placeholder="email@domain.pl" className="h-10 rounded-xl" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1.5 block">Notatka</label>
-                  <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} className="h-10 rounded-xl" />
-                </div>
-                {editConflict && (
-                  <p className="text-xs text-destructive">Wybrany specjalista ma już wizytę w tym czasie.</p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Klient</span>
-                  <span className="text-sm font-medium">{activeApt.client?.name}</span>
-                </div>
-                <div>
-                  <span className="text-sm text-muted-foreground">Usługa</span>
-                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                    {getServiceBadges(activeApt)}
-                  </div>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Specjalista</span>
-                  <span className="text-sm font-medium">{activeApt.staff?.name || 'Dowolny'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Data</span>
-                  <span className="text-sm font-medium">{activeApt.date}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Godzina</span>
-                  <span className="text-sm font-medium">{activeApt.time}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Status</span>
-                  <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
-                </div>
-              </div>
-            )
-          ) : detailTab === 'client' ? (
+                )
+              ) : detailTab === 'client' ? (
             <div className="space-y-3 mt-4">
               <div className="rounded-xl border border-border p-3 bg-card">
                 <p className="text-sm font-semibold">{activeApt.client?.name}</p>
@@ -918,7 +918,10 @@ export default function AppointmentsPage() {
             )}
             <Button variant="outline" className="rounded-xl" onClick={() => setDetailsOpen(false)}>Zamknij</Button>
           </div>
-        </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Brak danych wizyty</p>
+          )}
         </SheetContent>
       </Sheet>
 
