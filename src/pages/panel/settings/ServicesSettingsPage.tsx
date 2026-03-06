@@ -29,7 +29,7 @@ export default function ServicesSettingsPage() {
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', category: '', duration: 30, price: 0, description: '' });
+  const [form, setForm] = useState({ name: '', category: '', duration: 30, price: 0, description: '', color: '' });
 
   useEffect(() => {
     let mounted = true;
@@ -49,7 +49,7 @@ export default function ServicesSettingsPage() {
   const activeService = services.find((s: any) => s.id === activeServiceId);
   const openCreate = () => {
     setActiveServiceId(null);
-    setForm({ name: '', category: '', duration: 30, price: 0, description: '' });
+    setForm({ name: '', category: '', duration: 30, price: 0, description: '', color: '' });
     setDialogOpen(true);
   };
   const openEdit = (id: string) => {
@@ -61,6 +61,7 @@ export default function ServicesSettingsPage() {
       duration: svc?.duration || 30,
       price: svc?.price || 0,
       description: svc?.description || '',
+      color: svc?.color || '',
     });
     setDialogOpen(true);
   };
@@ -112,7 +113,12 @@ export default function ServicesSettingsPage() {
             <MotionItem key={service.id}>
               <HoverCard className="bg-card rounded-2xl p-4 border border-border flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-medium text-sm">{service.name}</p>
+                  <div className="flex items-center gap-2">
+                    {service.color && (
+                      <span className="inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: service.color }} />
+                    )}
+                    <p className="font-medium text-sm">{service.name}</p>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{service.description || 'Brak opisu'}</p>
                 <div className="flex items-center gap-2 mt-2">
                     <Badge variant="secondary" className="text-[10px]">{service.category}</Badge>
@@ -193,6 +199,23 @@ export default function ServicesSettingsPage() {
             <div>
               <label className="text-sm font-medium mb-1.5 block">Opis</label>
               <Textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Opcjonalny opis usługi" className="rounded-xl min-h-[90px]" />
+            </div>
+            <div className="grid grid-cols-[120px_1fr] gap-3 items-center">
+              <label className="text-sm font-medium">Kolor</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="color"
+                  value={form.color || '#e11d48'}
+                  onChange={(e) => setForm(f => ({ ...f, color: e.target.value }))}
+                  className="h-10 w-16 p-1 rounded-xl"
+                />
+                <Input
+                  placeholder="#E11D48"
+                  value={form.color}
+                  onChange={(e) => setForm(f => ({ ...f, color: e.target.value }))}
+                  className="h-10 rounded-xl"
+                />
+              </div>
             </div>
           </div>
 

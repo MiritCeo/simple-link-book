@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { createClient, deleteClient, getSalonClientAppointments, getSalonClients, importSalonClients, updateClient } from '@/lib/api';
 import { statusLabels } from '@/data/mockData';
+import { getReadableTextColor } from '@/lib/color';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -67,6 +68,22 @@ export default function ClientsPage() {
 
   const activeClient = clients.find((c: any) => c.id === selectedClient);
   const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
+  const getServiceBadges = (apt: any) => {
+    const services = apt.appointmentServices || [];
+    return services.map((s: any) => {
+      const color = s.service?.color;
+      const textColor = getReadableTextColor(color);
+      return (
+        <span
+          key={s.service.id}
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium mr-1"
+          style={{ backgroundColor: color || 'var(--muted)', color: color ? textColor : 'var(--muted-foreground)' }}
+        >
+          {s.service.name}
+        </span>
+      );
+    });
+  };
   const openClientDetail = (id: string) => {
     setSelectedClient(id);
     const current = clients.find((c: any) => c.id === id);
@@ -719,9 +736,10 @@ export default function ClientsPage() {
                               {statusLabels[mapStatus(apt.status) as keyof typeof statusLabels] || apt.status}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')} • {apt.staff?.name || 'Dowolny'}
-                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {getServiceBadges(apt)}
+                            <span className="text-[10px] text-muted-foreground">{apt.staff?.name || 'Dowolny'}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -904,11 +922,16 @@ export default function ClientsPage() {
                 ) : (
                   <div className="space-y-2">
                     {clientAppointments.slice(0, 3).map((apt: any) => (
-                      <div key={apt.id} className="flex justify-between text-sm">
-                        <span>{apt.date} {apt.time}</span>
-                        <span className="text-muted-foreground">
-                          {statusLabels[mapStatus(apt.status) as keyof typeof statusLabels] || apt.status}
-                        </span>
+                      <div key={apt.id} className="rounded-xl border border-border p-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span>{apt.date} {apt.time}</span>
+                          <span className="text-muted-foreground">
+                            {statusLabels[mapStatus(apt.status) as keyof typeof statusLabels] || apt.status}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {getServiceBadges(apt)}
+                        </div>
                       </div>
                     ))}
                   </div>

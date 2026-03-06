@@ -104,6 +104,7 @@ model Service {
   duration    Int
   price       Int
   description String?
+  color       String?
   active      Boolean  @default(true)
 
   salon   Salon  @relation(fields: [salonId], references: [id])
@@ -118,6 +119,7 @@ model Staff {
   name      String
   role      String
   phone     String?
+  photoUrl  String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   inventoryRole InventoryRole @default(STAFF)

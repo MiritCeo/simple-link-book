@@ -491,7 +491,7 @@ export async function updateAppointment(id: string, payload: {
   });
 }
 
-export async function createService(payload: { name: string; category: string; duration: number; price: number; description?: string }) {
+export async function createService(payload: { name: string; category: string; duration: number; price: number; description?: string; color?: string }) {
   return apiFetch<{ service: any }>("/api/salon/services", {
     method: "POST",
     auth: true,
@@ -499,7 +499,7 @@ export async function createService(payload: { name: string; category: string; d
   });
 }
 
-export async function updateService(id: string, payload: { name: string; category: string; duration: number; price: number; description?: string; active?: boolean }) {
+export async function updateService(id: string, payload: { name: string; category: string; duration: number; price: number; description?: string; color?: string; active?: boolean }) {
   return apiFetch<{ service: any }>(`/api/salon/services/${id}`, {
     method: "PUT",
     auth: true,
@@ -518,6 +518,7 @@ export async function createStaff(payload: {
   name: string;
   role: string;
   phone?: string;
+  photoUrl?: string;
   serviceIds: string[];
   inventoryRole?: "ADMIN" | "MANAGER" | "STAFF";
   accountEmail: string;
@@ -530,12 +531,28 @@ export async function createStaff(payload: {
   });
 }
 
-export async function updateStaff(id: string, payload: { name: string; role: string; phone?: string; serviceIds: string[]; inventoryRole?: "ADMIN" | "MANAGER" | "STAFF" }) {
+export async function updateStaff(id: string, payload: { name: string; role: string; phone?: string; photoUrl?: string; serviceIds: string[]; inventoryRole?: "ADMIN" | "MANAGER" | "STAFF" }) {
   return apiFetch<{ staff: any }>(`/api/salon/staff/${id}`, {
     method: "PUT",
     auth: true,
     body: JSON.stringify(payload),
   });
+}
+
+export async function uploadStaffPhoto(file: File) {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("photo", file);
+  const res = await fetch(`${API_URL}/api/salon/staff/photo`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.error || `Request failed: ${res.status}`);
+  }
+  return res.json() as Promise<{ url: string }>;
 }
 
 export async function deleteStaff(id: string) {

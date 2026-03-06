@@ -5,11 +5,45 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { statusLabels, statusColors } from '@/data/mockData';
+import { getReadableTextColor } from '@/lib/color';
+import { getReadableTextColor } from '@/lib/color';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
 import { getSalonAppointments, getSalonClients, getSalonStaff } from '@/lib/api';
 
 export default function DashboardPage() {
+  const getServiceBadges = (apt: any) => {
+    const services = apt.appointmentServices || [];
+    return services.map((s: any) => {
+      const color = s.service?.color;
+      const textColor = getReadableTextColor(color);
+      return (
+        <span
+          key={s.service.id}
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium mr-1"
+          style={{ backgroundColor: color || 'var(--muted)', color: color ? textColor : 'var(--muted-foreground)' }}
+        >
+          {s.service.name}
+        </span>
+      );
+    });
+  };
+  const getServiceBadges = (apt: any) => {
+    const services = apt.appointmentServices || [];
+    return services.map((s: any) => {
+      const color = s.service?.color;
+      const textColor = getReadableTextColor(color);
+      return (
+        <span
+          key={s.service.id}
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium mr-1"
+          style={{ backgroundColor: color || 'var(--muted)', color: color ? textColor : 'var(--muted-foreground)' }}
+        >
+          {s.service.name}
+        </span>
+      );
+    });
+  };
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [clientsTotal, setClientsTotal] = useState(0);
@@ -210,9 +244,10 @@ export default function DashboardPage() {
                             {statusLabels[mapStatus(apt.status) as keyof typeof statusLabels]}
                           </Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')} • {apt.staff?.name || 'Dowolny'}
-                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          {getServiceBadges(apt)}
+                          <span className="text-[10px] text-muted-foreground">{apt.staff?.name || 'Dowolny'}</span>
+                        </div>
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-sm font-semibold">{apt.time}</p>
@@ -279,19 +314,32 @@ export default function DashboardPage() {
           </DialogHeader>
           {activeApt ? (
             <div className="space-y-3">
-              {[
-                ['Klient', activeApt.client?.name],
-                ['Usługa', activeApt.appointmentServices?.map((s: any) => s.service.name).join(', ')],
-                ['Specjalista', activeApt.staff?.name || 'Dowolny'],
-                ['Data', activeApt.date],
-                ['Godzina', activeApt.time],
-                ['Status', statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">{label}</span>
-                  <span className="text-sm font-medium">{value}</span>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Klient</span>
+                <span className="text-sm font-medium">{activeApt.client?.name}</span>
+              </div>
+              <div>
+                <span className="text-sm text-muted-foreground">Usługa</span>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {getServiceBadges(activeApt)}
                 </div>
-              ))}
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Specjalista</span>
+                <span className="text-sm font-medium">{activeApt.staff?.name || 'Dowolny'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Data</span>
+                <span className="text-sm font-medium">{activeApt.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Godzina</span>
+                <span className="text-sm font-medium">{activeApt.time}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
+              </div>
               <div className="flex items-center gap-2 pt-2">
                 <Button
                   variant="outline"

@@ -5,7 +5,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { statusLabels, statusColors, type Appointment } from '@/data/mockData';
+import { getReadableTextColor } from '@/lib/color';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -31,6 +33,8 @@ export default function AppointmentsPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<'visit' | 'client' | 'history'>('visit');
+  const [clientNoteDraft, setClientNoteDraft] = useState('');
   const [activeAptId, setActiveAptId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editDate, setEditDate] = useState('');
@@ -68,6 +72,22 @@ export default function AppointmentsPage() {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+  const getServiceBadges = (apt: any) => {
+    const services = apt.appointmentServices || [];
+    return services.map((s: any) => {
+      const color = s.service?.color;
+      const textColor = getReadableTextColor(color);
+      return (
+        <span
+          key={s.service.id}
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium mr-1"
+          style={{ backgroundColor: color || 'var(--muted)', color: color ? textColor : 'var(--muted-foreground)' }}
+        >
+          {s.service.name}
+        </span>
+      );
+    });
   };
   const dayIndexMap: Record<string, number> = {
     Pn: 0, Wt: 1, Śr: 2, Sr: 2, Cz: 3, Pt: 4, So: 5, Sob: 5, Sb: 5, Nd: 6,
@@ -224,6 +244,12 @@ export default function AppointmentsPage() {
     return appts;
   }, [activeTab, selectedSpecialist, selectedStatus, search, dateFrom, dateTo, appointments, today]);
   const activeApt = filtered.find(a => a.id === activeAptId);
+  const clientHistory = useMemo(() => {
+    if (!activeApt?.client?.id) return [];
+    return appointments
+      .filter((a: any) => a.client?.id === activeApt.client.id)
+      .sort((a: any, b: any) => (a.date + a.time).localeCompare(b.date + b.time));
+  }, [appointments, activeApt]);
   const openDetails = (id: string) => {
     const apt = filtered.find(a => a.id === id);
     setActiveAptId(id);
@@ -232,6 +258,8 @@ export default function AppointmentsPage() {
     if (apt) {
       setEditDate(apt.date);
       setEditTime(apt.time);
+      setDetailTab('visit');
+      setClientNoteDraft(apt.client?.notes || '');
       setEditCustomDuration('');
       setEditAllowConflict(false);
       setEditStatus(mapStatus(apt.status) as Appointment['status']);
@@ -487,10 +515,12 @@ export default function AppointmentsPage() {
             <HoverCard className="bg-card rounded-2xl p-4 border border-border lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_120px_160px_120px] lg:items-center lg:gap-3 lg:px-5 lg:py-3 lg:rounded-xl">
               <div className="mb-2 lg:mb-0 min-w-0">
                 <p className="font-medium text-sm truncate">{apt.client?.name}</p>
-                <p className="text-xs text-muted-foreground lg:hidden">{apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}</p>
+                <div className="lg:hidden mt-1">{getServiceBadges(apt)}</div>
               </div>
               <div className="hidden lg:block min-w-0">
-                <p className="text-sm truncate">{apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}</p>
+                <div className="flex flex-wrap items-center gap-1">
+                  {getServiceBadges(apt)}
+                </div>
                 <p className="text-xs text-muted-foreground truncate">{apt.staff?.name || 'Dowolny'}</p>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3 lg:mb-0">
@@ -568,15 +598,69 @@ export default function AppointmentsPage() {
         </MotionList>
       )}
 
-      <Dialog open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) setEditMode(false); }}>
-        <DialogContent className="rounded-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Szczegóły wizyty</DialogTitle>
-            <DialogDescription>Szczegóły wizyty</DialogDescription>
-          </DialogHeader>
+      <Sheet open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) setEditMode(false); }}>
+        <SheetContent side="right" className="w-[420px] sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{activeApt?.client?.name || 'Szczegóły wizyty'}</SheetTitle>
+            <SheetDescription>{activeApt ? `${activeApt.date} • ${activeApt.time}` : 'Szczegóły wizyty'}</SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={detailTab === 'visit' ? 'secondary' : 'outline'}
+              className="rounded-xl h-8 text-xs"
+              onClick={() => setDetailTab('visit')}
+            >
+              Wizyta
+            </Button>
+            <Button
+              size="sm"
+              variant={detailTab === 'client' ? 'secondary' : 'outline'}
+              className="rounded-xl h-8 text-xs"
+              onClick={() => setDetailTab('client')}
+            >
+              Klient
+            </Button>
+            <Button
+              size="sm"
+              variant={detailTab === 'history' ? 'secondary' : 'outline'}
+              className="rounded-xl h-8 text-xs"
+              onClick={() => setDetailTab('history')}
+            >
+              Historia
+            </Button>
+          </div>
           {activeApt ? (
-            editMode ? (
-              <div className="space-y-3">
+            <>
+              <div className="mt-4 flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={detailTab === 'visit' ? 'secondary' : 'outline'}
+                  className="rounded-xl h-8 text-xs"
+                  onClick={() => setDetailTab('visit')}
+                >
+                  Wizyta
+                </Button>
+                <Button
+                  size="sm"
+                  variant={detailTab === 'client' ? 'secondary' : 'outline'}
+                  className="rounded-xl h-8 text-xs"
+                  onClick={() => setDetailTab('client')}
+                >
+                  Klient
+                </Button>
+                <Button
+                  size="sm"
+                  variant={detailTab === 'history' ? 'secondary' : 'outline'}
+                  className="rounded-xl h-8 text-xs"
+                  onClick={() => setDetailTab('history')}
+                >
+                  Historia
+                </Button>
+              </div>
+              {detailTab === 'visit' ? (
+                editMode ? (
+                  <div className="space-y-3 mt-4">
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Data</label>
                   <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-10 rounded-xl" />
@@ -711,80 +795,157 @@ export default function AppointmentsPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {[
-                  ['Klient', activeApt.client?.name],
-                  ['Usługa', activeApt.appointmentServices?.map((s: any) => s.service.name).join(', ')],
-                  ['Specjalista', activeApt.staff?.name || 'Dowolny'],
-                  ['Data', activeApt.date],
-                  ['Godzina', activeApt.time],
-                  ['Status', statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">{label}</span>
-                    <span className="text-sm font-medium">{value}</span>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Klient</span>
+                  <span className="text-sm font-medium">{activeApt.client?.name}</span>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">Usługa</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {getServiceBadges(activeApt)}
                   </div>
-                ))}
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Specjalista</span>
+                  <span className="text-sm font-medium">{activeApt.staff?.name || 'Dowolny'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Data</span>
+                  <span className="text-sm font-medium">{activeApt.date}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Godzina</span>
+                  <span className="text-sm font-medium">{activeApt.time}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Status</span>
+                  <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
+                </div>
               </div>
             )
+          ) : detailTab === 'client' ? (
+            <div className="space-y-3 mt-4">
+              <div className="rounded-xl border border-border p-3 bg-card">
+                <p className="text-sm font-semibold">{activeApt.client?.name}</p>
+                <p className="text-xs text-muted-foreground">{activeApt.client?.phone}</p>
+                {activeApt.client?.email && <p className="text-xs text-muted-foreground">{activeApt.client?.email}</p>}
+                <p className="text-xs text-muted-foreground mt-2">
+                  Wizyt: {clientHistory.length} • Ostatnia: {clientHistory.at(-1)?.date || '—'}
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  {activeApt.client?.phone && (
+                    <>
+                      <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs">
+                        <a href={`tel:${activeApt.client.phone}`}>Zadzwoń</a>
+                      </Button>
+                      <Button asChild size="sm" variant="outline" className="rounded-xl h-8 text-xs">
+                        <a href={`sms:${activeApt.client.phone}`}>SMS</a>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Notatki klienta</label>
+                <Textarea
+                  value={clientNoteDraft}
+                  onChange={(e) => setClientNoteDraft(e.target.value)}
+                  className="rounded-xl min-h-[120px]"
+                />
+                <Button
+                  size="sm"
+                  className="rounded-xl mt-2"
+                  onClick={async () => {
+                    if (!activeApt.client?.id) return;
+                    await updateClient(activeApt.client.id, {
+                      notes: clientNoteDraft || undefined,
+                    });
+                    toast.success('Notatka klienta zapisana');
+                  }}
+                >
+                  Zapisz notatkę
+                </Button>
+              </div>
+            </div>
+          ) : detailTab === 'history' ? (
+            <div className="space-y-2 mt-4">
+              {clientHistory.map((apt: any) => (
+                <div key={apt.id} className="rounded-xl border border-border p-3">
+                  <p className="text-xs text-muted-foreground">{apt.date} • {apt.time}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {getServiceBadges(apt)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{apt.staff?.name || 'Dowolny'}</p>
+                </div>
+              ))}
+              {clientHistory.length === 0 && (
+                <p className="text-sm text-muted-foreground">Brak historii wizyt</p>
+              )}
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">Brak danych wizyty</p>
           )}
-          <DialogFooter className="pt-2">
-            <Button variant="outline" className="rounded-xl" onClick={() => setDetailsOpen(false)}>Zamknij</Button>
-            {editMode ? (
-              <Button
-                className="rounded-xl"
-                disabled={editConflict}
-                onClick={async () => {
-                  if (!activeAptId) return;
-                  try {
-                    if (!editDate || !editTime || editServiceIds.length === 0) {
-                      toast.error('Uzupełnij datę, godzinę i usługi');
-                      return;
-                    }
-                    if (!editClientName || !editClientPhone) {
-                      toast.error('Uzupełnij imię i telefon klienta');
-                      return;
-                    }
-                    if (activeApt?.client?.id) {
-                      await updateClient(activeApt.client.id, {
-                        name: editClientName,
-                        phone: editClientPhone,
-                        email: editClientEmail || undefined,
-                        notes: activeApt.client?.notes || undefined,
-                        allergies: activeApt.client?.allergies || undefined,
+          <div className="pt-3 flex items-center gap-2">
+            {detailTab === 'visit' && (
+              editMode ? (
+                <Button
+                  className="rounded-xl"
+                  onClick={async () => {
+                    if (!activeAptId) return;
+                    try {
+                      if (!editDate || !editTime || editServiceIds.length === 0) {
+                        toast.error('Uzupełnij datę, godzinę i usługi');
+                        return;
+                      }
+                      if (!editClientName || !editClientPhone) {
+                        toast.error('Uzupełnij imię i telefon klienta');
+                        return;
+                      }
+                      if (editConflict) {
+                        const ok = window.confirm('Wizyta koliduje z inną wizytą. Zapisać mimo konfliktu?');
+                        if (!ok) return;
+                      }
+                      if (activeApt?.client?.id) {
+                        await updateClient(activeApt.client.id, {
+                          name: editClientName,
+                          phone: editClientPhone,
+                          email: editClientEmail || undefined,
+                          notes: activeApt.client?.notes || undefined,
+                          allergies: activeApt.client?.allergies || undefined,
+                        });
+                      }
+                      await updateAppointment(activeAptId, {
+                        date: editDate,
+                        time: editTime,
+                        status: editStatus.toUpperCase().replace(/-/g, '_'),
+                        staffId: editStaffId === 'any' ? null : editStaffId,
+                        notes: editNotes || undefined,
+                        serviceIds: editServiceIds,
+                        durationOverride: editCustomDuration ? Number(editCustomDuration) : undefined,
+                        allowConflict: editAllowConflict || undefined,
                       });
+                      const res = await getSalonAppointments();
+                      setAppointments(res.appointments || []);
+                      setEditMode(false);
+                      toast.success('Wizyta zaktualizowana');
+                    } catch (err: any) {
+                      const msg = err.message?.includes('not available')
+                        ? 'Specjalista jest zajęty w tym czasie'
+                        : (err.message || 'Błąd zapisu');
+                      toast.error(msg);
                     }
-                    await updateAppointment(activeAptId, {
-                      date: editDate,
-                      time: editTime,
-                      status: editStatus.toUpperCase().replace(/-/g, '_'),
-                      staffId: editStaffId === 'any' ? null : editStaffId,
-                      notes: editNotes || undefined,
-                      serviceIds: editServiceIds,
-                      durationOverride: editCustomDuration ? Number(editCustomDuration) : undefined,
-                      allowConflict: editAllowConflict || undefined,
-                    });
-                    const res = await getSalonAppointments();
-                    setAppointments(res.appointments || []);
-                    setEditMode(false);
-                    toast.success('Wizyta zaktualizowana');
-                  } catch (err: any) {
-                    const msg = err.message?.includes('not available')
-                      ? 'Specjalista jest zajęty w tym czasie'
-                      : (err.message || 'Błąd zapisu');
-                    toast.error(msg);
-                  }
-                }}
-              >
-                Zapisz
-              </Button>
-            ) : (
-              <Button className="rounded-xl" onClick={() => setEditMode(true)}>Edytuj wizytę</Button>
+                  }}
+                >
+                  Zapisz
+                </Button>
+              ) : (
+                <Button className="rounded-xl" onClick={() => setEditMode(true)}>Edytuj wizytę</Button>
+              )
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <Button variant="outline" className="rounded-xl" onClick={() => setDetailsOpen(false)}>Zamknij</Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={smsOpen} onOpenChange={setSmsOpen}>
         <DialogContent className="rounded-2xl">

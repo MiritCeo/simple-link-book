@@ -8,7 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageTransition } from '@/components/motion';
 import { toast } from 'sonner';
-import { createStaffAccount, getSalonServices, getSalonStaff, updateStaff, updateStaffAccount } from '@/lib/api';
+import { createStaffAccount, getSalonServices, getSalonStaff, updateStaff, updateStaffAccount, uploadStaffPhoto } from '@/lib/api';
+import { cropAndCompressImage } from '@/lib/image';
 
 export default function StaffEditPage() {
   const navigate = useNavigate();
@@ -18,12 +19,13 @@ export default function StaffEditPage() {
   const [services, setServices] = useState<any[]>([]);
   const [serviceSearch, setServiceSearch] = useState('');
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [form, setForm] = useState({ name: '', role: '', phone: '' });
+  const [form, setForm] = useState({ name: '', role: '', phone: '', photoUrl: '' });
   const [accountEmail, setAccountEmail] = useState('');
   const [accountPassword, setAccountPassword] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [accountRole, setAccountRole] = useState<'OWNER' | 'STAFF'>('STAFF');
   const [inventoryRole, setInventoryRole] = useState<'ADMIN' | 'MANAGER' | 'STAFF'>('STAFF');
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const loadData = async () => {
     if (!id) return;
@@ -34,7 +36,7 @@ export default function StaffEditPage() {
       setStaff(staffRec);
       setServices(servicesRes.services || []);
       if (staffRec) {
-        setForm({ name: staffRec.name || '', role: staffRec.role || '', phone: staffRec.phone || '' });
+        setForm({ name: staffRec.name || '', role: staffRec.role || '', phone: staffRec.phone || '', photoUrl: staffRec.photoUrl || '' });
         setSelectedServiceIds(staffRec.services?.map((s: any) => s.id) ?? []);
         setAccountEmail(staffRec.user?.email || '');
         setAccountRole(staffRec.user?.role || 'STAFF');
@@ -117,6 +119,42 @@ export default function StaffEditPage() {
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Telefon</label>
                 <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} className="h-11 rounded-xl" />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Zdjęcie (URL)</label>
+                <Input value={form.photoUrl} onChange={(e) => setForm(f => ({ ...f, photoUrl: e.target.value }))} placeholder="https://..." className="h-11 rounded-xl" />
+              </div>
+              <div className="rounded-xl border border-border p-3">
+                <label className="text-sm font-medium mb-2 block">Zdjęcie (upload)</label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    className="h-10 rounded-xl"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setPhotoUploading(true);
+                      try {
+                        const processed = await cropAndCompressImage(file);
+                        const res = await uploadStaffPhoto(processed);
+                        setForm(f => ({ ...f, photoUrl: res.url }));
+                        toast.success('Zdjęcie wgrane');
+                      } catch (err: any) {
+                        toast.error(err.message || 'Nie udało się wgrać zdjęcia');
+                      } finally {
+                        setPhotoUploading(false);
+                        e.target.value = '';
+                      }
+                    }}
+                    disabled={photoUploading}
+                  />
+                  {form.photoUrl && (
+                    <div className="h-12 w-12 rounded-full overflow-hidden bg-muted shrink-0">
+                      <img src={form.photoUrl} alt="Podgląd" className="h-full w-full object-cover" />
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Uprawnienia magazynowe</label>

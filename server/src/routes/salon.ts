@@ -1,5 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import crypto from "crypto";
+import sharp from "sharp";
 import crypto from "crypto";
 import type { NotificationEvent } from "@prisma/client";
 import prisma from "../prisma.js";
@@ -476,6 +481,42 @@ router.get("/services", async (req: AuthRequest, res) => {
   return res.json({ services });
 });
 
+const staffPhotoDir = path.join(process.cwd(), "uploads", "staff");
+const ensureStaffPhotoDir = () => {
+  if (!fs.existsSync(staffPhotoDir)) {
+    fs.mkdirSync(staffPhotoDir, { recursive: true });
+  }
+};
+const uploadStaffPhoto = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) return cb(new Error("INVALID_FILE_TYPE"));
+    cb(null, true);
+  },
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+router.post("/staff/photo", uploadStaffPhoto.single("photo"), async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  if (!req.file) return res.status(400).json({ error: "Brak pliku" });
+  const minSize = 300;
+  const targetSize = 512;
+  const image = sharp(req.file.buffer);
+  const meta = await image.metadata();
+  if (!meta.width || !meta.height || meta.width < minSize || meta.height < minSize) {
+    return res.status(400).json({ error: `Zdjęcie musi mieć min. ${minSize}x${minSize}px` });
+  }
+  ensureStaffPhotoDir();
+  const filename = `${crypto.randomUUID()}.jpg`;
+  const outputPath = path.join(staffPhotoDir, filename);
+  await image
+    .resize(targetSize, targetSize, { fit: "cover", position: "center" })
+    .jpeg({ quality: 80 })
+    .toFile(outputPath);
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  return res.json({ url: `${baseUrl}/uploads/staff/${filename}` });
+});
+
 router.post("/services", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const schema = z.object({
@@ -484,6 +525,7 @@ router.post("/services", async (req: AuthRequest, res) => {
     duration: z.number().int().min(1),
     price: z.number().int().min(0),
     description: z.string().optional(),
+    color: z.string().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usługi" });
@@ -501,6 +543,7 @@ router.put("/services/:id", async (req: AuthRequest, res) => {
     duration: z.number().int().min(1),
     price: z.number().int().min(0),
     description: z.string().optional(),
+    color: z.string().optional(),
     active: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
@@ -554,6 +597,7 @@ router.post("/staff", async (req: AuthRequest, res) => {
     name: z.string().min(2),
     role: z.string().min(2),
     phone: z.string().optional(),
+    photoUrl: z.string().optional(),
     serviceIds: z.array(z.string()).default([]),
     inventoryRole: z.enum(["ADMIN", "MANAGER", "STAFF"]).optional(),
     accountEmail: z.string().email(),
@@ -579,6 +623,7 @@ router.post("/staff", async (req: AuthRequest, res) => {
         name: parsed.data.name,
         role: parsed.data.role,
         phone: parsed.data.phone,
+        photoUrl: parsed.data.photoUrl,
         active: true,
         salonId: getSalonId(req),
         inventoryRole: parsed.data.inventoryRole || "STAFF",
@@ -621,6 +666,7 @@ router.put("/staff/:id", async (req: AuthRequest, res) => {
     name: z.string().min(2),
     role: z.string().min(2),
     phone: z.string().optional(),
+    photoUrl: z.string().optional(),
     active: z.boolean().optional(),
     serviceIds: z.array(z.string()).default([]),
     inventoryRole: z.enum(["ADMIN", "MANAGER", "STAFF"]).optional(),
@@ -647,6 +693,7 @@ router.put("/staff/:id", async (req: AuthRequest, res) => {
       name: parsed.data.name,
       role: parsed.data.role,
       phone: parsed.data.phone,
+      photoUrl: parsed.data.photoUrl,
       active: parsed.data.active,
       inventoryRole: parsed.data.inventoryRole,
       staffServices: {

@@ -18,7 +18,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { createStaff, getSalonServices, getSalonStaff, updateStaff } from '@/lib/api';
+import { createStaff, getSalonServices, getSalonStaff, updateStaff, uploadStaffPhoto } from '@/lib/api';
+import { cropAndCompressImage } from '@/lib/image';
 import { toast } from 'sonner';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
@@ -35,6 +36,7 @@ export default function StaffSettingsPage() {
   const [accountEmail, setAccountEmail] = useState('');
   const [accountPassword, setAccountPassword] = useState('');
   const [inventoryRole, setInventoryRole] = useState<'ADMIN' | 'MANAGER' | 'STAFF'>('STAFF');
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -61,11 +63,11 @@ export default function StaffSettingsPage() {
     return active.filter((s: any) => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
   }, [serviceSearch, services]);
 
-  const [form, setForm] = useState({ name: '', role: '', phone: '' });
+  const [form, setForm] = useState({ name: '', role: '', phone: '', photoUrl: '' });
   const openCreate = () => { 
     setSelectedServiceIds([]); 
     setServiceSearch(''); 
-    setForm({ name: '', role: '', phone: '' });
+    setForm({ name: '', role: '', phone: '', photoUrl: '' });
     setAccountEmail('');
     setAccountPassword('');
     setInventoryRole('STAFF');
@@ -117,10 +119,18 @@ export default function StaffSettingsPage() {
           {filtered.map(staff => (
             <MotionItem key={staff.id}>
               <HoverCard className="bg-card rounded-2xl p-4 border border-border flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium text-sm">{staff.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{staff.role}</p>
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                <div className="min-w-0 flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden text-xs font-semibold">
+                    {staff.photoUrl ? (
+                      <img src={staff.photoUrl} alt={staff.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span>{staff.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{staff.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{staff.role}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
                     <Badge variant="secondary" className="text-[10px]">
                       {staff.services?.length ?? 0} usług
                     </Badge>
@@ -135,6 +145,7 @@ export default function StaffSettingsPage() {
                     {(staff.services || []).length > 2 && (
                       <span className="text-[11px] text-muted-foreground">+{(staff.services || []).length - 2}</span>
                     )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -231,6 +242,42 @@ export default function StaffSettingsPage() {
             <div>
               <label className="text-sm font-medium mb-1.5 block">Telefon</label>
               <Input value={form.phone} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+48 500 000 000" className="h-11 rounded-xl" />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Zdjęcie (URL)</label>
+              <Input value={form.photoUrl} onChange={(e) => setForm(f => ({ ...f, photoUrl: e.target.value }))} placeholder="https://..." className="h-11 rounded-xl" />
+            </div>
+            <div className="rounded-xl border border-border p-3">
+              <label className="text-sm font-medium mb-2 block">Zdjęcie (upload)</label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  className="h-10 rounded-xl"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setPhotoUploading(true);
+                    try {
+                      const processed = await cropAndCompressImage(file);
+                      const res = await uploadStaffPhoto(processed);
+                      setForm(f => ({ ...f, photoUrl: res.url }));
+                      toast.success('Zdjęcie wgrane');
+                    } catch (err: any) {
+                      toast.error(err.message || 'Nie udało się wgrać zdjęcia');
+                    } finally {
+                      setPhotoUploading(false);
+                      e.target.value = '';
+                    }
+                  }}
+                  disabled={photoUploading}
+                />
+                {form.photoUrl && (
+                  <div className="h-12 w-12 rounded-full overflow-hidden bg-muted shrink-0">
+                    <img src={form.photoUrl} alt="Podgląd" className="h-full w-full object-cover" />
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Uprawnienia magazynowe</label>
