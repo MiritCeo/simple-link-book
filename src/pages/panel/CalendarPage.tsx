@@ -1609,9 +1609,9 @@ export default function CalendarPage() {
               )}
               {timelineColumns.map(col => (
                 <div key={col.id} className="py-2 px-3 text-xs font-medium border-l border-border">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate">{col.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{getColumnLoadPct(col.staffId)}%</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="whitespace-normal break-words leading-tight" title={col.name}>{col.name}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{getColumnLoadPct(col.staffId)}%</span>
                   </div>
                   <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
                     <div className="h-full bg-primary" style={{ width: `${getColumnLoadPct(col.staffId)}%` }} />
@@ -1817,7 +1817,7 @@ export default function CalendarPage() {
       </DndContext>
 
       <Dialog open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) setEditMode(false); }}>
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="rounded-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Szczegóły wizyty</DialogTitle>
             <DialogDescription>Szczegóły wizyty</DialogDescription>

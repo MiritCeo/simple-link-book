@@ -1332,7 +1332,8 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     return res.status(400).json({ error: "Wybierz przynajmniej jedną usługę" });
   }
 
-  if (newStaffId) {
+  const staffIdChanged = (newStaffId ?? null) !== (appointment.staffId ?? null);
+  if (newStaffId && (staffIdChanged || parsed.data.serviceIds)) {
     const staffRec = await prisma.staff.findFirst({
       where: { id: newStaffId, salonId: appointment.salonId, active: true },
       select: { id: true },
