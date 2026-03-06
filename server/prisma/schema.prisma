@@ -226,7 +226,7 @@ model Client {
   name      String
   phone     String
   email     String?
-  notes     String?
+  notes     String? @db.Text
   allergies String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -290,7 +290,7 @@ model Appointment {
   time      String
   duration  Int
   status    AppointmentStatus @default(SCHEDULED)
-  notes     String?
+  notes     String? @db.Text
   createdAt DateTime @default(now())
 
   salon   Salon  @relation(fields: [salonId], references: [id])

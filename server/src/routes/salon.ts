@@ -833,6 +833,8 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
     cancelled: "CANCELLED",
     "no-show": "NO_SHOW",
   };
+  const truncateText = (value: string | undefined, maxLen: number) =>
+    value ? value.slice(0, maxLen) : value;
 
   const createAppointmentWithRetry = async (data: any, attempts = 3) => {
     let lastError: unknown;
@@ -878,7 +880,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
           data: {
             name,
             email: row.email || existing.email || null,
-            notes: row.notes || existing.notes || null,
+          notes: truncateText(row.notes || existing.notes || undefined, 191) || null,
             allergies: row.allergies || existing.allergies || null,
             active: true,
           },
@@ -892,7 +894,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
           name,
           phone,
           email: row.email || null,
-          notes: row.notes || null,
+          notes: truncateText(row.notes, 191) || null,
           allergies: row.allergies || null,
           active: true,
         },
