@@ -1,5 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { Plus, ChevronLeft, ChevronRight, Clock, User, List, LayoutGrid, Filter, Ban } from 'lucide-react';
+import { DndContext, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +16,123 @@ import { createAppointment, createClient, createSalonException, createStaffExcep
 import { toast } from 'sonner';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
+
+const ColumnDropZone = ({
+  id,
+  staffId,
+  className,
+  style,
+  children,
+}: {
+  id: string;
+  staffId?: string | null;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) => {
+  const { setNodeRef } = useDroppable({ id, data: { staffId, mode: 'column' } });
+  return (
+    <div ref={setNodeRef} className={className} style={style}>
+      {children}
+    </div>
+  );
+};
+
+const DayDropZone = ({
+  id,
+  date,
+  className,
+  children,
+}: {
+  id: string;
+  date: string;
+  className?: string;
+  children: ReactNode;
+}) => {
+  const { setNodeRef } = useDroppable({ id, data: { date, mode: 'day' } });
+  return (
+    <div ref={setNodeRef} className={className}>
+      {children}
+    </div>
+  );
+};
+
+const DraggableAppointment = ({
+  apt,
+  top,
+  height,
+  width,
+  left,
+  statusKey,
+  compactTimeline,
+  onClick,
+}: {
+  apt: any;
+  top: number;
+  height: number;
+  width: string;
+  left: string;
+  statusKey: string;
+  compactTimeline: boolean;
+  onClick: () => void;
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: apt.id,
+    data: { appointment: apt, top, mode: 'timeline' },
+  });
+  const style: React.CSSProperties = {
+    top,
+    height,
+    width,
+    left,
+    transform: CSS.Translate.toString(transform),
+    zIndex: isDragging ? 20 : 1,
+    opacity: isDragging ? 0.85 : 1,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={`absolute rounded-lg border cursor-pointer hover:opacity-90 transition-opacity overflow-hidden ${statusColors[statusKey as keyof typeof statusColors]} border-current/10 ${
+        compactTimeline ? 'px-2 py-1' : 'px-3 py-1.5'
+      }`}
+      style={style}
+      onClick={onClick}
+    >
+      <p className={`font-semibold truncate ${compactTimeline ? 'text-[10px]' : 'text-xs'}`}>
+        {apt.time} — {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}
+      </p>
+      {!compactTimeline && (
+        <p className="text-[10px] truncate opacity-70">{apt.client?.name}</p>
+      )}
+    </div>
+  );
+};
+
+const DraggableAppointmentChip = ({
+  apt,
+  className,
+  children,
+}: {
+  apt: any;
+  className?: string;
+  children: ReactNode;
+}) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: apt.id,
+    data: { appointment: apt, mode: 'chip' },
+  });
+  const style: CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.85 : 1,
+  };
+  return (
+    <div ref={setNodeRef} {...attributes} {...listeners} className={className} style={style}>
+      {children}
+    </div>
+  );
+};
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -83,6 +202,8 @@ export default function CalendarPage() {
   const [showAvailableOnly, setShowAvailableOnly] = useState(false);
   const [appointmentDate, setAppointmentDate] = useState(selectedDate);
   const [appointmentTime, setAppointmentTime] = useState('');
+  const [customDuration, setCustomDuration] = useState<number | ''>('');
+  const [allowConflict, setAllowConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const [services, setServices] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
@@ -102,6 +223,8 @@ export default function CalendarPage() {
   const [editMode, setEditMode] = useState(false);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
+  const [editCustomDuration, setEditCustomDuration] = useState<number | ''>('');
+  const [editAllowConflict, setEditAllowConflict] = useState(false);
   const [editStatus, setEditStatus] = useState<Appointment['status']>('scheduled');
   const [editStaffId, setEditStaffId] = useState('any');
   const [editServiceIds, setEditServiceIds] = useState<string[]>([]);
@@ -250,6 +373,7 @@ export default function CalendarPage() {
     [selectedSpecialistId, staff],
   );
   const estimatedDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
+  const effectiveDuration = customDuration || estimatedDuration || 30;
   const estimatedCost = selectedServices.reduce((sum, s) => sum + s.price, 0);
   const getWindowForDate = (dateStr: string) => {
     if (!dateStr) return null;
@@ -283,6 +407,12 @@ export default function CalendarPage() {
   const toMinutes = (t: string) => {
     const [h, m] = (t || '').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
+  };
+  const formatTime = (totalMinutes: number) => {
+    const minutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
   const dayIndexMap: Record<string, number> = {
     Pn: 0, Wt: 1, Śr: 2, Sr: 2, Cz: 3, Pt: 4, So: 5, Sob: 5, Sb: 5, Nd: 6,
@@ -351,7 +481,7 @@ export default function CalendarPage() {
       const mm = m % 60;
       options.push(`${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
     }
-    const dur = estimatedDuration || 30;
+    const dur = effectiveDuration;
     const breakWindows = breakWindowsForDate(appointmentDate);
     return options.filter((t) => {
       const appointmentStart = toMinutes(t);
@@ -359,6 +489,7 @@ export default function CalendarPage() {
       const end = appointmentStart + dur + bufferMinutes.after;
       const breakOverlap = breakWindows.some(w => start < w.end && end > w.start);
       if (breakOverlap) return false;
+      if (allowConflict) return true;
       const conflict = appointments.some((a: any) => {
         if (a.staff?.id !== selectedSpecialistId) return false;
         if (a.date !== appointmentDate) return false;
@@ -368,7 +499,7 @@ export default function CalendarPage() {
       });
       return !conflict;
     });
-  }, [appointmentDate, selectedSpecialistId, estimatedDuration, appointments, salonHours, salonExceptions, staffSchedules, salonBreaks, bufferMinutes]);
+  }, [appointmentDate, selectedSpecialistId, effectiveDuration, appointments, salonHours, salonExceptions, staffSchedules, salonBreaks, bufferMinutes, allowConflict]);
   const addTimeAvailable = useMemo(() => {
     if (!appointmentDate || !appointmentTime) return true;
     const window = getEffectiveWindow(appointmentDate, selectedSpecialistId);
@@ -376,7 +507,7 @@ export default function CalendarPage() {
     const t = toMinutes(appointmentTime);
     const startM = toMinutes(window.start);
     const endM = toMinutes(window.end);
-    const dur = estimatedDuration || 30;
+    const dur = effectiveDuration;
     const start = t - bufferMinutes.before;
     const end = t + dur + bufferMinutes.after;
     const breakOverlap = breakWindowsForDate(appointmentDate).some(w => start < w.end && end > w.start);
@@ -384,8 +515,87 @@ export default function CalendarPage() {
     if (selectedSpecialistId === 'any') {
       return t >= startM && t <= endM;
     }
+    if (allowConflict) {
+      return t >= startM && t <= endM;
+    }
     return addTimeOptions.includes(appointmentTime);
-  }, [appointmentDate, appointmentTime, selectedSpecialistId, addTimeOptions, salonHours, salonExceptions, staffSchedules, salonBreaks, estimatedDuration, bufferMinutes]);
+  }, [appointmentDate, appointmentTime, selectedSpecialistId, addTimeOptions, salonHours, salonExceptions, staffSchedules, salonBreaks, effectiveDuration, bufferMinutes, allowConflict]);
+  const appointmentEndTime = useMemo(() => {
+    if (!appointmentTime) return '';
+    return formatTime(toMinutes(appointmentTime) + effectiveDuration);
+  }, [appointmentTime, effectiveDuration]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over, delta } = event;
+    if (!over) return;
+    const activeData = active.data.current as any;
+    const apt = activeData?.appointment;
+    if (!apt) return;
+    const overData = over.data.current as any;
+    const overStaffId = overData?.staffId ?? null;
+    const newStaffId = overStaffId === 'any' ? null : overStaffId ?? (apt.staff?.id ?? null);
+    const newDate = overData?.date || selectedDate;
+    let newTime = apt.time;
+    if (overData?.mode === 'column') {
+      const startTop = typeof activeData.top === 'number' ? activeData.top : 0;
+      const newTop = startTop + delta.y;
+      const minutesOffset = Math.round((newTop / slotPxPerMinute) / timelineScale) * timelineScale;
+      newTime = formatTime(8 * 60 + minutesOffset);
+    }
+    if (newTime === apt.time && (newStaffId ?? null) === (apt.staff?.id ?? null)) return;
+
+    const window = getEffectiveWindow(newDate, newStaffId ?? undefined);
+    if (!window) {
+      toast.error('Termin jest niedostępny');
+      return;
+    }
+    const startWindow = toMinutes(window.start);
+    const endWindow = toMinutes(window.end);
+    const start = toMinutes(newTime) - bufferMinutes.before;
+    const end = toMinutes(newTime) + (apt.duration || 0) + bufferMinutes.after;
+    if (start < startWindow || end > endWindow) {
+      toast.error('Wybrana godzina poza grafikiem');
+      return;
+    }
+    const breakOverlap = breakWindowsForDate(newDate).some(w => start < w.end && end > w.start);
+    if (breakOverlap) {
+      toast.error('Wybrana godzina wypada w przerwie');
+      return;
+    }
+    let allowConflictDrag = false;
+    if (newStaffId) {
+      const conflict = appointments.some((a: any) => {
+        if (a.id === apt.id) return false;
+        if (a.staff?.id !== newStaffId) return false;
+        if (a.date !== newDate) return false;
+        const s = toMinutes(a.time) - bufferMinutes.before;
+        const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
+        return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
+      });
+      if (conflict) {
+        allowConflictDrag = window.confirm('Wizyta koliduje z inną wizytą. Zapisać mimo konfliktu?');
+        if (!allowConflictDrag) return;
+      }
+    }
+    try {
+      const res = await updateAppointment(apt.id, {
+        date: newDate,
+        time: newTime,
+        staffId: newStaffId === null ? null : newStaffId,
+        allowConflict: allowConflictDrag || undefined,
+      });
+      setAppointments(prev => prev.map(a => (a.id === apt.id ? res.appointment : a)));
+      if (newDate !== selectedDate) {
+        setSelectedDate(newDate);
+        setAppointmentDate(newDate);
+      }
+      toast.success('Wizyta zaktualizowana');
+    } catch (err: any) {
+      toast.error(err?.message || 'Nie udało się przenieść wizyty');
+    }
+  };
   useEffect(() => {
     if (selectedSpecialistId === 'any') return;
     if (appointmentTime && !addTimeOptions.includes(appointmentTime)) {
@@ -408,6 +618,8 @@ export default function CalendarPage() {
     setSelectedSpecialistId('any');
     setAppointmentTime('');
     setAppointmentDate(selectedDate);
+    setCustomDuration('');
+    setAllowConflict(false);
   };
   const resetBlockForm = () => {
     setBlockDate(selectedDate || new Date().toISOString().split('T')[0]);
@@ -425,6 +637,8 @@ export default function CalendarPage() {
     if (apt) {
       setEditDate(apt.date);
       setEditTime(apt.time);
+      setEditCustomDuration('');
+      setEditAllowConflict(false);
       setEditStatus(mapStatus(apt.status) as Appointment['status']);
       setEditStaffId(apt.staff?.id || 'any');
       setEditServiceIds(apt.appointmentServices?.map((s: any) => s.service.id) || []);
@@ -448,14 +662,20 @@ export default function CalendarPage() {
     [editServiceIds, services],
   );
   const editDuration = editServices.reduce((sum, s) => sum + s.duration, 0);
+  const effectiveEditDuration = editCustomDuration || editDuration || activeApt?.duration || 0;
+  const editEndTime = useMemo(() => {
+    if (!editTime) return '';
+    return formatTime(toMinutes(editTime) + effectiveEditDuration);
+  }, [editTime, effectiveEditDuration]);
   const editConflict = useMemo(() => {
     if (!activeAptId || editStaffId === 'any' || !editDate || !editTime) return false;
-    const dur = editDuration || activeApt?.duration || 0;
+    const dur = effectiveEditDuration;
     const appointmentStart = toMinutes(editTime);
     const start = appointmentStart - bufferMinutes.before;
     const end = appointmentStart + dur + bufferMinutes.after;
     const breakOverlap = breakWindowsForDate(editDate).some(w => start < w.end && end > w.start);
     if (breakOverlap) return true;
+    if (editAllowConflict) return false;
     return appointments.some((a: any) => {
       if (a.id === activeAptId) return false;
       if (a.staff?.id !== editStaffId) return false;
@@ -464,7 +684,7 @@ export default function CalendarPage() {
       const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
       return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
     });
-  }, [activeAptId, editStaffId, editDate, editTime, editDuration, activeApt, appointments, salonBreaks, bufferMinutes]);
+  }, [activeAptId, editStaffId, editDate, editTime, effectiveEditDuration, activeApt, appointments, salonBreaks, bufferMinutes, editAllowConflict]);
   const editTimeOptions = useMemo(() => {
     if (!editDate) return [];
     const window = getEffectiveWindow(editDate, editStaffId);
@@ -477,7 +697,7 @@ export default function CalendarPage() {
       const mm = m % 60;
       options.push(`${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
     }
-    const dur = editDuration || activeApt?.duration || 30;
+    const dur = effectiveEditDuration || 30;
     const breakWindows = breakWindowsForDate(editDate);
     const filtered = options.filter((t) => {
       if (editStaffId === 'any') return true;
@@ -486,6 +706,7 @@ export default function CalendarPage() {
       const end = appointmentStart + dur + bufferMinutes.after;
       const breakOverlap = breakWindows.some(w => start < w.end && end > w.start);
       if (breakOverlap) return false;
+      if (editAllowConflict) return true;
       const conflict = appointments.some((a: any) => {
         if (a.id === activeAptId) return false;
         if (a.staff?.id !== editStaffId) return false;
@@ -500,7 +721,7 @@ export default function CalendarPage() {
       return [editTime, ...filtered];
     }
     return filtered;
-  }, [editDate, editStaffId, editDuration, activeApt, appointments, activeAptId, salonHours, salonExceptions, staffSchedules, editTime, salonBreaks, bufferMinutes]);
+  }, [editDate, editStaffId, effectiveEditDuration, activeApt, appointments, activeAptId, salonHours, salonExceptions, staffSchedules, editTime, salonBreaks, bufferMinutes, editAllowConflict]);
 
   const shiftWeek = (dir: number) => {
     const d = new Date(weekStart);
@@ -548,10 +769,11 @@ export default function CalendarPage() {
       await createAppointment({
         date: appointmentDate,
         time: appointmentTime,
-        duration: estimatedDuration || 30,
+        durationOverride: customDuration ? Number(customDuration) : undefined,
         notes: appointmentNotes || undefined,
         clientId,
         staffId: selectedSpecialistId !== 'any' ? selectedSpecialistId : undefined,
+        allowConflict: allowConflict || undefined,
         serviceIds: selectedServiceIds,
       });
       toast.success('Wizyta dodana');
@@ -991,6 +1213,41 @@ export default function CalendarPage() {
                     <p className="text-xs text-destructive">Wymagane: wybierz co najmniej jedną usługę</p>
                   )}
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Czas trwania (min)</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder={`${estimatedDuration || 30}`}
+                      value={customDuration}
+                      onChange={e => setCustomDuration(e.target.value ? Number(e.target.value) : '')}
+                      className="h-11 rounded-xl"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Domyślnie z usług: {estimatedDuration || 30} min
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Zakończenie</label>
+                    <Input
+                      value={appointmentEndTime || '—'}
+                      readOnly
+                      className="h-11 rounded-xl bg-muted/40"
+                    />
+                  </div>
+                </div>
+                {selectedSpecialistId !== 'any' && (
+                  <label className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      checked={allowConflict}
+                      onCheckedChange={(checked) => setAllowConflict(Boolean(checked))}
+                    />
+                    <span>
+                      Zezwól na konflikt z innymi wizytami tego specjalisty (wizyty równoległe)
+                    </span>
+                  </label>
+                )}
                 {(selectedServiceIds.length > 0 || selectedSpecialistId !== 'any') && (
                   <div>
                     <label className="text-sm font-medium mb-1.5 block">Specjalista</label>
@@ -1333,14 +1590,15 @@ export default function CalendarPage() {
       )}
 
       {/* Timeline view (desktop) */}
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       {view === 'day-timeline' && (
-        <motion.div
-          className="hidden sm:block"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="border border-border rounded-2xl bg-card overflow-hidden">
+          <motion.div
+            className="hidden sm:block"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="border border-border rounded-2xl bg-card overflow-hidden">
             <div
               className="grid border-b border-border bg-muted/40"
               style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(180px, 1fr))` }}
@@ -1378,7 +1636,13 @@ export default function CalendarPage() {
                 );
                 const layout = buildLaneLayout(columnAppts);
                 return (
-                  <div key={col.id} className="relative border-l border-border" style={{ height: HOURS.length * hourHeight }}>
+                  <ColumnDropZone
+                    key={col.id}
+                    id={`col-${col.id}`}
+                    staffId={col.staffId}
+                    className="relative border-l border-border"
+                    style={{ height: HOURS.length * hourHeight }}
+                  >
                     {HOURS.map(hour => (
                       <div key={hour} className="border-b border-border last:border-0 relative" style={{ height: hourHeight }}>
                         {timelineScale !== 60 && (
@@ -1401,32 +1665,25 @@ export default function CalendarPage() {
                       const width = `calc(${100 / laneInfo.laneCount}% - 6px)`;
                       const left = `calc(${(100 / laneInfo.laneCount) * laneInfo.lane}% + 3px)`;
                       return (
-                        <motion.div
+                        <DraggableAppointment
                           key={apt.id}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.03, duration: 0.3 }}
-                          className={`absolute rounded-lg border cursor-pointer hover:opacity-90 transition-opacity overflow-hidden ${statusColors[statusKey as keyof typeof statusColors]} border-current/10 ${
-                            compactTimeline ? 'px-2 py-1' : 'px-3 py-1.5'
-                          }`}
-                          style={{ top: pos.top, height: pos.height, width, left }}
+                          apt={apt}
+                          top={pos.top}
+                          height={pos.height}
+                          width={width}
+                          left={left}
+                          statusKey={statusKey}
+                          compactTimeline={compactTimeline}
                           onClick={() => openDetails(apt.id)}
-                        >
-                          <p className={`font-semibold truncate ${compactTimeline ? 'text-[10px]' : 'text-xs'}`}>
-                            {apt.time} — {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}
-                          </p>
-                          {!compactTimeline && (
-                            <p className="text-[10px] truncate opacity-70">{apt.client?.name}</p>
-                          )}
-                        </motion.div>
+                        />
                       );
                     })}
-                  </div>
+                  </ColumnDropZone>
                 );
               })}
             </div>
           </div>
-        </motion.div>
+          </motion.div>
       )}
 
       {/* List view */}
@@ -1486,30 +1743,32 @@ export default function CalendarPage() {
           const isSelected = selectedDate === date;
           return (
             <MotionItem key={date}>
-              <HoverCard
-                onClick={() => openAddForDate(date)}
-                className={`text-left p-3 rounded-xl border cursor-pointer transition-all min-h-[120px] ${
-                  isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-primary/30'
-                }`}
-              >
-                <p className={`text-xs font-medium mb-2 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
-                  {dayNames[d.getDay()]} {d.getDate()}
-                </p>
-                <div className="space-y-1">
-                  {dayAppts.slice(0, 3).map(apt => (
-                    <div key={apt.id} className="text-[11px] leading-tight">
-                      <span className="font-medium">{apt.time}</span>{' '}
-                      <span className="text-muted-foreground">{apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}</span>
-                    </div>
-                  ))}
-                  {dayAppts.length > 3 && (
-                    <p className="text-[10px] text-muted-foreground">+{dayAppts.length - 3} więcej</p>
-                  )}
-                  {dayAppts.length === 0 && (
-                    <p className="text-[10px] text-muted-foreground italic">Brak wizyt</p>
-                  )}
-                </div>
-              </HoverCard>
+              <DayDropZone id={`day-${date}`} date={date}>
+                <HoverCard
+                  onClick={() => openAddForDate(date)}
+                  className={`text-left p-3 rounded-xl border cursor-pointer transition-all min-h-[120px] ${
+                    isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:border-primary/30'
+                  }`}
+                >
+                  <p className={`text-xs font-medium mb-2 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                    {dayNames[d.getDay()]} {d.getDate()}
+                  </p>
+                  <div className="space-y-1">
+                    {dayAppts.slice(0, 3).map(apt => (
+                      <DraggableAppointmentChip key={apt.id} apt={apt} className="text-[11px] leading-tight">
+                        <span className="font-medium">{apt.time}</span>{' '}
+                        <span className="text-muted-foreground">{apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}</span>
+                      </DraggableAppointmentChip>
+                    ))}
+                    {dayAppts.length > 3 && (
+                      <p className="text-[10px] text-muted-foreground">+{dayAppts.length - 3} więcej</p>
+                    )}
+                    {dayAppts.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground italic">Brak wizyt</p>
+                    )}
+                  </div>
+                </HoverCard>
+              </DayDropZone>
             </MotionItem>
           );
         })}
@@ -1530,30 +1789,32 @@ export default function CalendarPage() {
               const d = new Date(date);
               const dayAppts = appointments.filter((a: any) => a.date === date && (selectedSpecialist === 'all' || a.staff?.name === selectedSpecialist));
               return (
-                <button
-                  key={date}
-                  onClick={() => openAddForDate(date)}
-                  className={`h-20 rounded-xl border border-border text-left p-2 hover:border-primary/40 transition-colors ${
-                    date === selectedDate ? 'border-primary bg-primary/5' : 'bg-card'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold">{d.getDate()}</span>
-                    {dayAppts.length > 0 && (
-                      <Badge variant="secondary" className="text-[9px]">{dayAppts.length}</Badge>
-                    )}
-                  </div>
-                  {dayAppts.slice(0, 2).map(apt => (
-                    <div key={apt.id} className="text-[9px] text-muted-foreground truncate mt-1">
-                      {apt.time} {apt.client?.name}
+                <DayDropZone key={date} id={`day-${date}`} date={date}>
+                  <button
+                    onClick={() => openAddForDate(date)}
+                    className={`h-20 rounded-xl border border-border text-left p-2 hover:border-primary/40 transition-colors w-full ${
+                      date === selectedDate ? 'border-primary bg-primary/5' : 'bg-card'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold">{d.getDate()}</span>
+                      {dayAppts.length > 0 && (
+                        <Badge variant="secondary" className="text-[9px]">{dayAppts.length}</Badge>
+                      )}
                     </div>
-                  ))}
-                </button>
+                    {dayAppts.slice(0, 2).map(apt => (
+                      <div key={apt.id} className="text-[9px] text-muted-foreground truncate mt-1">
+                        {apt.time} {apt.client?.name}
+                      </div>
+                    ))}
+                  </button>
+                </DayDropZone>
               );
             })}
           </div>
         </div>
       )}
+      </DndContext>
 
       <Dialog open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) setEditMode(false); }}>
         <DialogContent className="rounded-2xl">
@@ -1647,8 +1908,39 @@ export default function CalendarPage() {
                       <p className="text-xs text-muted-foreground px-3 py-4 text-center">Brak wyników</p>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">Czas: {editDuration || activeApt.duration} min</p>
+                  <p className="text-xs text-muted-foreground mt-2">Czas: {effectiveEditDuration} min</p>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Czas trwania (min)</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder={`${editDuration || activeApt.duration}`}
+                      value={editCustomDuration}
+                      onChange={(e) => setEditCustomDuration(e.target.value ? Number(e.target.value) : '')}
+                      className="h-10 rounded-xl"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Domyślnie z usług: {editDuration || activeApt.duration} min
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Zakończenie</label>
+                    <Input value={editEndTime || '—'} readOnly className="h-10 rounded-xl bg-muted/40" />
+                  </div>
+                </div>
+                {editStaffId !== 'any' && (
+                  <label className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      checked={editAllowConflict}
+                      onCheckedChange={(checked) => setEditAllowConflict(Boolean(checked))}
+                    />
+                    <span>
+                      Zezwól na konflikt z innymi wizytami tego specjalisty
+                    </span>
+                  </label>
+                )}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Klient</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -1718,7 +2010,8 @@ export default function CalendarPage() {
                       staffId: editStaffId === 'any' ? null : editStaffId,
                       notes: editNotes || undefined,
                       serviceIds: editServiceIds,
-                      duration: editDuration || activeApt?.duration,
+                      durationOverride: editCustomDuration ? Number(editCustomDuration) : undefined,
+                      allowConflict: editAllowConflict || undefined,
                     });
                     const [, , , apptsRes, hoursRes, exceptionsRes, breaksRes] = await loadData();
                     setAppointments(apptsRes.appointments || []);

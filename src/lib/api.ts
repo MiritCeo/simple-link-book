@@ -458,10 +458,12 @@ export async function getSalonClientAppointments(clientId: string) {
 export async function createAppointment(payload: {
   date: string;
   time: string;
-  duration: number;
+  duration?: number;
+  durationOverride?: number;
   notes?: string;
   clientId: string;
   staffId?: string;
+  allowConflict?: boolean;
   serviceIds: string[];
 }) {
   return apiFetch<{ appointment: any }>("/api/salon/appointments", {
@@ -475,9 +477,11 @@ export async function updateAppointment(id: string, payload: {
   date?: string;
   time?: string;
   duration?: number;
+  durationOverride?: number;
   status?: string;
   notes?: string;
   staffId?: string | null;
+  allowConflict?: boolean;
   serviceIds?: string[];
 }) {
   return apiFetch<{ appointment: any }>(`/api/salon/appointments/${id}`, {

@@ -35,6 +35,8 @@ export default function AppointmentsPage() {
   const [editMode, setEditMode] = useState(false);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
+  const [editCustomDuration, setEditCustomDuration] = useState<number | ''>('');
+  const [editAllowConflict, setEditAllowConflict] = useState(false);
   const [editStatus, setEditStatus] = useState<Appointment['status']>('scheduled');
   const [editStaffId, setEditStaffId] = useState('any');
   const [editNotes, setEditNotes] = useState('');
@@ -60,6 +62,12 @@ export default function AppointmentsPage() {
   const toMinutes = (t: string) => {
     const [h, m] = (t || '').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
+  };
+  const formatTime = (totalMinutes: number) => {
+    const minutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
   const dayIndexMap: Record<string, number> = {
     Pn: 0, Wt: 1, Śr: 2, Sr: 2, Cz: 3, Pt: 4, So: 5, Sob: 5, Sb: 5, Nd: 6,
@@ -224,6 +232,8 @@ export default function AppointmentsPage() {
     if (apt) {
       setEditDate(apt.date);
       setEditTime(apt.time);
+      setEditCustomDuration('');
+      setEditAllowConflict(false);
       setEditStatus(mapStatus(apt.status) as Appointment['status']);
       setEditStaffId(apt.staff?.id || 'any');
       setEditNotes(apt.notes || '');
@@ -263,6 +273,11 @@ export default function AppointmentsPage() {
     [editServiceIds, services],
   );
   const editDuration = editServices.reduce((sum, s) => sum + s.duration, 0);
+  const effectiveEditDuration = editCustomDuration || editDuration || activeApt?.duration || 0;
+  const editEndTime = useMemo(() => {
+    if (!editTime) return '';
+    return formatTime(toMinutes(editTime) + effectiveEditDuration);
+  }, [editTime, effectiveEditDuration]);
   const editTimeOptions = useMemo(() => {
     if (!editDate) return [];
     const window = getEffectiveWindow(editDate, editStaffId);
@@ -275,7 +290,7 @@ export default function AppointmentsPage() {
       const mm = m % 60;
       options.push(`${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
     }
-    const dur = editDuration || activeApt?.duration || 30;
+    const dur = effectiveEditDuration || 30;
     const breakWindows = breakWindowsForDate(editDate);
     const filtered = options.filter((t) => {
       const appointmentStart = toMinutes(t);
@@ -285,6 +300,7 @@ export default function AppointmentsPage() {
       const breakOverlap = breakWindows.some(w => start < w.end && end > w.start);
       if (breakOverlap) return false;
       if (editStaffId === 'any') return true;
+      if (editAllowConflict) return true;
       const conflict = appointments.some((a: any) => {
         if (a.id === activeAptId) return false;
         if (a.staff?.id !== editStaffId) return false;
@@ -299,15 +315,16 @@ export default function AppointmentsPage() {
       return [editTime, ...filtered];
     }
     return filtered;
-  }, [editDate, editStaffId, editDuration, activeApt, appointments, activeAptId, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules, editTime]);
+  }, [editDate, editStaffId, effectiveEditDuration, activeApt, appointments, activeAptId, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules, editTime, editAllowConflict]);
   const editConflict = useMemo(() => {
     if (!activeAptId || !editDate || !editTime) return false;
-    const dur = editDuration || activeApt?.duration || 0;
+    const dur = effectiveEditDuration;
     const appointmentStart = toMinutes(editTime);
     const start = appointmentStart - bufferMinutes.before;
     const end = appointmentStart + dur + bufferMinutes.after;
     const breakOverlap = breakWindowsForDate(editDate).some(w => start < w.end && end > w.start);
     if (breakOverlap) return true;
+    if (editAllowConflict) return false;
     const window = getEffectiveWindow(editDate, editStaffId);
     if (!window) return true;
     const startWindow = toMinutes(window.start);
@@ -322,7 +339,7 @@ export default function AppointmentsPage() {
       const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
       return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
     });
-  }, [activeAptId, editStaffId, editDate, editTime, editDuration, activeApt, appointments, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules]);
+  }, [activeAptId, editStaffId, editDate, editTime, effectiveEditDuration, activeApt, appointments, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules, editAllowConflict]);
 
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6">
@@ -643,8 +660,39 @@ export default function AppointmentsPage() {
                       <p className="text-xs text-muted-foreground px-3 py-4 text-center">Brak wyników</p>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">Czas: {editDuration || activeApt?.duration} min</p>
+                  <p className="text-xs text-muted-foreground mt-2">Czas: {effectiveEditDuration} min</p>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Czas trwania (min)</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder={`${editDuration || activeApt?.duration || 30}`}
+                      value={editCustomDuration}
+                      onChange={(e) => setEditCustomDuration(e.target.value ? Number(e.target.value) : '')}
+                      className="h-10 rounded-xl"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Domyślnie z usług: {editDuration || activeApt?.duration || 30} min
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-1.5 block">Zakończenie</label>
+                    <Input value={editEndTime || '—'} readOnly className="h-10 rounded-xl bg-muted/40" />
+                  </div>
+                </div>
+                {editStaffId !== 'any' && (
+                  <label className="flex items-start gap-2 text-sm">
+                    <Checkbox
+                      checked={editAllowConflict}
+                      onCheckedChange={(checked) => setEditAllowConflict(Boolean(checked))}
+                    />
+                    <span>
+                      Zezwól na konflikt z innymi wizytami tego specjalisty
+                    </span>
+                  </label>
+                )}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Klient</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -714,7 +762,8 @@ export default function AppointmentsPage() {
                       staffId: editStaffId === 'any' ? null : editStaffId,
                       notes: editNotes || undefined,
                       serviceIds: editServiceIds,
-                      duration: editDuration || activeApt?.duration,
+                      durationOverride: editCustomDuration ? Number(editCustomDuration) : undefined,
+                      allowConflict: editAllowConflict || undefined,
                     });
                     const res = await getSalonAppointments();
                     setAppointments(res.appointments || []);

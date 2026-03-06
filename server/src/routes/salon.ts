@@ -114,6 +114,7 @@ const validateAppointmentAvailability = async ({
   duration,
   staffId,
   excludeAppointmentId,
+  allowConflict,
 }: {
   salonId: string;
   date: string;
@@ -121,6 +122,7 @@ const validateAppointmentAvailability = async ({
   duration: number;
   staffId?: string | null;
   excludeAppointmentId?: string;
+  allowConflict?: boolean;
 }) => {
   const [salonHours, salonExceptions, salonBreaks] = await Promise.all([
     prisma.salonHour.findMany({ where: { salonId } }),
@@ -183,7 +185,7 @@ const validateAppointmentAvailability = async ({
     return { ok: false, error: "Termin wypada w czasie przerwy" };
   }
 
-  if (staffId) {
+  if (staffId && !allowConflict) {
     const conflicts = await prisma.appointment.findMany({
       where: {
         salonId,
@@ -1195,11 +1197,13 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   const schema = z.object({
     date: z.string().min(8),
     time: z.string().min(4),
-    duration: z.number().int().min(1),
+    duration: z.number().int().min(1).optional(),
+    durationOverride: z.number().int().min(1).optional(),
     status: z.enum(["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"]).optional(),
     notes: z.string().optional(),
     clientId: z.string(),
     staffId: z.string().optional(),
+    allowConflict: z.boolean().optional(),
     serviceIds: z.array(z.string()).default([]),
   });
   const parsed = schema.safeParse(req.body);
@@ -1218,7 +1222,8 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   if (services.length !== parsed.data.serviceIds.length) {
     return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
   }
-  const duration = services.reduce((sum, s) => sum + s.duration, 0);
+  const computedDuration = services.reduce((sum, s) => sum + s.duration, 0);
+  const duration = parsed.data.durationOverride ?? parsed.data.duration ?? computedDuration;
 
   if (parsed.data.staffId) {
     const staffRec = await prisma.staff.findFirst({
@@ -1240,6 +1245,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     time: parsed.data.time,
     duration,
     staffId: parsed.data.staffId,
+    allowConflict: parsed.data.allowConflict,
   });
   if (!availability.ok) {
     return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
@@ -1270,10 +1276,12 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     date: z.string().min(8).optional(),
     time: z.string().min(4).optional(),
     duration: z.number().int().min(1).optional(),
+    durationOverride: z.number().int().min(1).optional(),
     status: z.enum(["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "NO_SHOW"]).optional(),
     notes: z.string().optional(),
     staffId: z.string().optional().nullable(),
     serviceIds: z.array(z.string()).optional(),
+    allowConflict: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wizyty" });
@@ -1292,7 +1300,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     (parsed.data.date && parsed.data.date !== appointment.date) ||
     (parsed.data.time && parsed.data.time !== appointment.time);
 
-  let duration = parsed.data.duration;
+  let duration = parsed.data.durationOverride ?? parsed.data.duration;
   let effectiveServiceIds: string[] = [];
   if (parsed.data.serviceIds) {
     const services = await prisma.service.findMany({
@@ -1301,7 +1309,9 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     if (services.length !== parsed.data.serviceIds.length) {
       return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
     }
-    duration = services.reduce((sum, s) => sum + s.duration, 0);
+    if (!parsed.data.durationOverride) {
+      duration = services.reduce((sum, s) => sum + s.duration, 0);
+    }
     effectiveServiceIds = services.map(s => s.id);
     await prisma.appointmentService.deleteMany({ where: { appointmentId: appointment.id } });
     await prisma.appointmentService.createMany({
@@ -1344,6 +1354,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     duration: newDuration,
     staffId: newStaffId || undefined,
     excludeAppointmentId: appointment.id,
+    allowConflict: parsed.data.allowConflict,
   });
   if (!availability.ok) {
     return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
