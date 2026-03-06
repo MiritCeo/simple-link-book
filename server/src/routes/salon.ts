@@ -834,6 +834,23 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
     "no-show": "NO_SHOW",
   };
 
+  const createAppointmentWithRetry = async (data: any, attempts = 3) => {
+    let lastError: unknown;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        return await prisma.appointment.create({ data });
+      } catch (error: any) {
+        lastError = error;
+        if (error?.code === "P2002" && error?.meta?.target === "PRIMARY") {
+          data.id = crypto.randomUUID();
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError;
+  };
+
   let createdServices = 0;
   let createdAppointments = 0;
   let createdClients = 0;
@@ -954,21 +971,20 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
     const statusKey = (row.status || "").toLowerCase().trim();
     const status = (statusMap[statusKey] || "SCHEDULED") as any;
 
-    const appointment = await prisma.appointment.create({
-      data: {
-        id: crypto.randomUUID(),
-        salonId,
-        date: row.date!,
-        time: row.time!,
-        duration,
-        status,
-        clientId: client.id,
-        staffId: staff?.id,
-        appointmentServices: {
-          create: services.map(s => ({ serviceId: s.id })),
-        },
+    const appointmentData = {
+      id: crypto.randomUUID(),
+      salonId,
+      date: row.date!,
+      time: row.time!,
+      duration,
+      status,
+      clientId: client.id,
+      staffId: staff?.id,
+      appointmentServices: {
+        create: services.map(s => ({ serviceId: s.id })),
       },
-    });
+    };
+    const appointment = await createAppointmentWithRetry(appointmentData);
     createdAppointments += 1;
   }
 
