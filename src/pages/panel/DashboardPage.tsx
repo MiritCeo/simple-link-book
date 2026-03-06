@@ -6,28 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { statusLabels, statusColors } from '@/data/mockData';
 import { getReadableTextColor } from '@/lib/color';
-import { getReadableTextColor } from '@/lib/color';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
 import { getSalonAppointments, getSalonClients, getSalonStaff } from '@/lib/api';
 
 export default function DashboardPage() {
-  const getServiceBadges = (apt: any) => {
-    const services = apt.appointmentServices || [];
-    return services.map((s: any) => {
-      const color = s.service?.color;
-      const textColor = getReadableTextColor(color);
-      return (
-        <span
-          key={s.service.id}
-          className="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-medium mr-1"
-          style={{ backgroundColor: color || 'var(--muted)', color: color ? textColor : 'var(--muted-foreground)' }}
-        >
-          {s.service.name}
-        </span>
-      );
-    });
-  };
   const getServiceBadges = (apt: any) => {
     const services = apt.appointmentServices || [];
     return services.map((s: any) => {
