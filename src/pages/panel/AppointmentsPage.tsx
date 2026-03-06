@@ -796,7 +796,6 @@ export default function AppointmentsPage() {
                   <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
                 </div>
               </div>
-            </div>
             )
           ) : detailTab === 'client' ? (
             <div className="space-y-3 mt-4">
@@ -860,6 +859,7 @@ export default function AppointmentsPage() {
           ) : (
             <p className="text-sm text-muted-foreground">Brak danych wizyty</p>
           )}
+          </div>
           <div className="pt-3 flex items-center gap-2">
             {detailTab === 'visit' && (
               editMode ? (
