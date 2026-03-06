@@ -753,21 +753,45 @@ router.delete("/staff/:id", async (req: AuthRequest, res) => {
 });
 
 router.get("/clients", async (req: AuthRequest, res) => {
-  const clients = await prisma.client.findMany({
-    where: { salonId: getSalonId(req), active: true },
-    include: { appointments: { select: { date: true } } },
-  });
-  const enriched = clients.map(c => {
-    const dates = c.appointments.map((a: any) => a.date).sort();
-    const lastVisit = dates.length ? dates[dates.length - 1] : null;
-    return {
-      ...c,
-      visits: c.appointments.length,
-      lastVisit,
-      appointments: undefined,
-    };
-  });
-  return res.json({ clients: enriched });
+  const salonId = getSalonId(req);
+  const searchRaw = (req.query.search || req.query.q || "").toString().trim();
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSizeRaw = Number(req.query.pageSize || 50);
+  const pageSize = Math.min(200, Math.max(1, Number.isNaN(pageSizeRaw) ? 50 : pageSizeRaw));
+  const all = req.query.all === "true";
+
+  const where = {
+    salonId,
+    active: true,
+    ...(searchRaw
+      ? {
+          OR: [
+            { name: { contains: searchRaw } },
+            { phone: { contains: searchRaw } },
+            { email: { contains: searchRaw } },
+          ],
+        }
+      : {}),
+  };
+
+  if (all) {
+    const clients = await prisma.client.findMany({
+      where,
+      orderBy: { name: "asc" },
+    });
+    return res.json({ clients, total: clients.length, page: 1, pageSize: clients.length });
+  }
+
+  const [total, clients] = await Promise.all([
+    prisma.client.count({ where }),
+    prisma.client.findMany({
+      where,
+      orderBy: { name: "asc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+  ]);
+  return res.json({ clients, total, page, pageSize });
 });
 
 router.post("/clients", async (req: AuthRequest, res) => {

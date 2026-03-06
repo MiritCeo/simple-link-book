@@ -30,6 +30,10 @@ export default function ClientsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [totalClients, setTotalClients] = useState(0);
+  const [searchDebounced, setSearchDebounced] = useState('');
   const [clientAppointments, setClientAppointments] = useState<any[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '', allergies: '' });
@@ -39,23 +43,27 @@ export default function ClientsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchDebounced(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  useEffect(() => {
     let mounted = true;
     setLoading(true);
-    getSalonClients()
-      .then(res => { if (mounted) setClients(res.clients || []); })
+    getSalonClients({ page, pageSize, search: searchDebounced })
+      .then(res => {
+        if (!mounted) return;
+        setClients(res.clients || []);
+        setTotalClients(res.total || 0);
+      })
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
-  }, []);
+  }, [page, pageSize, searchDebounced]);
 
-  const filtered = useMemo(() => {
-    if (!search) return clients;
-    const q = search.toLowerCase();
-    return clients.filter((c: any) =>
-      c.name.toLowerCase().includes(q)
-      || c.phone.includes(q)
-      || c.email?.toLowerCase().includes(q),
-    );
-  }, [search, clients]);
+  const filtered = useMemo(() => clients, [clients]);
 
   const activeClient = clients.find((c: any) => c.id === selectedClient);
   const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
@@ -103,7 +111,12 @@ export default function ClientsPage() {
     return () => { mounted = false; };
   }, [selectedClient]);
 
-  const refresh = () => getSalonClients().then(res => setClients(res.clients || []));
+  const refresh = () =>
+    getSalonClients({ page, pageSize, search: searchDebounced })
+      .then(res => {
+        setClients(res.clients || []);
+        setTotalClients(res.total || 0);
+      });
 
   const buildCsvValue = (value?: string) => {
     const safe = (value ?? '').replace(/\r?\n/g, ' ').trim();
@@ -292,41 +305,50 @@ export default function ClientsPage() {
     }
   };
 
-  const exportClientsCsv = () => {
+  const exportClientsCsv = async () => {
     if (exportingClients) return;
     setExportingClients(true);
-    const rows = [
-      ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki', 'Alergie'],
-      ...clients.map((c: any) => {
-        const { firstName, lastName } = splitName(c.name);
-        return [
-          buildCsvValue(firstName),
-          buildCsvValue(lastName),
-          buildCsvValue(c.phone),
-          buildCsvValue(c.email),
-          buildCsvValue(c.notes),
-          buildCsvValue(c.allergies),
-        ];
-      }),
-    ];
-    const csv = rows.map(r => r.join(',')).join('\n');
-    const content = `\uFEFF${csv}`;
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `klienci-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setExportingClients(false);
+    try {
+      const res = await getSalonClients({ all: true, search: searchDebounced });
+      const allClients = res.clients || [];
+      const rows = [
+        ['Imię', 'Nazwisko', 'Telefon', 'Email', 'Notatki', 'Alergie'],
+        ...allClients.map((c: any) => {
+          const { firstName, lastName } = splitName(c.name);
+          return [
+            buildCsvValue(firstName),
+            buildCsvValue(lastName),
+            buildCsvValue(c.phone),
+            buildCsvValue(c.email),
+            buildCsvValue(c.notes),
+            buildCsvValue(c.allergies),
+          ];
+        }),
+      ];
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const content = `\uFEFF${csv}`;
+      const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `klienci-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err?.message || 'Nie udało się wyeksportować danych');
+    } finally {
+      setExportingClients(false);
+    }
   };
 
   const exportClientsWithVisitsCsv = async () => {
     if (exportingWithVisits) return;
     setExportingWithVisits(true);
     try {
+      const clientsRes = await getSalonClients({ all: true, search: searchDebounced });
+      const allClients = clientsRes.clients || [];
       const results = await Promise.all(
-        clients.map(async (c: any) => {
+        allClients.map(async (c: any) => {
           try {
             const res = await getSalonClientAppointments(c.id);
             return { client: c, appointments: res.appointments || [] };
@@ -453,7 +475,7 @@ export default function ClientsPage() {
             variant="outline"
             className="rounded-xl gap-1.5 h-10"
             onClick={exportClientsCsv}
-            disabled={clients.length === 0 || exportingClients}
+            disabled={totalClients === 0 || exportingClients}
           >
             <Download className="w-4 h-4" />{exportingClients ? 'Eksportowanie...' : 'Eksport CSV'}
           </Button>
@@ -462,7 +484,7 @@ export default function ClientsPage() {
             variant="outline"
             className="rounded-xl gap-1.5 h-10"
             onClick={exportClientsWithVisitsCsv}
-            disabled={clients.length === 0 || exportingWithVisits}
+            disabled={totalClients === 0 || exportingWithVisits}
           >
             <Download className="w-4 h-4" />{exportingWithVisits ? 'Eksportowanie...' : 'CSV + wizyty'}
           </Button>
@@ -491,7 +513,7 @@ export default function ClientsPage() {
             variant="outline"
             className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
             onClick={exportClientsCsv}
-            disabled={clients.length === 0 || exportingClients}
+            disabled={totalClients === 0 || exportingClients}
           >
             <Download className="w-4 h-4" />{exportingClients ? 'Eksportowanie...' : 'Eksport CSV'}
           </Button>
@@ -539,12 +561,12 @@ export default function ClientsPage() {
             variant="outline"
             className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
             onClick={exportClientsWithVisitsCsv}
-            disabled={clients.length === 0 || exportingWithVisits}
+            disabled={totalClients === 0 || exportingWithVisits}
           >
             <Download className="w-4 h-4" />{exportingWithVisits ? 'Eksportowanie...' : 'CSV + wizyty'}
           </Button>
 
-          <p className="text-xs text-muted-foreground mb-3">{filtered.length} klientów</p>
+          <p className="text-xs text-muted-foreground mb-3">{totalClients} klientów</p>
 
           {loading ? (
             <div className="bg-card rounded-2xl border border-border p-6 text-sm text-muted-foreground">
@@ -555,31 +577,69 @@ export default function ClientsPage() {
               Brak klientów
             </div>
           ) : (
-            <MotionList className="space-y-2" key={search}>
-              {filtered.map(client => (
-                <MotionItem key={client.id}>
-                  <HoverCard
-                    onClick={() => openClientDetail(client.id)}
-                    className={`w-full text-left bg-card rounded-2xl p-4 border flex items-center gap-3 touch-target cursor-pointer transition-all ${
-                      selectedClient === client.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'
-                    }`}
-                  >
-                    <div className="w-11 h-11 rounded-full bg-accent flex items-center justify-center font-semibold text-sm text-accent-foreground shrink-0">
-                      {client.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{client.name}</p>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                        <span>{client.visits ?? '—'} wizyt</span>
-                        <span>Ostatnia: {client.lastVisit ?? '—'}</span>
+            <>
+              <MotionList className="space-y-2" key={searchDebounced || 'all'}>
+                {filtered.map(client => (
+                  <MotionItem key={client.id}>
+                    <HoverCard
+                      onClick={() => openClientDetail(client.id)}
+                      className={`w-full text-left bg-card rounded-2xl p-4 border flex items-center gap-3 touch-target cursor-pointer transition-all ${
+                        selectedClient === client.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'
+                      }`}
+                    >
+                      <div className="w-11 h-11 rounded-full bg-accent flex items-center justify-center font-semibold text-sm text-accent-foreground shrink-0">
+                        {client.name.split(' ').map(n => n[0]).join('')}
                       </div>
-                      {client.notes && <p className="text-xs text-muted-foreground italic mt-1 truncate">{client.notes}</p>}
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                  </HoverCard>
-                </MotionItem>
-              ))}
-            </MotionList>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{client.name}</p>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          <span>{client.visits ?? '—'} wizyt</span>
+                          <span>Ostatnia: {client.lastVisit ?? '—'}</span>
+                        </div>
+                        {client.notes && <p className="text-xs text-muted-foreground italic mt-1 truncate">{client.notes}</p>}
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    </HoverCard>
+                  </MotionItem>
+                ))}
+              </MotionList>
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-xs text-muted-foreground">
+                  {totalClients === 0
+                    ? '0 klientów'
+                    : `Strona ${page} / ${Math.max(1, Math.ceil(totalClients / pageSize))} • ${totalClients} klientów`}
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                    value={pageSize}
+                    onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  >
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page <= 1 || loading}
+                  >
+                    Poprzednia
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2"
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={loading || page >= Math.max(1, Math.ceil(totalClients / pageSize))}
+                  >
+                    Następna
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </div>
 

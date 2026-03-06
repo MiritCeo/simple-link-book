@@ -147,7 +147,7 @@ export default function CalendarPage() {
   const loadData = () => Promise.all([
     getSalonServices(),
     getSalonStaff(),
-    getSalonClients(),
+    getSalonClients({ all: true }),
     getSalonAppointments(),
     getSalonHours(),
     getSalonExceptions(),

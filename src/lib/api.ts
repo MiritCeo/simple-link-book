@@ -275,8 +275,22 @@ export async function getSalonStaff() {
   return apiFetch<{ staff: any[] }>("/api/salon/staff", { auth: true });
 }
 
-export async function getSalonClients() {
-  return apiFetch<{ clients: any[] }>("/api/salon/clients", { auth: true });
+export async function getSalonClients(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  all?: boolean;
+}) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  if (params?.search) query.set("search", params.search);
+  if (params?.all) query.set("all", "true");
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch<{ clients: any[]; total?: number; page?: number; pageSize?: number }>(
+    `/api/salon/clients${suffix}`,
+    { auth: true },
+  );
 }
 
 export async function getSalonAppointments() {

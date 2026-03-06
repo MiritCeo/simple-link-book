@@ -36,7 +36,11 @@ export default function InventoryMovementsPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [itemsRes, movementsRes, clientsRes] = await Promise.all([getInventoryItems(), getInventoryMovements(), getSalonClients()]);
+      const [itemsRes, movementsRes, clientsRes] = await Promise.all([
+        getInventoryItems(),
+        getInventoryMovements(),
+        getSalonClients({ all: true }),
+      ]);
       setItems(itemsRes.items || []);
       setMovements(movementsRes.movements || []);
       setClients(clientsRes.clients || []);

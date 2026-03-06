@@ -12,7 +12,7 @@ import { getSalonAppointments, getSalonClients, getSalonStaff } from '@/lib/api'
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
+  const [clientsTotal, setClientsTotal] = useState(0);
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
@@ -20,11 +20,11 @@ export default function DashboardPage() {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    Promise.all([getSalonAppointments(), getSalonClients(), getSalonStaff()])
+    Promise.all([getSalonAppointments(), getSalonClients({ page: 1, pageSize: 1 }), getSalonStaff()])
       .then(([apptsRes, clientsRes, staffRes]) => {
         if (!mounted) return;
         setAppointments(apptsRes.appointments || []);
-        setClients(clientsRes.clients || []);
+        setClientsTotal(clientsRes.total || clientsRes.clients?.length || 0);
         setStaff(staffRes.staff || []);
       })
       .finally(() => mounted && setLoading(false));
@@ -86,7 +86,7 @@ export default function DashboardPage() {
     },
     {
       label: 'Aktywni klienci',
-      value: clients.length,
+      value: clientsTotal,
       icon: Users,
       change: '+1 nowy ten tydzień',
       up: true,
