@@ -921,10 +921,14 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
       continue;
     }
 
-    const serviceNames = (row.services || "")
-      .split(/[+,]/)
-      .map(s => s.trim())
-      .filter(Boolean);
+    const serviceNames = Array.from(
+      new Set(
+        (row.services || "")
+          .split(/[+,]/)
+          .map(s => s.trim())
+          .filter(Boolean)
+      )
+    );
     if (!serviceNames.length) {
       skippedRows += 1;
       errors.push({ row: idx + 2, reason: "Brak usług w wierszu wizyty" });
@@ -971,6 +975,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
     const statusKey = (row.status || "").toLowerCase().trim();
     const status = (statusMap[statusKey] || "SCHEDULED") as any;
 
+    const uniqueServiceIds = Array.from(new Set(services.map(s => s.id)));
     const appointmentData = {
       id: crypto.randomUUID(),
       salonId,
@@ -981,7 +986,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
       clientId: client.id,
       staffId: staff?.id,
       appointmentServices: {
-        create: services.map(s => ({ serviceId: s.id })),
+        create: uniqueServiceIds.map(serviceId => ({ serviceId })),
       },
     };
     const appointment = await createAppointmentWithRetry(appointmentData);
