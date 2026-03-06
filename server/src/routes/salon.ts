@@ -503,8 +503,8 @@ router.post("/staff/photo", uploadStaffPhoto.single("photo"), async (req: AuthRe
   const targetSize = 512;
   const image = sharp(req.file.buffer);
   const meta = await image.metadata();
-  if (!meta.width || !meta.height || meta.width < minSize || meta.height < minSize) {
-    return res.status(400).json({ error: `Zdjęcie musi mieć min. ${minSize}x${minSize}px` });
+  if (!meta.width || !meta.height || Math.min(meta.width, meta.height) < minSize) {
+    return res.status(400).json({ error: `Krótszy bok zdjęcia musi mieć min. ${minSize}px` });
   }
   ensureStaffPhotoDir();
   const filename = `${crypto.randomUUID()}.jpg`;

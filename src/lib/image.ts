@@ -4,8 +4,9 @@ export async function cropAndCompressImage(
 ): Promise<File> {
   const { size = 512, quality = 0.8, minSize = 300 } = options;
   const bitmap = await createImageBitmap(file);
-  if (bitmap.width < minSize || bitmap.height < minSize) {
-    throw new Error(`Zdjęcie musi mieć min. ${minSize}x${minSize}px`);
+  const minSide = Math.min(bitmap.width, bitmap.height);
+  if (minSide < minSize) {
+    throw new Error(`Krótszy bok zdjęcia musi mieć min. ${minSize}px`);
   }
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
