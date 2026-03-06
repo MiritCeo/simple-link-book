@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import crypto from "crypto";
 import type { NotificationEvent } from "@prisma/client";
 import prisma from "../prisma.js";
 import { sendEventNotification } from "../notificationService.js";
@@ -955,6 +956,7 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
 
     const appointment = await prisma.appointment.create({
       data: {
+        id: crypto.randomUUID(),
         salonId,
         date: row.date!,
         time: row.time!,
