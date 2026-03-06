@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { Plus, ChevronLeft, ChevronRight, Clock, User, List, LayoutGrid, Filter, Ban } from 'lucide-react';
-import { DndContext, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,16 +23,36 @@ const ColumnDropZone = ({
   className,
   style,
   children,
+  dragPreview,
 }: {
   id: string;
   staffId?: string | null;
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
+  dragPreview?: { top: number; time: string } | null;
 }) => {
-  const { setNodeRef } = useDroppable({ id, data: { staffId, mode: 'column' } });
+  const { setNodeRef, isOver } = useDroppable({ id, data: { staffId, mode: 'column' } });
   return (
-    <div ref={setNodeRef} className={className} style={style}>
+    <div
+      ref={setNodeRef}
+      className={`${className} ${isOver ? 'bg-primary/5 outline outline-1 outline-primary/40' : ''}`}
+      style={style}
+    >
+      {dragPreview && (
+        <>
+          <div
+            className="absolute left-0 right-0 h-0.5 bg-primary/80"
+            style={{ top: dragPreview.top }}
+          />
+          <div
+            className="absolute -left-1 translate-x-0 -translate-y-1/2 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded shadow"
+            style={{ top: dragPreview.top }}
+          >
+            {dragPreview.time}
+          </div>
+        </>
+      )}
       {children}
     </div>
   );
@@ -49,9 +69,9 @@ const DayDropZone = ({
   className?: string;
   children: ReactNode;
 }) => {
-  const { setNodeRef } = useDroppable({ id, data: { date, mode: 'day' } });
+  const { setNodeRef, isOver } = useDroppable({ id, data: { date, mode: 'day' } });
   return (
-    <div ref={setNodeRef} className={className}>
+    <div ref={setNodeRef} className={`${className} ${isOver ? 'outline outline-1 outline-primary/40 bg-primary/5' : ''}`}>
       {children}
     </div>
   );
@@ -233,6 +253,9 @@ export default function CalendarPage() {
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
   const [editClientEmail, setEditClientEmail] = useState('');
+  const [draggingApt, setDraggingApt] = useState<any | null>(null);
+  const [draggingMode, setDraggingMode] = useState<'timeline' | 'chip' | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ columnId: string; top: number; time: string } | null>(null);
 
   const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
   const dayNamesFull = ['Niedziela', 'Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota'];
@@ -489,17 +512,9 @@ export default function CalendarPage() {
       const end = appointmentStart + dur + bufferMinutes.after;
       const breakOverlap = breakWindows.some(w => start < w.end && end > w.start);
       if (breakOverlap) return false;
-      if (allowConflict) return true;
-      const conflict = appointments.some((a: any) => {
-        if (a.staff?.id !== selectedSpecialistId) return false;
-        if (a.date !== appointmentDate) return false;
-        const s = toMinutes(a.time) - bufferMinutes.before;
-        const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
-        return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
-      });
-      return !conflict;
+      return true;
     });
-  }, [appointmentDate, selectedSpecialistId, effectiveDuration, appointments, salonHours, salonExceptions, staffSchedules, salonBreaks, bufferMinutes, allowConflict]);
+  }, [appointmentDate, selectedSpecialistId, effectiveDuration, salonHours, salonExceptions, staffSchedules, salonBreaks, bufferMinutes]);
   const addTimeAvailable = useMemo(() => {
     if (!appointmentDate || !appointmentTime) return true;
     const window = getEffectiveWindow(appointmentDate, selectedSpecialistId);
@@ -520,6 +535,20 @@ export default function CalendarPage() {
     }
     return addTimeOptions.includes(appointmentTime);
   }, [appointmentDate, appointmentTime, selectedSpecialistId, addTimeOptions, salonHours, salonExceptions, staffSchedules, salonBreaks, effectiveDuration, bufferMinutes, allowConflict]);
+  const addConflict = useMemo(() => {
+    if (!appointmentDate || !appointmentTime || selectedSpecialistId === 'any') return false;
+    const dur = effectiveDuration;
+    const appointmentStart = toMinutes(appointmentTime);
+    const start = appointmentStart - bufferMinutes.before;
+    const end = appointmentStart + dur + bufferMinutes.after;
+    return appointments.some((a: any) => {
+      if (a.staff?.id !== selectedSpecialistId) return false;
+      if (a.date !== appointmentDate) return false;
+      const s = toMinutes(a.time) - bufferMinutes.before;
+      const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
+      return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
+    });
+  }, [appointmentDate, appointmentTime, selectedSpecialistId, effectiveDuration, appointments, bufferMinutes]);
   const appointmentEndTime = useMemo(() => {
     if (!appointmentTime) return '';
     return formatTime(toMinutes(appointmentTime) + effectiveDuration);
@@ -675,7 +704,6 @@ export default function CalendarPage() {
     const end = appointmentStart + dur + bufferMinutes.after;
     const breakOverlap = breakWindowsForDate(editDate).some(w => start < w.end && end > w.start);
     if (breakOverlap) return true;
-    if (editAllowConflict) return false;
     return appointments.some((a: any) => {
       if (a.id === activeAptId) return false;
       if (a.staff?.id !== editStaffId) return false;
@@ -684,7 +712,7 @@ export default function CalendarPage() {
       const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
       return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
     });
-  }, [activeAptId, editStaffId, editDate, editTime, effectiveEditDuration, activeApt, appointments, salonBreaks, bufferMinutes, editAllowConflict]);
+  }, [activeAptId, editStaffId, editDate, editTime, effectiveEditDuration, activeApt, appointments, salonBreaks, bufferMinutes]);
   const editTimeOptions = useMemo(() => {
     if (!editDate) return [];
     const window = getEffectiveWindow(editDate, editStaffId);
@@ -706,22 +734,13 @@ export default function CalendarPage() {
       const end = appointmentStart + dur + bufferMinutes.after;
       const breakOverlap = breakWindows.some(w => start < w.end && end > w.start);
       if (breakOverlap) return false;
-      if (editAllowConflict) return true;
-      const conflict = appointments.some((a: any) => {
-        if (a.id === activeAptId) return false;
-        if (a.staff?.id !== editStaffId) return false;
-        if (a.date !== editDate) return false;
-        const s = toMinutes(a.time) - bufferMinutes.before;
-        const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
-        return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
-      });
-      return !conflict;
+      return true;
     });
     if (editTime && !filtered.includes(editTime)) {
       return [editTime, ...filtered];
     }
     return filtered;
-  }, [editDate, editStaffId, effectiveEditDuration, activeApt, appointments, activeAptId, salonHours, salonExceptions, staffSchedules, editTime, salonBreaks, bufferMinutes, editAllowConflict]);
+  }, [editDate, editStaffId, effectiveEditDuration, activeApt, appointments, activeAptId, salonHours, salonExceptions, staffSchedules, editTime, salonBreaks, bufferMinutes]);
 
   const shiftWeek = (dir: number) => {
     const d = new Date(weekStart);
@@ -766,6 +785,10 @@ export default function CalendarPage() {
         clientId = created.client.id;
       }
       if (!clientId) throw new Error('Brak klienta');
+      if (addConflict) {
+        const ok = window.confirm('Wizyta koliduje z inną wizytą. Zapisać mimo konfliktu?');
+        if (!ok) return;
+      }
       await createAppointment({
         date: appointmentDate,
         time: appointmentTime,
@@ -773,7 +796,7 @@ export default function CalendarPage() {
         notes: appointmentNotes || undefined,
         clientId,
         staffId: selectedSpecialistId !== 'any' ? selectedSpecialistId : undefined,
-        allowConflict: allowConflict || undefined,
+        allowConflict: (allowConflict || addConflict) || undefined,
         serviceIds: selectedServiceIds,
       });
       toast.success('Wizyta dodana');
@@ -1590,7 +1613,48 @@ export default function CalendarPage() {
       )}
 
       {/* Timeline view (desktop) */}
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={(event) => {
+          const data = event.active.data.current as any;
+          setDraggingApt(data?.appointment || null);
+          setDraggingMode(data?.mode || null);
+        }}
+        onDragMove={(event: DragMoveEvent) => {
+          if (view !== 'day-timeline') return;
+          const over = event.over;
+          const activeData = event.active.data.current as any;
+          if (!over || activeData?.mode !== 'timeline') {
+            setDragPreview(null);
+            return;
+          }
+          const overData = over.data.current as any;
+          if (overData?.mode !== 'column') {
+            setDragPreview(null);
+            return;
+          }
+          const startTop = typeof activeData.top === 'number' ? activeData.top : 0;
+          const newTop = startTop + event.delta.y;
+          const minutesOffset = Math.round((newTop / slotPxPerMinute) / timelineScale) * timelineScale;
+          const top = (minutesOffset) * slotPxPerMinute;
+          setDragPreview({
+            columnId: String(over.id),
+            top,
+            time: formatTime(8 * 60 + minutesOffset),
+          });
+        }}
+        onDragEnd={(event) => {
+          handleDragEnd(event);
+          setDraggingApt(null);
+          setDraggingMode(null);
+          setDragPreview(null);
+        }}
+        onDragCancel={() => {
+          setDraggingApt(null);
+          setDraggingMode(null);
+          setDragPreview(null);
+        }}
+      >
       {view === 'day-timeline' && (
           <motion.div
             className="hidden sm:block"
@@ -1642,6 +1706,7 @@ export default function CalendarPage() {
                     staffId={col.staffId}
                     className="relative border-l border-border"
                     style={{ height: HOURS.length * hourHeight }}
+                    dragPreview={dragPreview && dragPreview.columnId === `col-${col.id}` ? { top: dragPreview.top, time: dragPreview.time } : null}
                   >
                     {HOURS.map(hour => (
                       <div key={hour} className="border-b border-border last:border-0 relative" style={{ height: hourHeight }}>
@@ -1814,6 +1879,27 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+        <DragOverlay>
+          {draggingApt && draggingMode === 'timeline' && (
+            <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 shadow-lg">
+              <p className="text-xs font-semibold truncate">
+                {draggingApt.time} — {draggingApt.appointmentServices?.map((s: any) => s.service.name).join(', ')}
+              </p>
+              <p className="text-[10px] truncate opacity-70">{draggingApt.client?.name}</p>
+              {dragPreview?.time && (
+                <span className="inline-flex mt-1 text-[10px] bg-primary text-white px-1.5 py-0.5 rounded">
+                  {dragPreview.time}
+                </span>
+              )}
+            </div>
+          )}
+          {draggingApt && draggingMode === 'chip' && (
+            <div className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] shadow-lg">
+              <span className="font-medium">{draggingApt.time}</span>{' '}
+              <span className="text-muted-foreground">{draggingApt.client?.name}</span>
+            </div>
+          )}
+        </DragOverlay>
       </DndContext>
 
       <Dialog open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) setEditMode(false); }}>
@@ -1982,7 +2068,6 @@ export default function CalendarPage() {
             {editMode ? (
               <Button
                 className="rounded-xl"
-                disabled={editConflict}
                 onClick={async () => {
                   if (!activeAptId) return;
                   try {
@@ -1993,6 +2078,10 @@ export default function CalendarPage() {
                     if (!editClientName || !editClientPhone) {
                       toast.error('Uzupełnij imię i telefon klienta');
                       return;
+                    }
+                    if (editConflict) {
+                      const ok = window.confirm('Wizyta koliduje z inną wizytą. Zapisać mimo konfliktu?');
+                      if (!ok) return;
                     }
                     if (activeApt?.client?.id) {
                       await updateClient(activeApt.client.id, {
@@ -2011,7 +2100,7 @@ export default function CalendarPage() {
                       notes: editNotes || undefined,
                       serviceIds: editServiceIds,
                       durationOverride: editCustomDuration ? Number(editCustomDuration) : undefined,
-                      allowConflict: editAllowConflict || undefined,
+                      allowConflict: (editAllowConflict || editConflict) || undefined,
                     });
                     const [, , , apptsRes, hoursRes, exceptionsRes, breaksRes] = await loadData();
                     setAppointments(apptsRes.appointments || []);
