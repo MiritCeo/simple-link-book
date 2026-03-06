@@ -213,7 +213,7 @@ export default function ClientsPage() {
     const monthKey = normalizeMonthKey(match[2]);
     const year = Number(match[3] || new Date().getFullYear());
     const months: Record<string, number> = {
-      sty: 1, styczen: 1, styczen: 1,
+      sty: 1, styczen: 1,
       lut: 2, luty: 2,
       mar: 3, march: 3,
       kwi: 4, kwiecien: 4, apr: 4, april: 4,
