@@ -813,10 +813,16 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
   const statusMap: Record<string, string> = {
     zaplanowana: "SCHEDULED",
     potwierdzona: "CONFIRMED",
+      potwierdzono: "CONFIRMED",
     "w trakcie": "IN_PROGRESS",
     zakonczona: "COMPLETED",
     zakończona: "COMPLETED",
+      zakonczono: "COMPLETED",
+      zakończono: "COMPLETED",
     anulowana: "CANCELLED",
+      odwolano: "CANCELLED",
+      odwołano: "CANCELLED",
+      anulowano: "CANCELLED",
     nieobecnosc: "NO_SHOW",
     nieobecność: "NO_SHOW",
     scheduled: "SCHEDULED",
@@ -930,9 +936,20 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
 
     const duration = services.reduce((sum, s) => sum + s.duration, 0);
     const staffName = (row.staff || "").trim();
-    const staff = staffName
+    let staff = staffName
       ? await prisma.staff.findFirst({ where: { salonId, name: staffName, active: true } })
       : null;
+    if (!staff && staffName) {
+      staff = await prisma.staff.create({
+        data: {
+          salonId,
+          name: staffName,
+          role: "Import",
+          phone: null,
+          active: true,
+        },
+      });
+    }
     const statusKey = (row.status || "").toLowerCase().trim();
     const status = (statusMap[statusKey] || "SCHEDULED") as any;
 

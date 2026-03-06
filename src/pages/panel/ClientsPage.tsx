@@ -117,7 +117,15 @@ export default function ClientsPage() {
     return { firstName, lastName };
   };
 
+  const detectDelimiter = (text: string) => {
+    const firstLine = text.split(/\r?\n/)[0] || '';
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    return semicolonCount > commaCount ? ';' : ',';
+  };
+
   const parseCsv = (text: string) => {
+    const delimiter = detectDelimiter(text);
     const rows: string[][] = [];
     let current = '';
     let row: string[] = [];
@@ -132,7 +140,7 @@ export default function ClientsPage() {
         } else {
           inQuotes = !inQuotes;
         }
-      } else if (char === ',' && !inQuotes) {
+      } else if (char === delimiter && !inQuotes) {
         row.push(current);
         current = '';
       } else if ((char === '\n' || char === '\r') && !inQuotes) {
@@ -151,6 +159,75 @@ export default function ClientsPage() {
   };
 
   const normalizeHeader = (value: string) => value.replace('\uFEFF', '').trim().toLowerCase();
+
+  const normalizeMonthKey = (value: string) => value
+    .toLowerCase()
+    .replace('ą', 'a')
+    .replace('ć', 'c')
+    .replace('ę', 'e')
+    .replace('ł', 'l')
+    .replace('ń', 'n')
+    .replace('ó', 'o')
+    .replace('ś', 's')
+    .replace('ź', 'z')
+    .replace('ż', 'z')
+    .trim();
+
+  const normalizeDate = (value?: string) => {
+    const raw = (value || '').trim();
+    if (!raw) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const match = raw.match(/^(\d{1,2})\s+([A-Za-ząćęłńóśźż]+)(?:\s+(\d{4}))?$/i);
+    if (!match) return raw;
+    const day = Number(match[1]);
+    const monthKey = normalizeMonthKey(match[2]);
+    const year = Number(match[3] || new Date().getFullYear());
+    const months: Record<string, number> = {
+      sty: 1, styczen: 1, styczen: 1,
+      lut: 2, luty: 2,
+      mar: 3, march: 3,
+      kwi: 4, kwiecien: 4, apr: 4, april: 4,
+      maj: 5, may: 5,
+      cze: 6, czerwiec: 6, jun: 6, june: 6,
+      lip: 7, lipiec: 7, jul: 7, july: 7,
+      sie: 8, sierpien: 8, aug: 8, august: 8,
+      wrz: 9, wrzesien: 9, sep: 9, sept: 9, september: 9,
+      paz: 10, pazdziernik: 10, oct: 10, october: 10,
+      lis: 11, listopad: 11, nov: 11, november: 11,
+      gru: 12, grudzien: 12, dec: 12, december: 12,
+    };
+    const month = months[monthKey];
+    if (!month || Number.isNaN(day) || Number.isNaN(year)) return raw;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  const normalizeServices = (value?: string) => {
+    const raw = (value || '').trim();
+    if (!raw) return '';
+    const parts = raw
+      .split(/[+•]/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(part => !/zł/i.test(part))
+      .filter(part => !/^\d+[.,]?\d*\s*$/.test(part));
+    return parts.join(', ');
+  };
+
+  const normalizeStatus = (value?: string) => {
+    const raw = (value || '').trim().toLowerCase();
+    if (!raw) return '';
+    const map: Record<string, string> = {
+      potwierdzono: 'potwierdzona',
+      potwierdzona: 'potwierdzona',
+      odwolano: 'anulowana',
+      odwołano: 'anulowana',
+      anulowano: 'anulowana',
+      zakonczono: 'zakończona',
+      zakończono: 'zakończona',
+      zrealizowano: 'zakończona',
+    };
+    return map[raw] || raw;
+  };
 
   const handleImportCsv = async (file?: File | null, includeVisits = true, updateExisting = true) => {
     if (!file) return;
@@ -175,17 +252,17 @@ export default function ClientsPage() {
         status: getIdx('status'),
       };
       const dataRows = rows.slice(1).map(cells => ({
-        firstName: cells[idx.firstName] || '',
-        lastName: cells[idx.lastName] || '',
-        phone: cells[idx.phone] || '',
-        email: cells[idx.email] || '',
-        notes: cells[idx.notes] || '',
-        allergies: cells[idx.allergies] || '',
-        date: cells[idx.date] || '',
-        time: cells[idx.time] || '',
-        services: cells[idx.services] || '',
-        staff: cells[idx.staff] || '',
-        status: cells[idx.status] || '',
+        firstName: (cells[idx.firstName] || '').trim(),
+        lastName: (cells[idx.lastName] || '').trim(),
+        phone: (cells[idx.phone] || '').trim(),
+        email: (cells[idx.email] || '').trim(),
+        notes: (cells[idx.notes] || '').trim(),
+        allergies: (cells[idx.allergies] || '').trim(),
+        date: normalizeDate(cells[idx.date] || ''),
+        time: (cells[idx.time] || '').trim(),
+        services: normalizeServices(cells[idx.services] || ''),
+        staff: (cells[idx.staff] || '').trim(),
+        status: normalizeStatus(cells[idx.status] || ''),
       }));
 
       const res = await importSalonClients({ rows: dataRows, includeVisits, updateExisting });
