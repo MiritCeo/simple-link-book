@@ -859,7 +859,6 @@ export default function AppointmentsPage() {
           ) : (
             <p className="text-sm text-muted-foreground">Brak danych wizyty</p>
           )}
-          </div>
           <div className="pt-3 flex items-center gap-2">
             {detailTab === 'visit' && (
               editMode ? (
@@ -919,6 +918,7 @@ export default function AppointmentsPage() {
             )}
             <Button variant="outline" className="rounded-xl" onClick={() => setDetailsOpen(false)}>Zamknij</Button>
           </div>
+        </div>
         </SheetContent>
       </Sheet>
 
