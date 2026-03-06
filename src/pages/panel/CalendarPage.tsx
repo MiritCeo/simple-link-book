@@ -1663,6 +1663,8 @@ export default function CalendarPage() {
             transition={{ duration: 0.3 }}
           >
             <div className="border border-border rounded-2xl bg-card overflow-hidden">
+            <div className="overflow-x-auto">
+            <div className="min-w-max">
             <div
               className="grid border-b border-border bg-muted/40"
               style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(180px, 1fr))` }}
@@ -1746,6 +1748,8 @@ export default function CalendarPage() {
                   </ColumnDropZone>
                 );
               })}
+            </div>
+            </div>
             </div>
           </div>
           </motion.div>
