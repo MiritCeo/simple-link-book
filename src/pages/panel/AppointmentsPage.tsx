@@ -796,7 +796,6 @@ export default function AppointmentsPage() {
                   <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
                 </div>
               </div>
-            </div>
             )
           ) : detailTab === 'client' ? (
             <div className="space-y-3 mt-4">
