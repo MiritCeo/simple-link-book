@@ -631,33 +631,7 @@ export default function AppointmentsPage() {
             </Button>
           </div>
           {activeApt ? (
-            <>
-              <div className="mt-4 flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={detailTab === 'visit' ? 'secondary' : 'outline'}
-                  className="rounded-xl h-8 text-xs"
-                  onClick={() => setDetailTab('visit')}
-                >
-                  Wizyta
-                </Button>
-                <Button
-                  size="sm"
-                  variant={detailTab === 'client' ? 'secondary' : 'outline'}
-                  className="rounded-xl h-8 text-xs"
-                  onClick={() => setDetailTab('client')}
-                >
-                  Klient
-                </Button>
-                <Button
-                  size="sm"
-                  variant={detailTab === 'history' ? 'secondary' : 'outline'}
-                  className="rounded-xl h-8 text-xs"
-                  onClick={() => setDetailTab('history')}
-                >
-                  Historia
-                </Button>
-              </div>
+            <div>
               {detailTab === 'visit' ? (
                 editMode ? (
                   <div className="space-y-3 mt-4">
@@ -822,6 +796,7 @@ export default function AppointmentsPage() {
                   <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
                 </div>
               </div>
+            </div>
             )
           ) : detailTab === 'client' ? (
             <div className="space-y-3 mt-4">
