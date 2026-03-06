@@ -1,9 +1,9 @@
 import { Router } from "express";
+import type { Request } from "express";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import crypto from "crypto";
 import sharp from "sharp";
 import crypto from "crypto";
 import type { NotificationEvent } from "@prisma/client";
@@ -489,7 +489,7 @@ const ensureStaffPhotoDir = () => {
 };
 const uploadStaffPhoto = multer({
   storage: multer.memoryStorage(),
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     if (!file.mimetype.startsWith("image/")) return cb(new Error("INVALID_FILE_TYPE"));
     cb(null, true);
   },
@@ -703,7 +703,7 @@ router.put("/staff/:id", async (req: AuthRequest, res) => {
     include: { staffServices: { include: { service: true } }, user: true },
   });
   return res.json({
-    staff: { ...staff, services: staff.staffServices.map(ss => ss.service) },
+    staff: { ...staff, services: staff.staffServices.map((ss: any) => ss.service) },
   });
 });
 

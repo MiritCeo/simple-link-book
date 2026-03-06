@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 
 export interface AuthRequest extends Request {
   user?: { userId: string; salonId?: string | null; role: "SUPER_ADMIN" | "OWNER" | "STAFF" };
+  file?: Express.Multer.File;
 }
 
 export default function auth(req: AuthRequest, res: Response, next: NextFunction) {
