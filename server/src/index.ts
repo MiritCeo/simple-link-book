@@ -20,7 +20,7 @@ dotenv.config();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 const openApiPath = path.join(process.cwd(), "openapi.yaml");
 if (fs.existsSync(openApiPath)) {
