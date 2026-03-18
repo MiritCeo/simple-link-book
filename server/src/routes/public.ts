@@ -805,6 +805,49 @@ router.post("/client/register", async (req, res) => {
   return res.json({ ok: true, token, clientId: client.id, salonId: client.salonId });
 });
 
+router.post("/client/resend-code", async (req, res) => {
+  const schema = z.object({
+    phone: z.string().min(6).optional(),
+    email: z.string().email().optional(),
+  }).refine(data => data.phone || data.email, { message: "Podaj telefon lub email" });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane" });
+
+  const { phone, email } = parsed.data;
+  const appointment = await prisma.appointment.findFirst({
+    where: {
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      client: {
+        OR: [
+          ...(phone ? [{ phone }] : []),
+          ...(email ? [{ email }] : []),
+        ],
+      },
+    },
+    orderBy: [{ date: "desc" }, { time: "desc" }, { createdAt: "desc" }],
+    include: {
+      client: true,
+      staff: true,
+      appointmentServices: { include: { service: true } },
+      salon: true,
+    },
+  });
+
+  if (appointment && email && appointment.client.email !== email) {
+    const updatedClient = await prisma.client.update({
+      where: { id: appointment.clientId },
+      data: { email },
+    });
+    appointment.client.email = updatedClient.email;
+  }
+
+  if (appointment) {
+    await sendEventNotification("BOOKING_CONFIRMATION", appointment as any);
+  }
+
+  return res.json({ ok: true });
+});
+
 export default router;
 
 

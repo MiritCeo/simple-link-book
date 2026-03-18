@@ -66,7 +66,7 @@ export default function PanelLayout() {
         <header className="sticky top-0 bg-card/95 backdrop-blur-sm border-b border-border z-40 lg:hidden">
           <div className="max-w-lg mx-auto flex items-center justify-between px-4 h-14">
             <div className="flex items-center gap-2">
-              <img src={logoUrl || '/purebooklogo.svg'} alt="Logo salonu" className="w-6 h-6" />
+              <img src={logoUrl || '/honlylogo.svg'} alt="Logo salonu" className="w-6 h-6" />
               <span className="font-bold text-sm">{salonName || 'Salon'}</span>
             </div>
             <button
@@ -88,3 +88,4 @@ export default function PanelLayout() {
     </div>
   );
 }
+

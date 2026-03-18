@@ -60,7 +60,7 @@ export default function SalonBooking() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [salon, setSalon] = useState<any | null>(null);
   const accentHex = salon?.accentColor || '#CD798A';
-  const logoSrc = salon?.logoUrl || '/purebooklogo.svg';
+  const logoSrc = salon?.logoUrl || '/honlylogo.svg';
 
   const hexToHsl = (hex: string) => {
     const value = hex.replace('#', '');
@@ -392,7 +392,7 @@ export default function SalonBooking() {
               </motion.div>
             ))}
           </motion.div>
-          <p className="text-xs text-muted-foreground text-center mt-8 mb-6">Powered by purebook.pl</p>
+          <p className="text-xs text-muted-foreground text-center mt-8 mb-6">Powered by honly.pl</p>
         </div>
       </div>
     );
@@ -520,7 +520,7 @@ export default function SalonBooking() {
                         onChange={e => setClientData(d => ({ ...d, email: e.target.value }))} 
                         className="h-12 rounded-xl" 
                       />
-                      <p className="text-[10px] text-muted-foreground mt-1">Potrzebujemy emaila do logowania</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Email = dodatkowy kanał z kodem rejestracji i do logowania</p>
                     </div>
                   )}
                   <div className="mb-3">
@@ -1039,7 +1039,7 @@ export default function SalonBooking() {
                   <p className="text-xs text-destructive text-center mt-3">{bookingError}</p>
                 )}
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55 }} className="text-xs text-muted-foreground text-center mt-3">
-                  Otrzymasz SMS z potwierdzeniem wizyty
+                  Otrzymasz SMS i email z potwierdzeniem wizyty oraz linkiem do rejestracji
                 </motion.p>
               </div>
             )}
@@ -1049,3 +1049,4 @@ export default function SalonBooking() {
     </div>
   );
 }
+

@@ -40,11 +40,11 @@ export default function NotificationsPage() {
   const [activeTemplate, setActiveTemplate] = useState<any | null>(null);
   const [templateForm, setTemplateForm] = useState({ event: 'BOOKING_CONFIRMATION', channel: 'SMS', subject: '', body: '' });
   const [testPhone, setTestPhone] = useState('');
-  const [testMessage, setTestMessage] = useState('Test SMS z purebook.');
+  const [testMessage, setTestMessage] = useState('Test SMS z honly.');
   const [sendingTest, setSendingTest] = useState(false);
   const [testEmail, setTestEmail] = useState('');
-  const [testEmailSubject, setTestEmailSubject] = useState('Test email z purebook');
-  const [testEmailBody, setTestEmailBody] = useState('To jest testowa wiadomość email z purebook.');
+  const [testEmailSubject, setTestEmailSubject] = useState('Test email z honly');
+  const [testEmailBody, setTestEmailBody] = useState('To jest testowa wiadomość email z honly.');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
   const eventIcon = (id: string) => eventMeta.find(e => e.id === id)?.icon || Bell;
@@ -280,7 +280,7 @@ export default function NotificationsPage() {
               <p className="text-xs leading-relaxed">
                 Cześć Joanna! 👋 Przypominamy o wizycie jutro (22.02) o 09:00 w {senderName}.
                 Usługa: Strzyżenie damskie. Do zobaczenia!
-                Odwołaj: purebook.pl/cancel/abc123
+                Odwołaj: honly.pl/cancel/abc123
               </p>
             </div>
             <p className="text-[10px] text-muted-foreground mt-2">~1 SMS (148 znaków)</p>
@@ -475,3 +475,4 @@ export default function NotificationsPage() {
     </PageTransition>
   );
 }
+

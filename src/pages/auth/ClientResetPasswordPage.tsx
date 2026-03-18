@@ -59,7 +59,7 @@ export default function ClientResetPasswordPage() {
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src="/purebooklogo.svg" alt="purebook" className="w-12 h-12 mx-auto mb-4" />
+          <img src="/honlylogo.svg" alt="honly" className="w-12 h-12 mx-auto mb-4" />
           <h1 className="text-2xl font-bold">Reset hasła</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {token ? "Ustaw nowe hasło do konta" : "Wyślemy link do zmiany hasła"}
@@ -128,3 +128,4 @@ export default function ClientResetPasswordPage() {
     </div>
   );
 }
+

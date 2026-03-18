@@ -191,6 +191,13 @@ export async function registerClientFromBooking(payload: { token: string; email?
   });
 }
 
+export async function resendClientRegistrationCode(payload: { phone?: string; email?: string }) {
+  return apiFetch<{ ok: boolean }>("/api/public/client/resend-code", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getPublicCancelDetails(token: string) {
   return apiFetch<{ appointment: any }>(`/api/public/cancel/${token}`);
 }

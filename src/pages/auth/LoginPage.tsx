@@ -47,9 +47,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-16 h-16 flex items-center justify-center mx-auto mb-4">
-            <img src="/purebooklogo.svg" alt="purebook" className="w-12 h-12" />
+            <img src="/honlylogo.svg" alt="honly" className="w-12 h-12" />
           </div>
-          <h1 className="text-2xl font-bold">purebook</h1>
+          <h1 className="text-2xl font-bold">honly</h1>
           <p className="text-sm text-muted-foreground mt-1">Zaloguj się do panelu salonu</p>
         </div>
 
@@ -74,3 +74,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

@@ -1,5 +1,5 @@
 {
-  "name": "purebook-server",
+  "name": "honly-server",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -36,3 +36,4 @@
     "typescript": "^5.8.3"
   }
 }
+

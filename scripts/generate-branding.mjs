@@ -1,7 +1,7 @@
 import fs from "fs";
 import { Resvg } from "@resvg/resvg-js";
 
-const logoSvg = fs.readFileSync("public/purebooklogo.svg", "utf8");
+const logoSvg = fs.readFileSync("public/honlylogo.svg", "utf8");
 const logoBase64 = Buffer.from(logoSvg).toString("base64");
 const logoDataUri = `data:image/svg+xml;base64,${logoBase64}`;
 const logoRatio = 123 / 117;
@@ -38,3 +38,4 @@ const makeSquare = (size, logoWidth, outPath, bg) => {
 makeSquare(180, 140, "public/apple-touch-icon.png", "#FFFFFF");
 makeSquare(192, 140, "public/icon-192.png", "#FFFFFF");
 makeSquare(512, 320, "public/icon-512.png", "#FFFFFF");
+

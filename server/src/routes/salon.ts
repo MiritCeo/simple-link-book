@@ -14,11 +14,20 @@ import type { AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 
-router.use((req: AuthRequest, res, next) => {
-  if (!req.user?.salonId) {
+router.use(async (req: AuthRequest, res, next) => {
+  if (req.user?.salonId) return next();
+  if (!req.user?.userId || req.user.role === "SUPER_ADMIN") {
     return res.status(403).json({ error: "Nie wybrano salonu" });
   }
-  return next();
+  const links = await prisma.userSalon.findMany({
+    where: { userId: req.user.userId },
+    select: { salonId: true },
+  });
+  if (links.length === 1) {
+    req.user.salonId = links[0].salonId;
+    return next();
+  }
+  return res.status(403).json({ error: "Nie wybrano salonu" });
 });
 
 const getSalonId = (req: AuthRequest) => req.user!.salonId as string;
@@ -391,7 +400,7 @@ router.post("/notifications/test-sms", async (req: AuthRequest, res) => {
   if (!token) return res.status(400).json({ error: "Brak konfiguracji SMS" });
   const salon = await prisma.salon.findUnique({ where: { id: getSalonId(req) } });
   const prefix = salon?.name ? `[${salon.name}] ` : "";
-  const result = await sendSms(parsed.data.to, `${prefix}${parsed.data.message || "Test SMS z purebook."}`, salon?.name);
+  const result = await sendSms(parsed.data.to, `${prefix}${parsed.data.message || "Test SMS z honly."}`, salon?.name);
   if (!result?.ok) {
     return res.status(400).json({ error: result?.error || "Błąd SMSAPI" });
   }
@@ -411,9 +420,9 @@ router.post("/notifications/test-email", async (req: AuthRequest, res) => {
     return res.status(400).json({ error: "Brak konfiguracji email" });
   }
   const salon = await prisma.salon.findUnique({ where: { id: getSalonId(req) } });
-  const subject = parsed.data.subject || "Test email z purebook";
+  const subject = parsed.data.subject || "Test email z honly";
   const prefix = salon?.name ? `[${salon.name}] ` : "";
-  const body = parsed.data.body || "To jest testowa wiadomość email z purebook.";
+  const body = parsed.data.body || "To jest testowa wiadomość email z honly.";
   await sendEmail(parsed.data.to, `${prefix}${subject}`, body);
   return res.json({ ok: true });
 });
@@ -1518,6 +1527,7 @@ router.post("/schedule/:staffId/exceptions", async (req: AuthRequest, res) => {
 });
 
 export default router;
+
 
 
 

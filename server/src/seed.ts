@@ -56,12 +56,12 @@ async function seed() {
     });
   }
 
-  const ownerEmail = process.env.SEED_OWNER_EMAIL || "admin@purebook.pl";
+  const ownerEmail = process.env.SEED_OWNER_EMAIL || "admin@honly.pl";
   const ownerPhone = process.env.SEED_OWNER_PHONE || "+48 500 000 000";
   const ownerPass = process.env.SEED_OWNER_PASSWORD || "Password123!";
   const passwordHash = await bcrypt.hash(ownerPass, 10);
 
-  const superEmail = process.env.SEED_SUPERADMIN_EMAIL || "superadmin@purebook.pl";
+  const superEmail = process.env.SEED_SUPERADMIN_EMAIL || "superadmin@honly.pl";
   const superPhone = process.env.SEED_SUPERADMIN_PHONE || "+48 500 000 999";
   const superPass = process.env.SEED_SUPERADMIN_PASSWORD || "SuperAdmin123!";
   const superHash = await bcrypt.hash(superPass, 10);
@@ -240,3 +240,4 @@ seed()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

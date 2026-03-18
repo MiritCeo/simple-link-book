@@ -28,7 +28,7 @@ export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salon
   const location = useLocation();
   const navigate = useNavigate();
   const role = getRole();
-  const logoSrc = logoUrl || '/purebooklogo.svg';
+  const logoSrc = logoUrl || '/honlylogo.svg';
   const name = salonName || 'Salon';
   const [salons, setSalonsList] = useState(getSalons());
   const [activeSalon, setActiveSalon] = useState(getActiveSalonId());
@@ -116,7 +116,7 @@ export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salon
           <LogOut className="w-4 h-4" />
           Wyloguj się
         </button>
-        <p className="text-[10px] text-muted-foreground">purebook.pl v1.0</p>
+        <p className="text-[10px] text-muted-foreground">honly.pl v1.0</p>
       </div>
     </aside>
   );
@@ -152,3 +152,4 @@ export default function BottomNav() {
     </nav>
   );
 }
+

@@ -86,7 +86,7 @@ export async function sendEventNotification(
     service: serviceLabel,
     staff: appointment.staff?.name || "Dowolny",
     salon_name: appointment.salon?.name || "Salon",
-    cancel_link: `https://purebook.pl/cancel/${cancelToken.token}`,
+    cancel_link: `https://honly.pl/cancel/${cancelToken.token}`,
   };
 
   const shouldSendSms = setting.smsEnabled && (!channels || channels.includes("SMS"));
@@ -95,7 +95,7 @@ export async function sendEventNotification(
   const defaultBody = (channel: "SMS" | "EMAIL") => {
     switch (event) {
       case "BOOKING_CONFIRMATION":
-        return `Twoja wizyta w {salon_name} dnia {date} o {time} została potwierdzona.`;
+        return `Twoja wizyta w {salon_name} dnia {date} o {time} została potwierdzona. Link do zarządzania wizytą i rejestracji konta: {cancel_link}`;
       case "REMINDER_24H":
       case "REMINDER_2H":
         return `Przypomnienie: Twoja wizyta w {salon_name} dnia {date} o {time}.`;
@@ -125,7 +125,10 @@ export async function sendEventNotification(
 
   if (shouldSendSms) {
     const smsTemplate = templates.find(t => t.channel === "SMS");
-    const body = smsTemplate?.body?.trim() ? smsTemplate.body : defaultBody("SMS");
+    let body = smsTemplate?.body?.trim() ? smsTemplate.body : defaultBody("SMS");
+    if (event === "BOOKING_CONFIRMATION" && !body.includes("{cancel_link}")) {
+      body = `${body} Link: {cancel_link}`;
+    }
     const content = `[${ctx.salon_name}] ${renderTemplate(body, ctx)}`;
     await sendSms(appointment.client.phone, content, appointment.salon?.name);
   }
@@ -133,7 +136,11 @@ export async function sendEventNotification(
   if (shouldSendEmail && appointment.client.email) {
     const emailTemplate = templates.find(t => t.channel === "EMAIL");
     const subject = emailTemplate?.subject?.trim() ? emailTemplate.subject : defaultSubject();
-    const body = emailTemplate?.body?.trim() ? emailTemplate.body : defaultBody("EMAIL");
+    let body = emailTemplate?.body?.trim() ? emailTemplate.body : defaultBody("EMAIL");
+    if (event === "BOOKING_CONFIRMATION" && !body.includes("{cancel_link}")) {
+      body = `${body}\n\nLink: {cancel_link}`;
+    }
     await sendEmail(appointment.client.email, subject, renderTemplate(body, ctx));
   }
 }
+

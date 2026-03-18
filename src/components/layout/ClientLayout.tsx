@@ -71,7 +71,7 @@ export default function ClientLayout() {
         {/* Mobile top bar */}
         <header className="sticky top-0 bg-card/95 backdrop-blur-sm border-b border-border z-40 lg:hidden">
           <div className="max-w-lg mx-auto flex items-center gap-2 px-4 h-14">
-            <img src="/purebooklogo.svg" alt="purebook" className="w-6 h-6" />
+            <img src="/honlylogo.svg" alt="honly" className="w-6 h-6" />
             <span className="font-bold text-sm">Moje konto</span>
             {salons.length > 1 && (
               <select
@@ -96,3 +96,4 @@ export default function ClientLayout() {
     </div>
   );
 }
+

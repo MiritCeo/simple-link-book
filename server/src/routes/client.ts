@@ -175,7 +175,7 @@ router.post("/password-reset", async (req, res) => {
     data: { clientAccountId: account.id, token, expiresAt },
   });
 
-  const resetLink = `https://purebook.pl/konto/reset-hasla?token=${token}`;
+  const resetLink = `https://honly.pl/konto/reset-hasla?token=${token}`;
   await sendEmail(account.email, "Reset hasła", `Kliknij, aby ustawić nowe hasło: ${resetLink}`);
 
   const isProd = process.env.NODE_ENV === "production";
@@ -394,3 +394,4 @@ router.put("/password", async (req: ClientAuthRequest, res) => {
 });
 
 export default router;
+

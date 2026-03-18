@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { registerClientFromBooking } from "@/lib/api";
+import { registerClientFromBooking, resendClientRegistrationCode } from "@/lib/api";
 
 export default function ClientRegisterPage() {
   const navigate = useNavigate();
@@ -12,6 +12,10 @@ export default function ClientRegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendPhone, setResendPhone] = useState("");
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendInfo, setResendInfo] = useState<string | null>(null);
 
   const canSubmit = token.length >= 10 && password.length >= 8 && password === confirmPassword && !loading;
 
@@ -37,21 +41,40 @@ export default function ClientRegisterPage() {
     }
   };
 
+  const onResend = async () => {
+    if (!resendPhone.trim() && !resendEmail.trim()) return;
+    setResendLoading(true);
+    setResendInfo(null);
+    try {
+      await resendClientRegistrationCode({
+        phone: resendPhone.trim() || undefined,
+        email: resendEmail.trim() || undefined,
+      });
+      setResendInfo("Jeśli znaleźliśmy rezerwację, wysłaliśmy kod SMS i/lub email.");
+    } catch (err: any) {
+      setResendInfo(err?.message || "Nie udało się wysłać kodu");
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src="/purebooklogo.svg" alt="purebook" className="w-12 h-12 mx-auto mb-4" />
+          <img src="/honlylogo.svg" alt="honly" className="w-12 h-12 mx-auto mb-4" />
           <h1 className="text-2xl font-bold">Rejestracja klienta</h1>
-          <p className="text-sm text-muted-foreground mt-1">Podaj kod z SMS lub linku rezerwacji.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Po rezerwacji wyślemy SMS i email z kodem lub linkiem do rejestracji.
+          </p>
         </div>
 
         <form className="space-y-4" onSubmit={onSubmit}>
           <div>
-            <label className="text-sm font-medium mb-1.5 block">Kod / token</label>
+            <label className="text-sm font-medium mb-1.5 block">Kod / link z SMS lub emaila</label>
             <Input
               type="text"
-              placeholder="Wklej kod z SMS"
+              placeholder="Wklej kod lub link"
               className="h-12 rounded-xl"
               value={token}
               onChange={e => setToken(e.target.value)}
@@ -94,6 +117,35 @@ export default function ClientRegisterPage() {
           <Link to="/konto/logowanie" className="text-xs text-muted-foreground text-center block hover:underline">
             Masz już konto? Zaloguj się
           </Link>
+          <div className="border border-border rounded-2xl p-4 space-y-3">
+            <p className="text-xs font-medium">Nie masz kodu?</p>
+            <div className="space-y-2">
+              <Input
+                type="tel"
+                placeholder="Telefon z rezerwacji (SMS)"
+                className="h-11 rounded-xl"
+                value={resendPhone}
+                onChange={e => setResendPhone(e.target.value)}
+              />
+              <Input
+                type="email"
+                placeholder="Email z rezerwacji (opcjonalnie)"
+                className="h-11 rounded-xl"
+                value={resendEmail}
+                onChange={e => setResendEmail(e.target.value)}
+              />
+            </div>
+            {resendInfo && <p className="text-xs text-muted-foreground">{resendInfo}</p>}
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-11 rounded-xl"
+              disabled={resendLoading || (!resendPhone.trim() && !resendEmail.trim())}
+              onClick={onResend}
+            >
+              {resendLoading ? "Wysyłam..." : "Wyślij kod ponownie"}
+            </Button>
+          </div>
           <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={() => navigate(-1)}>
             Wróć
           </Button>
@@ -102,3 +154,4 @@ export default function ClientRegisterPage() {
     </div>
   );
 }
+

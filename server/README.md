@@ -4,7 +4,7 @@
 
 Create a local `.env` (do not commit) with:
 
-- `DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/purebook`
+- `DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/honly`
 - `JWT_SECRET=replace-with-strong-secret`
 - `SENDGRID_API_KEY=replace-with-sendgrid-key`
 - `SENDGRID_FROM=hello@yourdomain.com`
@@ -18,3 +18,4 @@ Create a local `.env` (do not commit) with:
 - `npm run prisma:generate`
 - `npm run prisma:migrate`
 - `npm run dev`
+

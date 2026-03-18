@@ -30,7 +30,7 @@ export function ClientSidebar({
     <aside className="hidden lg:flex flex-col w-56 border-r border-border bg-card h-screen sticky top-0">
       <div className="flex items-center gap-2 px-5 h-16 border-b border-border">
         <div className="w-8 h-8 flex items-center justify-center">
-          <img src="/purebooklogo.svg" alt="purebook" className="w-7 h-7" />
+          <img src="/honlylogo.svg" alt="honly" className="w-7 h-7" />
         </div>
         <div>
           <span className="font-bold text-sm block leading-tight">{clientName || 'Klient'}</span>
@@ -118,3 +118,4 @@ export default function ClientBottomNav() {
     </nav>
   );
 }
+

@@ -1,6 +1,6 @@
 {
-  "name": "purebook",
-  "short_name": "purebook",
+  "name": "honly",
+  "short_name": "honly",
   "description": "System rezerwacji wizyt i zarzadzania salonem.",
   "start_url": "/",
   "display": "standalone",
@@ -19,3 +19,4 @@
     }
   ]
 }
+

@@ -27,7 +27,7 @@ export default function SettingsPage() {
     accentColor: '#111827',
     logoUrl: '',
   });
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://purebook.pl';
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://honly.pl';
   const bookingUrl = salon ? `${origin}/s/${salon.slug}` : '';
   const role = getRole();
 
@@ -181,7 +181,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl border border-border bg-background flex items-center justify-center">
                     <img
-                      src={profileForm.logoUrl || '/purebooklogo.svg'}
+                      src={profileForm.logoUrl || '/honlylogo.svg'}
                       alt="Logo salonu"
                       className="w-8 h-8"
                     />
@@ -313,7 +313,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground text-center mt-8 mb-4 lg:text-left">purebook.pl v1.0</p>
+      <p className="text-xs text-muted-foreground text-center mt-8 mb-4 lg:text-left">honly.pl v1.0</p>
     </PageTransition>
   );
 }
+

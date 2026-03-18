@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
-  title: purebook API
+  title: honly API
   version: 0.1.0
   description: API dla panelu salonu, klienta i publicznej rezerwacji.
 servers:
-  - url: https://purebook.pl
+  - url: https://honly.pl
     description: Production
   - url: http://localhost:4000
     description: Local
@@ -1281,3 +1281,4 @@ paths:
             schema: { type: object }
       responses:
         '200': { description: OK }
+
