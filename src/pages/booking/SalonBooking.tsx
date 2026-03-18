@@ -60,7 +60,7 @@ export default function SalonBooking() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [salon, setSalon] = useState<any | null>(null);
   const accentHex = salon?.accentColor || '#CD798A';
-  const logoSrc = salon?.logoUrl || '/honlylogo.svg';
+  const logoSrc = salon?.logoUrl || '/honlylogo.svg?v=20260318';
 
   const hexToHsl = (hex: string) => {
     const value = hex.replace('#', '');
@@ -1049,4 +1049,5 @@ export default function SalonBooking() {
     </div>
   );
 }
+
 

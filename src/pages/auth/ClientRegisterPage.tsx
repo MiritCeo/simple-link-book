@@ -62,7 +62,7 @@ export default function ClientRegisterPage() {
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src="/honlylogo.svg" alt="honly" className="w-12 h-12 mx-auto mb-4" />
+          <img src="/honlylogo.svg?v=20260318" alt="honly" className="w-12 h-12 mx-auto mb-4" />
           <h1 className="text-2xl font-bold">Rejestracja klienta</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Po rezerwacji wyślemy SMS i email z kodem lub linkiem do rejestracji.
@@ -154,4 +154,5 @@ export default function ClientRegisterPage() {
     </div>
   );
 }
+
 

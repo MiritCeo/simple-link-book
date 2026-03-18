@@ -28,7 +28,7 @@ export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salon
   const location = useLocation();
   const navigate = useNavigate();
   const role = getRole();
-  const logoSrc = logoUrl || '/honlylogo.svg';
+  const logoSrc = logoUrl || '/honlylogo.svg?v=20260318';
   const name = salonName || 'Salon';
   const [salons, setSalonsList] = useState(getSalons());
   const [activeSalon, setActiveSalon] = useState(getActiveSalonId());
@@ -152,4 +152,5 @@ export default function BottomNav() {
     </nav>
   );
 }
+
 

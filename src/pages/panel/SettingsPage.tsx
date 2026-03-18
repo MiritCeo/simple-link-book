@@ -181,7 +181,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl border border-border bg-background flex items-center justify-center">
                     <img
-                      src={profileForm.logoUrl || '/honlylogo.svg'}
+                      src={profileForm.logoUrl || '/honlylogo.svg?v=20260318'}
                       alt="Logo salonu"
                       className="w-8 h-8"
                     />
@@ -317,4 +317,5 @@ export default function SettingsPage() {
     </PageTransition>
   );
 }
+
 
