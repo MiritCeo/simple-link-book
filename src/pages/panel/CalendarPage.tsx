@@ -971,14 +971,6 @@ export default function CalendarPage() {
           {loading && (
             <span className="text-xs text-muted-foreground hidden sm:inline">Ładowanie...</span>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-xl h-10 sm:hidden"
-            onClick={toggleCalendarView}
-          >
-            {isCalendarView ? 'Widok listy' : 'Widok kalendarza'}
-          </Button>
           <div className="hidden sm:flex items-center bg-muted rounded-xl p-1">
             <button
               onClick={() => setView('day-list')}
@@ -1409,6 +1401,16 @@ export default function CalendarPage() {
           </Dialog>
         </div>
       </div>
+      <div className="sm:hidden mb-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-xl h-10 w-full"
+          onClick={toggleCalendarView}
+        >
+          {isCalendarView ? 'Widok listy' : 'Widok kalendarza'}
+        </Button>
+      </div>
 
       {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards') && (
         <>
@@ -1435,27 +1437,36 @@ export default function CalendarPage() {
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex sm:hidden items-center bg-muted rounded-xl p-1 mb-3 w-fit">
+          <div className="flex sm:hidden items-center bg-muted rounded-xl p-1 mb-3 w-full">
             <button
               onClick={() => setView('day-list')}
-              className={`p-2 rounded-lg transition-colors ${view === 'day-list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
-              title="Lista"
+              className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${view === 'day-list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Widok listy"
             >
-              <List className="w-4 h-4" />
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <List className="w-4 h-4" />
+                Lista
+              </span>
             </button>
             <button
               onClick={() => setView('day-cards')}
-              className={`p-2 rounded-lg transition-colors ${view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
-              title="Kafelki"
+              className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Widok kafelków"
             >
-              <Grid2X2 className="w-4 h-4" />
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <Grid2X2 className="w-4 h-4" />
+                Kafelki
+              </span>
             </button>
             <button
               onClick={() => setView('day-timeline')}
-              className={`p-2 rounded-lg transition-colors ${view === 'day-timeline' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
-              title="Oś czasu"
+              className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${view === 'day-timeline' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Widok osi czasu"
             >
-              <LayoutGrid className="w-4 h-4" />
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <LayoutGrid className="w-4 h-4" />
+                Oś czasu
+              </span>
             </button>
           </div>
         </>
@@ -1622,6 +1633,14 @@ export default function CalendarPage() {
             <h3 className="text-sm font-semibold">Wybierz osobę/osoby</h3>
             <div className="flex items-center gap-2">
               <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-xl h-8 text-xs"
+                onClick={() => setShowStaffFilter(false)}
+              >
+                Zamknij
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 className="rounded-xl h-8 text-xs"
@@ -1654,6 +1673,9 @@ export default function CalendarPage() {
                   checked={staffFilterIds.includes(sp.id)}
                   onCheckedChange={(checked) => {
                     setStaffFilterIds(prev => checked ? [...prev, sp.id] : prev.filter(id => id !== sp.id));
+                  if (typeof window !== 'undefined' && window.innerWidth < 640) {
+                    setShowStaffFilter(false);
+                  }
                   }}
                 />
                 <span className="flex items-center gap-2">
@@ -1671,6 +1693,9 @@ export default function CalendarPage() {
                 checked={staffFilterIds.includes('any')}
                 onCheckedChange={(checked) => {
                   setStaffFilterIds(prev => checked ? [...prev, 'any'] : prev.filter(id => id !== 'any'));
+                  if (typeof window !== 'undefined' && window.innerWidth < 640) {
+                    setShowStaffFilter(false);
+                  }
                 }}
               />
               <span>Dowolny</span>
@@ -1733,7 +1758,7 @@ export default function CalendarPage() {
       >
       {view === 'day-timeline' && (
           <motion.div
-            className="hidden sm:block"
+            className="block"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
@@ -1847,7 +1872,7 @@ export default function CalendarPage() {
 
       {/* List view */}
       {(view === 'day-list' || view === 'day-timeline') && (
-        <div className={view === 'day-timeline' ? 'sm:hidden' : ''}>
+        <div className={view === 'day-timeline' ? 'hidden' : ''}>
           <MotionList className="space-y-3" key={`${selectedDate}-${staffFilterIds.join(',')}`}>
             {dayAppointments.length === 0 && (
               <motion.p
