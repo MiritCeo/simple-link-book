@@ -1,5 +1,5 @@
 import { useRef, useState, useMemo, useEffect } from 'react';
-import { Search, Phone, Mail, ChevronRight, Plus, User, Pencil, Trash2, Download } from 'lucide-react';
+import { Search, Phone, Mail, ChevronRight, Plus, User, Pencil, Trash2, Download, Broom } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { createClient, deleteClient, getSalonClientAppointments, getSalonClients, importSalonClients, updateClient } from '@/lib/api';
+import { createClient, deleteClient, getSalonClientAppointments, getSalonClients, importSalonClients, updateClient, dedupeSalonAppointments } from '@/lib/api';
 import { statusLabels } from '@/data/mockData';
 import { getReadableTextColor } from '@/lib/color';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
@@ -41,6 +41,7 @@ export default function ClientsPage() {
   const [exportingClients, setExportingClients] = useState(false);
   const [exportingWithVisits, setExportingWithVisits] = useState(false);
   const [importingClients, setImportingClients] = useState(false);
+  const [dedupingAppointments, setDedupingAppointments] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -429,6 +430,22 @@ export default function ClientsPage() {
     }
   };
 
+  const handleDedupeAppointments = async () => {
+    if (dedupingAppointments) return;
+    const ok = window.confirm('Usunąć zduplikowane wizyty? Ta operacja jest nieodwracalna.');
+    if (!ok) return;
+    setDedupingAppointments(true);
+    try {
+      const res = await dedupeSalonAppointments();
+      toast.success(`Usunięto ${res.removed} duplikatów (sprawdzono: ${res.inspected})`);
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.message || 'Nie udało się usunąć duplikatów');
+    } finally {
+      setDedupingAppointments(false);
+    }
+  };
+
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6">
       <div className="flex items-center justify-between mb-4">
@@ -505,6 +522,15 @@ export default function ClientsPage() {
           >
             <Download className="w-4 h-4" />{exportingWithVisits ? 'Eksportowanie...' : 'CSV + wizyty'}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10"
+            onClick={handleDedupeAppointments}
+            disabled={dedupingAppointments}
+          >
+            <Broom className="w-4 h-4" />{dedupingAppointments ? 'Czyszczenie...' : 'Usuń duplikaty wizyt'}
+          </Button>
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Button size="sm" className="rounded-xl gap-1.5 h-10" onClick={() => setAddOpen(true)}>
               <Plus className="w-4 h-4" />Dodaj klienta
@@ -572,6 +598,15 @@ export default function ClientsPage() {
             disabled={importingClients}
           >
             <Download className="w-4 h-4" />{importingClients ? 'Importowanie...' : 'Import bez aktualizacji'}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl gap-1.5 h-10 w-full lg:hidden mb-3"
+            onClick={handleDedupeAppointments}
+            disabled={dedupingAppointments}
+          >
+            <Broom className="w-4 h-4" />{dedupingAppointments ? 'Czyszczenie...' : 'Usuń duplikaty wizyt'}
           </Button>
           <Button
             size="sm"

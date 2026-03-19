@@ -451,6 +451,13 @@ export async function importSalonClients(payload: { includeVisits?: boolean; upd
   );
 }
 
+export async function dedupeSalonAppointments() {
+  return apiFetch<{ inspected: number; removed: number; kept: number; groups: number }>("/api/salon/appointments/dedupe", {
+    method: "POST",
+    auth: true,
+  });
+}
+
 export async function deleteClient(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/salon/clients/${id}`, {
     method: "DELETE",

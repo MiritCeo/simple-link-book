@@ -36,6 +36,8 @@ export default function StaffScheduleEditPage() {
   const [exceptionForm, setExceptionForm] = useState({ date: '', label: '', start: '', end: '' });
   const [bulkDays, setBulkDays] = useState<string[]>(['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek']);
   const [rotationRule, setRotationRule] = useState<'none' | 'biweekly' | 'monthly'>('none');
+  const today = new Date().toISOString().split('T')[0];
+  const isTimeOrderValid = (start?: string, end?: string) => !!start && !!end && start < end;
 
   const staff = staffList.find((sp: any) => sp.id === selectedStaffId);
 
@@ -244,6 +246,7 @@ export default function StaffScheduleEditPage() {
                 <label className="text-sm font-medium mb-1.5 block">Data</label>
                 <Input
                   type="date"
+                  min={today}
                   value={exceptionForm.date}
                   onChange={(e) => setExceptionForm(prev => ({ ...prev, date: e.target.value }))}
                   className="h-10 rounded-xl"
@@ -286,6 +289,14 @@ export default function StaffScheduleEditPage() {
                     toast.error('Wybierz datę wyjątku');
                     return;
                   }
+                  if (exceptionForm.date < today) {
+                    toast.error('Nie można dodać wyjątku w przeszłości');
+                    return;
+                  }
+                  if ((exceptionForm.start || exceptionForm.end) && !isTimeOrderValid(exceptionForm.start, exceptionForm.end)) {
+                    toast.error('Godzina rozpoczęcia musi być wcześniejsza niż zakończenia');
+                    return;
+                  }
                   const hours = exceptionForm.start && exceptionForm.end ? `${exceptionForm.start}–${exceptionForm.end}` : '—';
                   const next = {
                     date: exceptionForm.date,
@@ -326,6 +337,12 @@ export default function StaffScheduleEditPage() {
               className="rounded-xl w-full gap-2"
               onClick={async () => {
                 if (!selectedStaffId) return;
+                  for (const day of availability) {
+                    if (day.available && (!day.from || !day.to || day.from >= day.to)) {
+                      toast.error(`Nieprawidłowe godziny dla ${day.day}`);
+                      return;
+                    }
+                  }
                 await saveStaffSchedule({
                   staffId: selectedStaffId,
                   availability: availability.map(d => ({

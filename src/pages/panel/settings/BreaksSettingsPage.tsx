@@ -28,6 +28,7 @@ export default function BreaksSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [breakForm, setBreakForm] = useState({ label: '', days: '', start: '', end: '' });
   const [bufferForm, setBufferForm] = useState({ label: '', minutes: '' });
+  const isTimeOrderValid = (start?: string, end?: string) => !!start && !!end && start < end;
 
   useEffect(() => {
     let mounted = true;
@@ -208,6 +209,14 @@ export default function BreaksSettingsPage() {
                   toast.error('Podaj nazwę przerwy');
                   return;
                 }
+                if (!breakForm.start || !breakForm.end) {
+                  toast.error('Uzupełnij godziny przerwy');
+                  return;
+                }
+                if (!isTimeOrderValid(breakForm.start, breakForm.end)) {
+                  toast.error('Godzina rozpoczęcia musi być wcześniejsza niż zakończenia');
+                  return;
+                }
                 try {
                   const created = await createSalonBreak({
                     type: 'BREAK',
@@ -254,6 +263,10 @@ export default function BreaksSettingsPage() {
               onClick={async () => {
                 if (!bufferForm.label || !bufferForm.minutes) {
                   toast.error('Uzupełnij typ i czas bufora');
+                  return;
+                }
+                if (Number(bufferForm.minutes) <= 0 || Number.isNaN(Number(bufferForm.minutes))) {
+                  toast.error('Podaj dodatnią liczbę minut bufora');
                   return;
                 }
                 try {

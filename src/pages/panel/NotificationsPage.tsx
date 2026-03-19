@@ -60,6 +60,8 @@ export default function NotificationsPage() {
       import('@/lib/api').then(m => m.getNotificationTemplates()),
     ]).then(([settingsRes, templatesRes]) => {
       if (!mounted) return;
+      const anySms = (settingsRes.settings || []).some((s: any) => s.smsEnabled);
+      const anyEmail = (settingsRes.settings || []).some((s: any) => s.emailEnabled);
       const mapped: NotificationSetting[] = settingsRes.settings.map((s: any) => ({
         id: s.event,
         label: eventLabel(s.event),
@@ -71,6 +73,8 @@ export default function NotificationsPage() {
       }));
       setSettings(mapped);
       setTemplates(templatesRes.templates || []);
+      setSmsEnabled(anySms);
+      setEmailEnabled(anyEmail);
     }).finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
   }, []);
@@ -85,8 +89,8 @@ export default function NotificationsPage() {
     import('@/lib/api')
       .then(m => m.saveNotificationSettings(settings.map(s => ({
         event: s.id,
-        smsEnabled: s.sms,
-        emailEnabled: s.email,
+        smsEnabled: smsEnabled ? s.sms : false,
+        emailEnabled: emailEnabled ? s.email : false,
         timingMinutes: s.timing ? (s.timing.includes('24') ? 1440 : s.timing.includes('2') ? 120 : 60) : null,
       }))))
       .then(() => toast.success('Ustawienia powiadomień zapisane!'))
@@ -448,6 +452,11 @@ export default function NotificationsPage() {
                           setTemplates(prev => prev.map(t => t.id === activeTemplate.id ? res.template : t));
                           toast.success('Szablon zapisany');
                         } else {
+                          const exists = templates.some(t => t.event === templateForm.event && t.channel === templateForm.channel);
+                          if (exists) {
+                            toast.error('Szablon dla tego zdarzenia i kanału już istnieje');
+                            return;
+                          }
                           const res = await import('@/lib/api').then(m => m.createNotificationTemplate({
                             event: templateForm.event,
                             channel: templateForm.channel as any,

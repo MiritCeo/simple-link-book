@@ -55,6 +55,15 @@ const toMinutes = (time: string) => {
   return (h || 0) * 60 + (m || 0);
 };
 
+const isTimeValue = (time?: string | null) => {
+  if (!time) return false;
+  if (!/^\d{2}:\d{2}$/.test(time)) return false;
+  const [h, m] = time.split(":").map(Number);
+  return Number.isInteger(h) && Number.isInteger(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59;
+};
+
+const todayISO = () => new Date().toISOString().split("T")[0];
+
 const hasOverlap = (startA: number, endA: number, startB: number, endB: number) => {
   return startA < endB && endA > startB;
 };
@@ -463,10 +472,17 @@ router.post("/notifications/templates", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane szablonu" });
-  const template = await prisma.notificationTemplate.create({
-    data: { ...parsed.data, salonId: getSalonId(req) },
-  });
-  return res.json({ template });
+  try {
+    const template = await prisma.notificationTemplate.create({
+      data: { ...parsed.data, salonId: getSalonId(req) },
+    });
+    return res.json({ template });
+  } catch (error: any) {
+    if (error?.code === "P2002") {
+      return res.status(409).json({ error: "Szablon dla tego zdarzenia i kanału już istnieje" });
+    }
+    throw error;
+  }
 });
 
 router.put("/notifications/templates/:id", async (req: AuthRequest, res) => {
@@ -1060,6 +1076,28 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
     const status = (statusMap[statusKey] || "SCHEDULED") as any;
 
     const uniqueServiceIds = Array.from(new Set(services.map(s => s.id)));
+    const serviceKey = uniqueServiceIds.slice().sort().join(",");
+    const existingAppointment = await prisma.appointment.findFirst({
+      where: {
+        salonId,
+        date: row.date!,
+        time: row.time!,
+        clientId: client.id,
+        staffId: staff?.id ?? null,
+      },
+      include: { appointmentServices: { select: { serviceId: true } } },
+    });
+    if (existingAppointment) {
+      const existingKey = existingAppointment.appointmentServices
+        .map(s => s.serviceId)
+        .sort()
+        .join(",");
+      if (existingKey === serviceKey) {
+        skippedRows += 1;
+        errors.push({ row: idx + 2, reason: "Duplikat wizyty (pominięto)" });
+        continue;
+      }
+    }
     const appointmentData = {
       id: crypto.randomUUID(),
       salonId,
@@ -1164,6 +1202,16 @@ router.put("/hours", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe godziny pracy" });
+  for (const h of parsed.data.hours) {
+    if (h.active) {
+      if (!isTimeValue(h.open) || !isTimeValue(h.close)) {
+        return res.status(400).json({ error: "Nieprawidłowe godziny pracy" });
+      }
+      if (toMinutes(h.open) >= toMinutes(h.close)) {
+        return res.status(400).json({ error: "Godzina otwarcia musi być wcześniejsza niż zamknięcia" });
+      }
+    }
+  }
   const salonId = getSalonId(req);
   await Promise.all(parsed.data.hours.map(h =>
     prisma.salonHour.upsert({
@@ -1195,6 +1243,22 @@ router.post("/hours/exceptions", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wyjątku" });
+  if (parsed.data.date < todayISO()) {
+    return res.status(400).json({ error: "Nie można dodać wyjątku w przeszłości" });
+  }
+  const hasStart = !!parsed.data.start;
+  const hasEnd = !!parsed.data.end;
+  if (parsed.data.closed && (hasStart || hasEnd)) {
+    return res.status(400).json({ error: "Wyjątek zamknięty nie może mieć godzin" });
+  }
+  if (hasStart || hasEnd) {
+    if (!hasStart || !hasEnd || !isTimeValue(parsed.data.start) || !isTimeValue(parsed.data.end)) {
+      return res.status(400).json({ error: "Nieprawidłowe godziny wyjątku" });
+    }
+    if (toMinutes(parsed.data.start!) >= toMinutes(parsed.data.end!)) {
+      return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
+    }
+  }
   const exception = await prisma.salonException.create({
     data: { ...parsed.data, salonId: getSalonId(req) },
   });
@@ -1203,6 +1267,10 @@ router.post("/hours/exceptions", async (req: AuthRequest, res) => {
 
 router.delete("/hours/exceptions/:id", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
+  const existing = await prisma.salonException.findUnique({ where: { id: req.params.id } });
+  if (existing && existing.date < todayISO()) {
+    return res.status(400).json({ error: "Nie można usuwać minionych wyjątków" });
+  }
   await prisma.salonException.delete({ where: { id: req.params.id } });
   return res.json({ ok: true });
 });
@@ -1228,6 +1296,22 @@ router.post("/breaks", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane przerwy" });
+  if (parsed.data.type === "BREAK") {
+    if (!parsed.data.start || !parsed.data.end) {
+      return res.status(400).json({ error: "Uzupełnij godziny przerwy" });
+    }
+    if (!isTimeValue(parsed.data.start) || !isTimeValue(parsed.data.end)) {
+      return res.status(400).json({ error: "Nieprawidłowe godziny przerwy" });
+    }
+    if (toMinutes(parsed.data.start) >= toMinutes(parsed.data.end)) {
+      return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
+    }
+  }
+  if (parsed.data.type === "BUFFER") {
+    if (!parsed.data.minutes || parsed.data.minutes <= 0) {
+      return res.status(400).json({ error: "Podaj dodatnią liczbę minut bufora" });
+    }
+  }
   const created = await prisma.salonBreak.create({
     data: { ...parsed.data, salonId: getSalonId(req) },
   });
@@ -1238,6 +1322,39 @@ router.delete("/breaks/:id", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   await prisma.salonBreak.delete({ where: { id: req.params.id } });
   return res.json({ ok: true });
+});
+
+router.post("/appointments/dedupe", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const salonId = getSalonId(req);
+  const appointments = await prisma.appointment.findMany({
+    where: { salonId },
+    include: { appointmentServices: { select: { serviceId: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const seen = new Map<string, string>();
+  let removed = 0;
+  for (const apt of appointments) {
+    const servicesKey = apt.appointmentServices.map(s => s.serviceId).sort().join(",");
+    const key = [
+      apt.clientId,
+      apt.date,
+      apt.time,
+      apt.staffId || "null",
+      apt.duration,
+      servicesKey,
+    ].join("|");
+    if (seen.has(key)) {
+      await prisma.notificationLog.deleteMany({ where: { appointmentId: apt.id } });
+      await prisma.appointmentToken.deleteMany({ where: { appointmentId: apt.id } });
+      await prisma.appointmentService.deleteMany({ where: { appointmentId: apt.id } });
+      await prisma.appointment.delete({ where: { id: apt.id } });
+      removed += 1;
+    } else {
+      seen.set(key, apt.id);
+    }
+  }
+  return res.json({ inspected: appointments.length, removed, kept: appointments.length - removed, groups: seen.size });
 });
 
 router.get("/appointments", async (req: AuthRequest, res) => {
@@ -1469,6 +1586,33 @@ router.post("/schedule/:staffId", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane grafiku" });
+  for (const day of parsed.data.availability) {
+    if (day.active) {
+      if (!isTimeValue(day.start) || !isTimeValue(day.end)) {
+        return res.status(400).json({ error: "Nieprawidłowe godziny grafiku" });
+      }
+      if (toMinutes(day.start) >= toMinutes(day.end)) {
+        return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
+      }
+    }
+  }
+  if (parsed.data.exceptions) {
+    for (const ex of parsed.data.exceptions) {
+      if (ex.date < todayISO()) {
+        return res.status(400).json({ error: "Nie można dodać wyjątku w przeszłości" });
+      }
+      const hasStart = !!ex.start;
+      const hasEnd = !!ex.end;
+      if (hasStart || hasEnd) {
+        if (!hasStart || !hasEnd || !isTimeValue(ex.start) || !isTimeValue(ex.end)) {
+          return res.status(400).json({ error: "Nieprawidłowe godziny wyjątku" });
+        }
+        if (toMinutes(ex.start!) >= toMinutes(ex.end!)) {
+          return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
+        }
+      }
+    }
+  }
 
   const { staffId } = req.params;
   await prisma.staffAvailability.deleteMany({ where: { staffId } });
@@ -1509,6 +1653,19 @@ router.post("/schedule/:staffId/exceptions", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wyjątku pracownika" });
+  if (parsed.data.date < todayISO()) {
+    return res.status(400).json({ error: "Nie można dodać wyjątku w przeszłości" });
+  }
+  const hasStart = !!parsed.data.start;
+  const hasEnd = !!parsed.data.end;
+  if (hasStart || hasEnd) {
+    if (!hasStart || !hasEnd || !isTimeValue(parsed.data.start) || !isTimeValue(parsed.data.end)) {
+      return res.status(400).json({ error: "Nieprawidłowe godziny wyjątku" });
+    }
+    if (toMinutes(parsed.data.start!) >= toMinutes(parsed.data.end!)) {
+      return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
+    }
+  }
 
   const staff = await prisma.staff.findUnique({ where: { id: req.params.staffId } });
   if (!staff || staff.salonId !== getSalonId(req)) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });

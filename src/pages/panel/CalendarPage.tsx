@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, type CSSProperties, type ReactNode } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Clock, User, List, LayoutGrid, Filter, Ban } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Clock, User, List, LayoutGrid, Grid2X2, Filter, Ban } from 'lucide-react';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
@@ -185,7 +185,7 @@ const DraggableAppointmentChip = ({
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [view, setView] = useState<'day-list' | 'day-timeline' | 'week' | 'month'>('day-list');
+  const [view, setView] = useState<'day-list' | 'day-timeline' | 'day-cards' | 'week' | 'month'>('day-list');
   const [selectedSpecialist, setSelectedSpecialist] = useState<string>(() => {
     try {
       return localStorage.getItem('calendar_selected_specialist') || 'all';
@@ -984,7 +984,7 @@ export default function CalendarPage() {
             <button
               onClick={() => setView('day-list')}
               className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                view === 'day-list' || view === 'day-timeline' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                view === 'day-list' || view === 'day-timeline' || view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
               }`}
             >
               Dzień
@@ -1385,8 +1385,56 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {(view === 'day-list' || view === 'day-timeline') && (
-        <div className="hidden sm:flex items-center bg-muted rounded-xl p-1 mb-3 w-fit">
+      {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards') && (
+        <>
+          <div className="hidden sm:flex items-center bg-muted rounded-xl p-1 mb-3 w-fit">
+            <button
+              onClick={() => setView('day-list')}
+              className={`p-2 rounded-lg transition-colors ${view === 'day-list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Widok listy"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setView('day-cards')}
+              className={`p-2 rounded-lg transition-colors ${view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Widok kafelków"
+            >
+              <Grid2X2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setView('day-timeline')}
+              className={`p-2 rounded-lg transition-colors ${view === 'day-timeline' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Widok osi czasu"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex sm:hidden items-center bg-muted rounded-xl p-1 mb-3 w-fit">
+            <button
+              onClick={() => setView('day-list')}
+              className={`p-2 rounded-lg transition-colors ${view === 'day-list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Lista"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setView('day-cards')}
+              className={`p-2 rounded-lg transition-colors ${view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Kafelki"
+            >
+              <Grid2X2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setView('day-timeline')}
+              className={`p-2 rounded-lg transition-colors ${view === 'day-timeline' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              title="Oś czasu"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        </>
+      )}
           <button
             onClick={() => setView('day-list')}
             className={`p-2 rounded-lg transition-colors ${view === 'day-list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
@@ -1404,7 +1452,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {(view === 'day-list' || view === 'day-timeline') && (
+      {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards') && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold">Dostępność zespołu</h3>
@@ -1455,7 +1503,7 @@ export default function CalendarPage() {
       )}
 
       {/* Week/Month selector */}
-      {(view === 'day-list' || view === 'day-timeline' || view === 'week') && (
+      {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards' || view === 'week') && (
         <div className="flex items-center justify-between mb-2">
           <motion.button whileHover={{ x: -2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(-1)} className="touch-target flex items-center justify-center">
             <ChevronLeft className="w-5 h-5" />
@@ -1479,7 +1527,7 @@ export default function CalendarPage() {
       )}
 
       {/* Week days */}
-      {(view === 'day-list' || view === 'day-timeline' || view === 'week') && (
+      {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards' || view === 'week') && (
         <div className="grid grid-cols-7 gap-1 mb-6">
           {weekDays.map(date => {
             const d = new Date(date);
@@ -1642,7 +1690,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {(view === 'day-list' || view === 'day-timeline') && (
+      {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards') && (
         <div className="hidden lg:flex items-center gap-2 mb-4">
           <h2 className="text-lg font-semibold">
             {dayNamesFull[new Date(selectedDate).getDay()]}, {new Date(selectedDate).getDate()}.{String(new Date(selectedDate).getMonth() + 1).padStart(2, '0')}
@@ -1855,6 +1903,51 @@ export default function CalendarPage() {
               </MotionItem>
             );})}
           </MotionList>
+        </div>
+      )}
+
+      {view === 'day-cards' && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {dayAppointments.length === 0 && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-sm text-muted-foreground text-center py-12 col-span-full"
+            >
+              Brak wizyt w tym dniu
+            </motion.p>
+          )}
+          {dayAppointments.map((apt: any) => {
+            const statusKey = mapStatus(apt.status);
+            return (
+              <motion.div key={apt.id} whileHover={{ y: -2 }} className="bg-card rounded-2xl p-4 border border-border">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="text-sm font-semibold">{apt.time}</p>
+                    <p className="text-xs text-muted-foreground">({apt.duration} min)</p>
+                  </div>
+                  <Badge variant="secondary" className={`text-[10px] ${statusColors[statusKey as keyof typeof statusColors]}`}>
+                    {statusLabels[statusKey as keyof typeof statusLabels]}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
+                  {getServiceBadges(apt)}
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{apt.client?.name}</div>
+                  <div className="mt-1">{apt.staff?.name || 'Dowolny'}</div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl h-8 text-xs mt-3 w-full"
+                  onClick={() => openDetails(apt.id)}
+                >
+                  Szczegóły
+                </Button>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 

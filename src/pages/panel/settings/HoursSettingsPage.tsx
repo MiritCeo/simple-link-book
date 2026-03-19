@@ -31,6 +31,8 @@ export default function HoursSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [editingHours, setEditingHours] = useState<any[]>([]);
   const [exceptionForm, setExceptionForm] = useState({ date: '', label: '', start: '', end: '' });
+  const today = new Date().toISOString().split('T')[0];
+  const isTimeOrderValid = (start?: string, end?: string) => !!start && !!end && start < end;
 
   useEffect(() => {
     let mounted = true;
@@ -112,9 +114,17 @@ export default function HoursSettingsPage() {
                 <span className="text-sm text-muted-foreground">
                   {ex.closed ? 'Zamknięte' : (ex.start && ex.end ? `${ex.start}–${ex.end}` : '—')}
                 </span>
+                {ex.date < today && (
+                  <span className="text-xs text-muted-foreground">Miniony</span>
+                )}
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs text-destructive">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={ex.date < today}
+                      className="rounded-xl h-9 text-xs text-destructive"
+                    >
                       Usuń
                     </Button>
                   </AlertDialogTrigger>
@@ -160,11 +170,13 @@ export default function HoursSettingsPage() {
               <div key={day.weekday} className="grid grid-cols-[1fr_1fr_1fr] gap-2 items-center">
                 <span className="text-sm font-medium">{dayNames[day.weekday]}</span>
                 <Input
+                  type="time"
                   value={day.open}
                   onChange={(e) => setEditingHours(prev => prev.map((d: any) => d.weekday === day.weekday ? { ...d, open: e.target.value, active: true } : d))}
                   className="h-10 rounded-xl"
                 />
                 <Input
+                  type="time"
                   value={day.close}
                   onChange={(e) => setEditingHours(prev => prev.map((d: any) => d.weekday === day.weekday ? { ...d, close: e.target.value, active: true } : d))}
                   className="h-10 rounded-xl"
@@ -178,6 +190,12 @@ export default function HoursSettingsPage() {
               className="rounded-xl"
               onClick={async () => {
                 try {
+                  for (const day of editingHours) {
+                    if (day.active && (!day.open || !day.close || day.open >= day.close)) {
+                      toast.error(`Nieprawidłowe godziny dla ${dayNames[day.weekday]}`);
+                      return;
+                    }
+                  }
                   await saveSalonHours(editingHours);
                   setHours(editingHours);
                   setEditHoursOpen(false);
@@ -202,7 +220,7 @@ export default function HoursSettingsPage() {
           <div className="space-y-3">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Data</label>
-              <Input type="date" value={exceptionForm.date} onChange={(e) => setExceptionForm(prev => ({ ...prev, date: e.target.value }))} className="h-11 rounded-xl" />
+              <Input type="date" min={today} value={exceptionForm.date} onChange={(e) => setExceptionForm(prev => ({ ...prev, date: e.target.value }))} className="h-11 rounded-xl" />
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Opis</label>
@@ -226,6 +244,14 @@ export default function HoursSettingsPage() {
               onClick={async () => {
                 if (!exceptionForm.date) {
                   toast.error('Wybierz datę wyjątku');
+                  return;
+                }
+                if (exceptionForm.date < today) {
+                  toast.error('Nie można dodać wyjątku w przeszłości');
+                  return;
+                }
+                if ((exceptionForm.start || exceptionForm.end) && !isTimeOrderValid(exceptionForm.start, exceptionForm.end)) {
+                  toast.error('Godzina rozpoczęcia musi być wcześniejsza niż zakończenia');
                   return;
                 }
                 try {
