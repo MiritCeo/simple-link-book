@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { statusLabels, statusColors, type Appointment } from '@/data/mockData';
 import { getReadableTextColor } from '@/lib/color';
+import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createAppointment, createClient, createSalonException, createStaffException, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient } from '@/lib/api';
@@ -1753,7 +1754,7 @@ export default function CalendarPage() {
                         {columnStaff && (
                           <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center overflow-hidden text-[10px] font-semibold">
                             {columnStaff.photoUrl ? (
-                              <img src={columnStaff.photoUrl} alt={columnStaff.name} className="h-full w-full object-cover" />
+                              <img src={normalizeAssetUrl(columnStaff.photoUrl)} alt={columnStaff.name} className="h-full w-full object-cover" />
                             ) : (
                               <span>{getInitials(columnStaff.name)}</span>
                             )}

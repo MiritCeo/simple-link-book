@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageTransition } from '@/components/motion';
 import { toast } from 'sonner';
+import { normalizeAssetUrl } from '@/lib/url';
 import { createStaffAccount, getSalonServices, getSalonStaff, updateStaff, updateStaffAccount, uploadStaffPhoto } from '@/lib/api';
 import { cropAndCompressImage } from '@/lib/image';
 
@@ -151,7 +152,7 @@ export default function StaffEditPage() {
                   />
                   {form.photoUrl && (
                     <div className="h-12 w-12 rounded-full overflow-hidden bg-muted shrink-0">
-                      <img src={form.photoUrl} alt="Podgląd" className="h-full w-full object-cover" />
+                      <img src={normalizeAssetUrl(form.photoUrl)} alt="Podgląd" className="h-full w-full object-cover" />
                     </div>
                   )}
                 </div>

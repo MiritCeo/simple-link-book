@@ -1,4 +1,5 @@
-export const API_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:4000";
+export const API_URL = (import.meta as any).env?.VITE_API_URL
+  || (typeof window !== "undefined" ? window.location.origin : "http://localhost:4000");
 
 const getToken = () => localStorage.getItem("auth_token");
 const setToken = (token: string) => localStorage.setItem("auth_token", token);

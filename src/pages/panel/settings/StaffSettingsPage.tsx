@@ -21,6 +21,7 @@ import {
 import { createStaff, getSalonServices, getSalonStaff, updateStaff, uploadStaffPhoto } from '@/lib/api';
 import { cropAndCompressImage } from '@/lib/image';
 import { toast } from 'sonner';
+import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
 
@@ -122,7 +123,7 @@ export default function StaffSettingsPage() {
                 <div className="min-w-0 flex items-start gap-3">
                   <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden text-xs font-semibold">
                     {staff.photoUrl ? (
-                      <img src={staff.photoUrl} alt={staff.name} className="h-full w-full object-cover" />
+                      <img src={normalizeAssetUrl(staff.photoUrl)} alt={staff.name} className="h-full w-full object-cover" />
                     ) : (
                       <span>{staff.name?.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}</span>
                     )}
@@ -274,7 +275,7 @@ export default function StaffSettingsPage() {
                 />
                 {form.photoUrl && (
                   <div className="h-12 w-12 rounded-full overflow-hidden bg-muted shrink-0">
-                    <img src={form.photoUrl} alt="Podgląd" className="h-full w-full object-cover" />
+                    <img src={normalizeAssetUrl(form.photoUrl)} alt="Podgląd" className="h-full w-full object-cover" />
                   </div>
                 )}
               </div>
