@@ -14,7 +14,7 @@ import { statusLabels, statusColors, type Appointment } from '@/data/mockData';
 import { getReadableTextColor } from '@/lib/color';
 import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { createAppointment, createClient, createSalonException, createStaffException, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -187,13 +187,6 @@ const DraggableAppointmentChip = ({
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [view, setView] = useState<'day-list' | 'day-timeline' | 'day-cards' | 'week' | 'month'>('day-list');
-  const [selectedSpecialist, setSelectedSpecialist] = useState<string>(() => {
-    try {
-      return localStorage.getItem('calendar_selected_specialist') || 'all';
-    } catch {
-      return 'all';
-    }
-  });
   const [staffFilterIds, setStaffFilterIds] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem('calendar_staff_filters');
@@ -365,25 +358,24 @@ export default function CalendarPage() {
   useEffect(() => {
     localStorage.setItem('calendar_timeline_scale', String(timelineScale));
   }, [timelineScale]);
-  useEffect(() => {
-    localStorage.setItem('calendar_selected_specialist', selectedSpecialist);
-  }, [selectedSpecialist]);
+  const matchesStaffFilter = (apt: any) => {
+    if (staffFilterIds.length === 0) return true;
+    if (!apt.staff?.id) return staffFilterIds.includes('any');
+    return staffFilterIds.includes(apt.staff.id);
+  };
+
+  const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
 
   const dayAppointments = useMemo(() => {
     let appts = appointments.filter((a: any) => a.date === selectedDate);
     if (staffFilterIds.length > 0) {
-      appts = appts.filter((a: any) => {
-        if (!a.staff?.id) return staffFilterIds.includes('any');
-        return staffFilterIds.includes(a.staff.id);
-      });
-    } else if (selectedSpecialist !== 'all') {
-      appts = appts.filter((a: any) => a.staff?.name === selectedSpecialist);
+      appts = appts.filter(matchesStaffFilter);
     }
     if (statusFilter !== 'all') {
       appts = appts.filter((a: any) => mapStatus(a.status) === statusFilter);
     }
     return appts;
-  }, [appointments, selectedDate, selectedSpecialist, staffFilterIds, statusFilter]);
+  }, [appointments, selectedDate, staffFilterIds, statusFilter]);
   const filteredClients = useMemo(() => {
     if (!clientSearch) return clients;
     const q = clientSearch.toLowerCase();
@@ -523,7 +515,6 @@ export default function CalendarPage() {
       });
     return { before, after };
   }, [salonBreaks]);
-  const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
   const addTimeOptions = useMemo(() => {
     if (!appointmentDate || selectedSpecialistId === 'any') return [];
     const window = getEffectiveWindow(appointmentDate, selectedSpecialistId);
@@ -948,20 +939,11 @@ export default function CalendarPage() {
       });
       return columns;
     }
-    if (selectedSpecialist !== 'all') {
-      const sp = staff.find((s: any) => s.name === selectedSpecialist);
-      if (sp) {
-        columns.push({ id: sp.id, name: sp.name, staffId: sp.id });
-      } else if (hasUnassigned) {
-        columns.push({ id: 'any', name: 'Dowolny', staffId: null });
-      }
-      return columns;
-    }
     const base = staffFilterActiveOnly ? visibleSpecialists.filter(sp => sp.active !== false) : visibleSpecialists;
     base.forEach(sp => columns.push({ id: sp.id, name: sp.name, staffId: sp.id }));
     if (hasUnassigned) columns.push({ id: 'any', name: 'Dowolny', staffId: null });
     return columns;
-  }, [selectedSpecialist, staffFilterIds, staffFilterActiveOnly, visibleSpecialists, staff, dayAppointments]);
+  }, [staffFilterIds, staffFilterActiveOnly, visibleSpecialists, staff, dayAppointments]);
 
   const getColumnLoadPct = (staffId?: string | null) => {
     const dayAppts = appointments.filter((a: any) => a.date === selectedDate && (
@@ -1517,7 +1499,7 @@ export default function CalendarPage() {
           {weekDays.map(date => {
             const d = new Date(date);
             const isSelected = selectedDate === date;
-            const dayAppts = appointments.filter((a: any) => a.date === date && (selectedSpecialist === 'all' || a.staff?.name === selectedSpecialist));
+            const dayAppts = appointments.filter((a: any) => a.date === date && matchesStaffFilter(a));
             return (
               <motion.button
                 key={date}
@@ -1547,24 +1529,13 @@ export default function CalendarPage() {
       {view !== 'month' && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
-          <Select value={selectedSpecialist} onValueChange={setSelectedSpecialist}>
-            <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-56">
-              <SelectValue placeholder="Wszyscy specjaliści" />
-            </SelectTrigger>
-            <SelectContent className="bg-popover z-50">
-              <SelectItem value="all">Wszyscy specjaliści</SelectItem>
-              {staff.map((sp: any) => (
-                <SelectItem key={sp.id} value={sp.name}>{sp.name} — {sp.role}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Button
             variant={staffFilterIds.length > 0 ? 'secondary' : 'outline'}
             size="sm"
             className="rounded-xl h-9 text-xs"
             onClick={() => setShowStaffFilter(v => !v)}
           >
-            Pracownicy {staffFilterIds.length > 0 ? `(${staffFilterIds.length})` : ''}
+            Wybierz osoby {staffFilterIds.length > 0 ? `(${staffFilterIds.length})` : ''}
           </Button>
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | Appointment['status'])}>
             <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-48">
@@ -1601,21 +1572,12 @@ export default function CalendarPage() {
               {compactTimeline ? 'Tryb normalny' : 'Tryb kompaktowy'}
             </Button>
           )}
-          <AnimatePresence>
-            {selectedSpecialist !== 'all' && (
-              <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedSpecialist('all')} className="rounded-xl h-9 text-xs text-muted-foreground shrink-0">
-                  Wyczyść
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       )}
       {view !== 'month' && showStaffFilter && (
         <div className="mb-4 rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">Filtr pracowników</h3>
+            <h3 className="text-sm font-semibold">Wybierz osobę/osoby</h3>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -1844,7 +1806,7 @@ export default function CalendarPage() {
       {/* List view */}
       {(view === 'day-list' || view === 'day-timeline') && (
         <div className={view === 'day-timeline' ? 'sm:hidden' : ''}>
-          <MotionList className="space-y-3" key={selectedDate + selectedSpecialist}>
+          <MotionList className="space-y-3" key={`${selectedDate}-${staffFilterIds.join(',')}`}>
             {dayAppointments.length === 0 && (
               <motion.p
                 initial={{ opacity: 0 }}
@@ -1942,7 +1904,7 @@ export default function CalendarPage() {
         <h3 className="col-span-7 text-base font-semibold mb-1">Przegląd tygodnia</h3>
         {weekDays.map(date => {
           const d = new Date(date);
-          const dayAppts = appointments.filter((a: any) => a.date === date && (selectedSpecialist === 'all' || a.staff?.name === selectedSpecialist));
+          const dayAppts = appointments.filter((a: any) => a.date === date && matchesStaffFilter(a));
           const isSelected = selectedDate === date;
           return (
             <MotionItem key={date}>
@@ -1990,7 +1952,7 @@ export default function CalendarPage() {
             {monthDays.map((date, idx) => {
               if (!date) return <div key={`empty-${idx}`} className="h-20 rounded-xl bg-muted/30" />;
               const d = new Date(date);
-              const dayAppts = appointments.filter((a: any) => a.date === date && (selectedSpecialist === 'all' || a.staff?.name === selectedSpecialist));
+              const dayAppts = appointments.filter((a: any) => a.date === date && matchesStaffFilter(a));
               return (
                 <DayDropZone key={date} id={`day-${date}`} date={date}>
                   <button
