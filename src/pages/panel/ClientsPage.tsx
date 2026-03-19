@@ -1,5 +1,5 @@
 import { useRef, useState, useMemo, useEffect } from 'react';
-import { Search, Phone, Mail, ChevronRight, Plus, User, Pencil, Trash2, Download, Broom } from 'lucide-react';
+import { Search, Phone, Mail, ChevronRight, Plus, User, Pencil, Trash2, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -529,7 +529,7 @@ export default function ClientsPage() {
             onClick={handleDedupeAppointments}
             disabled={dedupingAppointments}
           >
-            <Broom className="w-4 h-4" />{dedupingAppointments ? 'Czyszczenie...' : 'Usuń duplikaty wizyt'}
+            {dedupingAppointments ? 'Czyszczenie...' : 'Usuń duplikaty wizyt'}
           </Button>
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Button size="sm" className="rounded-xl gap-1.5 h-10" onClick={() => setAddOpen(true)}>
@@ -606,7 +606,7 @@ export default function ClientsPage() {
             onClick={handleDedupeAppointments}
             disabled={dedupingAppointments}
           >
-            <Broom className="w-4 h-4" />{dedupingAppointments ? 'Czyszczenie...' : 'Usuń duplikaty wizyt'}
+            {dedupingAppointments ? 'Czyszczenie...' : 'Usuń duplikaty wizyt'}
           </Button>
           <Button
             size="sm"
