@@ -250,6 +250,14 @@ export default function CalendarPage() {
   const [customDuration, setCustomDuration] = useState<number | ''>('');
   const [allowConflict, setAllowConflict] = useState(false);
   const [saving, setSaving] = useState(false);
+  const isCalendarView = view === 'day-timeline' || view === 'week' || view === 'month';
+  const toggleCalendarView = () => {
+    if (isCalendarView) {
+      setView('day-list');
+      return;
+    }
+    setView('week');
+  };
   const [services, setServices] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -963,7 +971,41 @@ export default function CalendarPage() {
           {loading && (
             <span className="text-xs text-muted-foreground hidden sm:inline">Ładowanie...</span>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl h-10 sm:hidden"
+            onClick={toggleCalendarView}
+          >
+            {isCalendarView ? 'Widok listy' : 'Widok kalendarza'}
+          </Button>
           <div className="hidden sm:flex items-center bg-muted rounded-xl p-1">
+            <button
+              onClick={() => setView('day-list')}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                view === 'day-list' || view === 'day-timeline' || view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              Dzień
+            </button>
+            <button
+              onClick={() => setView('week')}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                view === 'week' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              Tydzień
+            </button>
+            <button
+              onClick={() => setView('month')}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                view === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+              }`}
+            >
+              Miesiąc
+            </button>
+          </div>
+          <div className="flex sm:hidden items-center bg-muted rounded-xl p-1">
             <button
               onClick={() => setView('day-list')}
               className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
