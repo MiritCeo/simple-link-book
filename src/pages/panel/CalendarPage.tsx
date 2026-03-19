@@ -256,7 +256,7 @@ export default function CalendarPage() {
       setView('day-list');
       return;
     }
-    setView('week');
+    setView('day-timeline');
   };
   const [services, setServices] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
@@ -997,32 +997,34 @@ export default function CalendarPage() {
               Miesiąc
             </button>
           </div>
-          <div className="flex sm:hidden items-center bg-muted rounded-xl p-1">
-            <button
-              onClick={() => setView('day-list')}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                view === 'day-list' || view === 'day-timeline' || view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
-              }`}
-            >
-              Dzień
-            </button>
-            <button
-              onClick={() => setView('week')}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                view === 'week' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
-              }`}
-            >
-              Tydzień
-            </button>
-            <button
-              onClick={() => setView('month')}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                view === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
-              }`}
-            >
-              Miesiąc
-            </button>
-          </div>
+          {!isCalendarView && (
+            <div className="flex sm:hidden items-center bg-muted rounded-xl p-1">
+              <button
+                onClick={() => setView('day-list')}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  view === 'day-list' || view === 'day-timeline' || view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                Dzień
+              </button>
+              <button
+                onClick={() => setView('week')}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  view === 'week' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                Tydzień
+              </button>
+              <button
+                onClick={() => setView('month')}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  view === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                }`}
+              >
+                Miesiąc
+              </button>
+            </div>
+          )}
           <Dialog open={blockOpen} onOpenChange={(open) => { setBlockOpen(open); if (open) resetBlockForm(); }}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-10 hidden sm:inline-flex">
@@ -1524,7 +1526,7 @@ export default function CalendarPage() {
 
       {/* Week/Month selector */}
       {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards' || view === 'week') && (
-        <div className="flex items-center justify-between mb-2">
+        <div className={`flex items-center justify-between mb-2 ${view === 'day-timeline' ? 'hidden sm:flex' : ''}`}>
           <motion.button whileHover={{ x: -2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(-1)} className="touch-target flex items-center justify-center">
             <ChevronLeft className="w-5 h-5" />
           </motion.button>
@@ -1548,7 +1550,7 @@ export default function CalendarPage() {
 
       {/* Week days */}
       {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards' || view === 'week') && (
-        <div className="grid grid-cols-7 gap-1 mb-6">
+        <div className={`grid grid-cols-7 gap-1 mb-6 ${view === 'day-timeline' ? 'hidden sm:grid' : ''}`}>
           {weekDays.map(date => {
             const d = new Date(date);
             const isSelected = selectedDate === date;
@@ -1585,7 +1587,7 @@ export default function CalendarPage() {
           <Button
             variant={staffFilterIds.length > 0 ? 'secondary' : 'outline'}
             size="sm"
-            className="rounded-xl h-9 text-xs"
+            className="rounded-xl h-9 text-xs w-full sm:w-auto"
             onClick={() => setShowStaffFilter(v => !v)}
           >
             Wybierz osoby {staffFilterIds.length > 0 ? `(${staffFilterIds.length})` : ''}
@@ -1629,9 +1631,9 @@ export default function CalendarPage() {
       )}
       {view !== 'month' && showStaffFilter && (
         <div className="mb-4 rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
             <h3 className="text-sm font-semibold">Wybierz osobę/osoby</h3>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
