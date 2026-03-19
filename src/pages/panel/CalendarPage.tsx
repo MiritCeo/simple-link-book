@@ -1435,22 +1435,6 @@ export default function CalendarPage() {
           </div>
         </>
       )}
-          <button
-            onClick={() => setView('day-list')}
-            className={`p-2 rounded-lg transition-colors ${view === 'day-list' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
-            title="Widok listy"
-          >
-            <List className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setView('day-timeline')}
-            className={`p-2 rounded-lg transition-colors ${view === 'day-timeline' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}
-            title="Widok osi czasu"
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards') && (
         <div className="mb-4">
