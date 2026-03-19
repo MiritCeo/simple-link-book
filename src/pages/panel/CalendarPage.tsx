@@ -2268,6 +2268,14 @@ export default function CalendarPage() {
                   <span className="text-sm text-muted-foreground">Status</span>
                   <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
                 </div>
+                <div>
+                  <span className="text-sm text-muted-foreground block mb-1">Notatki klienta</span>
+                  <Textarea
+                    readOnly
+                    value={activeApt.client?.notes || '—'}
+                    className="rounded-xl min-h-[160px] bg-muted/30"
+                  />
+                </div>
               </div>
             )
               ) : detailTab === 'client' ? (
@@ -2297,7 +2305,7 @@ export default function CalendarPage() {
                     <Textarea
                       value={clientNoteDraft}
                       onChange={(e) => setClientNoteDraft(e.target.value)}
-                      className="rounded-xl min-h-[120px]"
+                      className="rounded-xl min-h-[180px]"
                     />
                     <Button
                       size="sm"
