@@ -85,7 +85,7 @@ export async function clientLogin(email: string, password: string) {
 }
 
 export async function getClientMe() {
-  return clientApiFetch<{ client: any }>("/api/client/me");
+  return clientApiFetch<{ client: any; salonPanelAvailable?: boolean }>("/api/client/me");
 }
 
 export async function getClientAppointments() {
@@ -111,6 +111,74 @@ export async function attachClientSalon(token: string) {
   return clientApiFetch<{ ok: boolean; salons?: any[] }>("/api/client/salons/attach", {
     method: "POST",
     body: JSON.stringify({ token }),
+  });
+}
+
+/** Publiczny katalog salonów Honly (mapa / mobile) */
+export async function getPublicSalonCatalog(params: { q?: string; page?: number; limit?: number }) {
+  const usp = new URLSearchParams();
+  if (params.q) usp.set("q", params.q);
+  if (params.page) usp.set("page", String(params.page));
+  if (params.limit) usp.set("limit", String(params.limit));
+  return apiFetch<{ salons: any[]; total: number; page: number; limit: number; pages: number }>(
+    `/api/public/salons/catalog?${usp.toString()}`,
+  );
+}
+
+/** Salony z Google w promieniu (backend + klucz GOOGLE_MAPS_API_KEY) */
+export async function getPlacesNearby(params: { lat: number; lng: number; radius?: number; q?: string }) {
+  const usp = new URLSearchParams({ lat: String(params.lat), lng: String(params.lng) });
+  if (params.radius != null) usp.set("radius", String(params.radius));
+  if (params.q?.trim()) usp.set("q", params.q.trim());
+  return apiFetch<{ places: any[]; googleConfigured: boolean; googlePlacesNote?: string | null }>(
+    `/api/public/places/nearby?${usp.toString()}`,
+  );
+}
+
+export async function getClientRatingPending() {
+  return clientApiFetch<{ pending: any[] }>("/api/client/ratings/pending");
+}
+
+export async function postClientRating(payload: { appointmentId: string; stars: number }) {
+  return clientApiFetch<{ ok: boolean }>("/api/client/ratings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getClientFavorites() {
+  return clientApiFetch<{ honlySalons: any[]; googlePlaces: any[] }>("/api/client/favorites");
+}
+
+export async function addClientFavoriteSalon(salonId: string) {
+  return clientApiFetch<{ ok: boolean }>("/api/client/favorites/salons", {
+    method: "POST",
+    body: JSON.stringify({ salonId }),
+  });
+}
+
+export async function removeClientFavoriteSalon(salonId: string) {
+  return clientApiFetch<{ ok: boolean }>(`/api/client/favorites/salons/${encodeURIComponent(salonId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function addClientFavoriteGooglePlace(payload: {
+  googlePlaceId: string;
+  displayName: string;
+  displayAddress?: string;
+  lat?: number;
+  lng?: number;
+}) {
+  return clientApiFetch<{ ok: boolean }>("/api/client/favorites/google-places", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeClientFavoriteGooglePlace(favoriteId: string) {
+  return clientApiFetch<{ ok: boolean }>(`/api/client/favorites/google-places/${encodeURIComponent(favoriteId)}`, {
+    method: "DELETE",
   });
 }
 
@@ -187,6 +255,44 @@ export async function createPublicAppointment(
 
 export async function registerClientFromBooking(payload: { token: string; email?: string; password: string }) {
   return apiFetch<{ ok: boolean; token: string; clientId: string; salonId: string }>("/api/public/client/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Rejestracja klienta — krok 1 (publiczne API, także mobile) */
+export async function clientRegisterSessionStart(payload: { email: string; password: string; confirmPassword: string }) {
+  return apiFetch<{ sessionToken: string; linkedSalonUser: boolean }>("/api/public/client/register/session", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Krok 2 — telefon, wysyła SMS + e-mail z jednym kodem */
+export async function clientRegisterSessionPhone(payload: { sessionToken: string; phone: string }) {
+  return apiFetch<{ ok: boolean }>("/api/public/client/register/session/phone", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function clientRegisterSessionResendCode(payload: { sessionToken: string }) {
+  return apiFetch<{ ok: boolean }>("/api/public/client/register/session/resend-code", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Krok 3 — kod weryfikacyjny, JWT jak po logowaniu */
+export async function clientRegisterSessionVerify(payload: { sessionToken: string; code: string }) {
+  return apiFetch<{
+    ok: boolean;
+    token: string;
+    clientId: string;
+    salonId: string;
+    salons?: any[];
+    linkedSalonUser: boolean;
+  }>("/api/public/client/register/session/verify", {
     method: "POST",
     body: JSON.stringify(payload),
   });

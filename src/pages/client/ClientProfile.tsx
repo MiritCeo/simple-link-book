@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { User, Mail, Phone, Lock, Check, LogOut } from 'lucide-react';
+import { User, Mail, Phone, Lock, Check, LogOut, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PageTransition } from '@/components/motion';
@@ -20,6 +20,7 @@ export default function ClientProfile() {
   const [editingPassword, setEditingPassword] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [salonPanelAvailable, setSalonPanelAvailable] = useState(false);
 
   const formatPhonePL = (input: string) => {
     const digits = input.replace(/\D/g, '');
@@ -42,6 +43,7 @@ export default function ClientProfile() {
           phone: res.client?.phone || '',
           email: res.client?.email || '',
         });
+        setSalonPanelAvailable(!!res.salonPanelAvailable);
       })
       .catch(() => {});
     return () => { mounted = false; };
@@ -256,6 +258,21 @@ export default function ClientProfile() {
           >
             <h2 className="font-semibold mb-3">Konto</h2>
             <div className="space-y-3">
+              {salonPanelAvailable && (
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate('/login', { state: { prefilledEmail: profile.email } })}
+                    className="w-full rounded-xl h-11 gap-2 justify-start"
+                  >
+                    <Building2 className="w-4 h-4" />
+                    Panel salonu (to samo konto e-mail)
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground mt-1.5 px-0.5">
+                    Zaloguj się hasłem do panelu salonu — to osobne konto użytkownika salonu powiązane z tym adresem e-mail.
+                  </p>
+                </motion.div>
+              )}
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                 <Button
                   variant="outline"

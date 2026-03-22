@@ -7,7 +7,10 @@ dotenv.config();
 async function seed() {
   const salon = await prisma.salon.upsert({
     where: { slug: "studio-bella" },
-    update: {},
+    update: {
+      latitude: 52.2297,
+      longitude: 21.0122,
+    },
     create: {
       slug: "studio-bella",
       name: "Studio Bella",
@@ -16,6 +19,8 @@ async function seed() {
       hours: "Pon-Pt 9:00-20:00, Sob 9:00-16:00",
       description: "Profesjonalny salon fryzjerski i kosmetyczny w sercu Warszawy.",
       accentColor: "#111827",
+      latitude: 52.2297,
+      longitude: 21.0122,
     },
   });
 

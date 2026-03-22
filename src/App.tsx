@@ -43,7 +43,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Public booking */}
           <Route path="/s/:slug" element={<SalonBooking />} />
@@ -61,7 +61,8 @@ const App = () => (
           <Route path="/konto" element={<ClientLayout />}>
             <Route index element={<ClientDashboard />} />
             <Route path="wizyty" element={<ClientAppointments />} />
-            <Route path="salony" element={<ClientSalons />} />
+            <Route path="ulubione" element={<ClientSalons mode="favorites" />} />
+            <Route path="salony" element={<ClientSalons mode="explore" />} />
             <Route path="profil" element={<ClientProfile />} />
           </Route>
 

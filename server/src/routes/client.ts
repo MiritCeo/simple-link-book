@@ -7,6 +7,7 @@ import prisma from "../prisma.js";
 import clientAuth, { ClientAuthRequest } from "../middleware/clientAuth.js";
 import { sendEmail } from "../notifications.js";
 import { ensureCancelToken } from "../notificationService.js";
+import { appointmentEndDate, canRateAppointment } from "../lib/appointmentTime.js";
 
 const router = Router();
 
@@ -35,7 +36,7 @@ const resetConfirmSchema = z.object({
   newPassword: z.string().min(8),
 });
 
-const buildClientSalons = async (account: { id: string; clientId: string }) => {
+export const buildClientSalons = async (account: { id: string; clientId: string }) => {
   const [primaryClient, links] = await Promise.all([
     prisma.client.findUnique({
       where: { id: account.clientId },
@@ -56,6 +57,8 @@ const buildClientSalons = async (account: { id: string; clientId: string }) => {
     phone?: string;
     hours?: string;
     description?: string;
+    latitude?: number | null;
+    longitude?: number | null;
   }> = [];
   if (primaryClient?.salon) {
     salons.push({
@@ -67,6 +70,8 @@ const buildClientSalons = async (account: { id: string; clientId: string }) => {
       phone: primaryClient.salon.phone,
       hours: primaryClient.salon.hours,
       description: primaryClient.salon.description,
+      latitude: primaryClient.salon.latitude,
+      longitude: primaryClient.salon.longitude,
     });
   }
 
@@ -82,13 +87,15 @@ const buildClientSalons = async (account: { id: string; clientId: string }) => {
       phone: link.salon.phone,
       hours: link.salon.hours,
       description: link.salon.description,
+      latitude: link.salon.latitude,
+      longitude: link.salon.longitude,
     });
   });
 
   return salons;
 };
 
-const ensureAccountSalonLink = async (accountId: string, clientId: string) => {
+export const ensureAccountSalonLink = async (accountId: string, clientId: string) => {
   const client = await prisma.client.findUnique({ where: { id: clientId } });
   if (!client) return;
   const existing = await prisma.clientAccountSalon.findFirst({
@@ -108,6 +115,18 @@ const getAccountForClient = async (clientId: string) => {
     include: { clientAccount: true },
   });
   return link?.clientAccount || null;
+};
+
+const getAccountContext = async (req: ClientAuthRequest) => {
+  const account = await getAccountForClient(req.client!.clientId);
+  if (!account) return null;
+  await ensureAccountSalonLink(account.id, account.clientId);
+  const links = await prisma.clientAccountSalon.findMany({
+    where: { clientAccountId: account.id },
+    select: { clientId: true },
+  });
+  const clientIds = Array.from(new Set([account.clientId, ...links.map((l) => l.clientId)]));
+  return { account, clientIds };
 };
 
 router.post("/login", async (req, res) => {
@@ -298,7 +317,16 @@ router.get("/me", async (req: ClientAuthRequest, res) => {
     where: { id: req.client!.clientId },
   });
   if (!client) return res.status(404).json({ error: "profile_not_found" });
-  return res.json({ client });
+  const account = await getAccountForClient(req.client!.clientId);
+  let salonPanelAvailable = false;
+  if (account) {
+    const salonUser = await prisma.user.findUnique({
+      where: { email: account.email },
+      select: { id: true, active: true },
+    });
+    salonPanelAvailable = !!(salonUser && salonUser.active);
+  }
+  return res.json({ client, salonPanelAvailable });
 });
 
 router.get("/appointments", async (req: ClientAuthRequest, res) => {
@@ -390,6 +418,185 @@ router.put("/password", async (req: ClientAuthRequest, res) => {
     data: { passwordHash },
   });
 
+  return res.json({ ok: true });
+});
+
+// --- Oceny salonów (1–5, 24h po wizycie, jedna ocena na wizytę) ---
+
+router.get("/ratings/pending", async (req: ClientAuthRequest, res) => {
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "account_not_found" });
+  const now = new Date();
+  const appts = await prisma.appointment.findMany({
+    where: {
+      clientId: { in: ctx.clientIds },
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      salonRating: { is: null },
+    },
+    include: { salon: true },
+    orderBy: [{ date: "desc" }, { time: "desc" }],
+  });
+  const pending = appts
+    .filter((a) => canRateAppointment(a, now).ok)
+    .map((a) => ({
+      appointmentId: a.id,
+      salonId: a.salonId,
+      salonName: a.salon.name,
+      date: a.date,
+      time: a.time,
+      duration: a.duration,
+      visitEndsAt: appointmentEndDate(a).toISOString(),
+    }));
+  return res.json({ pending });
+});
+
+router.post("/ratings", async (req: ClientAuthRequest, res) => {
+  const schema = z.object({
+    appointmentId: z.string(),
+    stars: z.number().int().min(1).max(5),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "account_not_found" });
+
+  const apt = await prisma.appointment.findUnique({
+    where: { id: parsed.data.appointmentId },
+    include: { salonRating: true },
+  });
+  if (!apt || !ctx.clientIds.includes(apt.clientId)) {
+    return res.status(404).json({ error: "appointment_not_found" });
+  }
+  if (apt.salonRating) return res.status(409).json({ error: "already_rated" });
+  const gate = canRateAppointment(apt, new Date());
+  if (!gate.ok) return res.status(403).json({ error: gate.reason || "cannot_rate" });
+
+  await prisma.salonRating.create({
+    data: {
+      appointmentId: apt.id,
+      clientAccountId: ctx.account.id,
+      salonId: apt.salonId,
+      stars: parsed.data.stars,
+    },
+  });
+  return res.json({ ok: true });
+});
+
+// --- Ulubione salony (Honly + Google) ---
+
+router.get("/favorites", async (req: ClientAuthRequest, res) => {
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "account_not_found" });
+
+  const [honly, google] = await Promise.all([
+    prisma.clientFavoriteSalon.findMany({
+      where: { clientAccountId: ctx.account.id },
+      include: { salon: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.clientFavoriteGooglePlace.findMany({
+      where: { clientAccountId: ctx.account.id },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  return res.json({
+    honlySalons: honly.map((f) => ({
+      favoriteId: f.id,
+      salonId: f.salon.id,
+      slug: f.salon.slug,
+      name: f.salon.name,
+      address: f.salon.address,
+      phone: f.salon.phone,
+      latitude: f.salon.latitude,
+      longitude: f.salon.longitude,
+    })),
+    googlePlaces: google.map((f) => ({
+      favoriteId: f.id,
+      googlePlaceId: f.googlePlaceId,
+      name: f.displayName,
+      address: f.displayAddress,
+      lat: f.lat,
+      lng: f.lng,
+    })),
+  });
+});
+
+router.post("/favorites/salons", async (req: ClientAuthRequest, res) => {
+  const schema = z.object({ salonId: z.string() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "account_not_found" });
+
+  const salon = await prisma.salon.findUnique({ where: { id: parsed.data.salonId } });
+  if (!salon) return res.status(404).json({ error: "salon_not_found" });
+
+  try {
+    await prisma.clientFavoriteSalon.create({
+      data: {
+        clientAccountId: ctx.account.id,
+        salonId: salon.id,
+      },
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002") return res.status(409).json({ error: "already_favorite" });
+    throw e;
+  }
+  return res.json({ ok: true });
+});
+
+router.delete("/favorites/salons/:salonId", async (req: ClientAuthRequest, res) => {
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "account_not_found" });
+  const r = await prisma.clientFavoriteSalon.deleteMany({
+    where: { clientAccountId: ctx.account.id, salonId: req.params.salonId },
+  });
+  if (r.count === 0) return res.status(404).json({ error: "not_found" });
+  return res.json({ ok: true });
+});
+
+router.post("/favorites/google-places", async (req: ClientAuthRequest, res) => {
+  const schema = z.object({
+    googlePlaceId: z.string().min(4),
+    displayName: z.string().min(1),
+    displayAddress: z.string().optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "account_not_found" });
+
+  try {
+    await prisma.clientFavoriteGooglePlace.create({
+      data: {
+        clientAccountId: ctx.account.id,
+        googlePlaceId: parsed.data.googlePlaceId,
+        displayName: parsed.data.displayName,
+        displayAddress: parsed.data.displayAddress,
+        lat: parsed.data.lat,
+        lng: parsed.data.lng,
+      },
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002") return res.status(409).json({ error: "already_favorite" });
+    throw e;
+  }
+  return res.json({ ok: true });
+});
+
+router.delete("/favorites/google-places/:id", async (req: ClientAuthRequest, res) => {
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "account_not_found" });
+  const r = await prisma.clientFavoriteGooglePlace.deleteMany({
+    where: { id: req.params.id, clientAccountId: ctx.account.id },
+  });
+  if (r.count === 0) return res.status(404).json({ error: "not_found" });
   return res.json({ ok: true });
 });
 

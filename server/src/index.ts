@@ -1,13 +1,14 @@
 import type { NotificationChannel } from "@prisma/client";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import fs from "fs";
 import path from "path";
 import yaml from "yaml";
 import authRoutes from "./routes/auth.js";
 import publicRoutes from "./routes/public.js";
+import publicDiscoveryRoutes from "./routes/publicDiscovery.js";
+import clientRegisterPublicRoutes from "./routes/clientRegisterPublic.js";
 import salonRoutes from "./routes/salon.js";
 import adminRoutes from "./routes/admin.js";
 import clientRoutes from "./routes/client.js";
@@ -15,8 +16,6 @@ import inventoryRoutes from "./routes/inventory.js";
 import auth from "./middleware/auth.js";
 import prisma from "./prisma.js";
 import { sendEventNotification } from "./notificationService.js";
-
-dotenv.config();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -33,6 +32,8 @@ if (fs.existsSync(openApiPath)) {
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/public", publicRoutes);
+app.use("/api/public", publicDiscoveryRoutes);
+app.use("/api/public", clientRegisterPublicRoutes);
 app.use("/api/client", clientRoutes);
 app.use("/api/salon", auth, salonRoutes);
 app.use("/api/salon/inventory", auth, inventoryRoutes);
@@ -97,7 +98,19 @@ setInterval(() => {
 }, 60_000);
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4000;
-app.listen(port, () => {
+const httpServer = app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`API running on http://localhost:${port}`);
+});
+httpServer.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[server] Port ${port} jest zajęty — zatrzymaj drugi proces (stary „npm run dev:full” / node). PowerShell: netstat -ano | findstr ":${port}" potem taskkill /PID <pid> /F`,
+    );
+  } else {
+    // eslint-disable-next-line no-console
+    console.error("[server] Błąd nasłuchiwania:", err);
+  }
+  process.exit(1);
 });

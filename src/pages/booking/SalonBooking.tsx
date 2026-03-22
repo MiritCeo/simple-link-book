@@ -7,7 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { type TimeSlot } from '@/data/mockData';
-import { createPublicAppointment, getPublicAvailability, getPublicSalon, registerClientFromBooking } from '@/lib/api';
+import {
+  createPublicAppointment,
+  getClientMe,
+  getPublicAvailability,
+  getPublicSalon,
+  registerClientFromBooking,
+} from '@/lib/api';
 
 const STEPS = ['Usługa', 'Specjalista', 'Termin', 'Dane', 'Potwierdzenie'];
 
@@ -60,7 +66,7 @@ export default function SalonBooking() {
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [salon, setSalon] = useState<any | null>(null);
   const accentHex = salon?.accentColor || '#CD798A';
-  const logoSrc = salon?.logoUrl || '/honlylogo.svg?v=20260318';
+  const logoSrc = salon?.logoUrl || '/happlogo.svg?v=20260324';
 
   const hexToHsl = (hex: string) => {
     const value = hex.replace('#', '');
@@ -109,6 +115,10 @@ export default function SalonBooking() {
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+  /** null = trwa wczytywanie profilu (jest token), true = zalogowany z kompletem danych, false = gość lub brak danych */
+  const [bookingSessionProfile, setBookingSessionProfile] = useState<boolean | null>(() =>
+    typeof window !== 'undefined' && localStorage.getItem('client_token') ? null : false,
+  );
 
   useEffect(() => {
     if (slug && normalizedSlug && slug !== normalizedSlug) {
@@ -133,6 +143,37 @@ export default function SalonBooking() {
       .finally(() => mounted && setLoadingSalon(false));
     return () => { mounted = false; };
   }, [slug, normalizedSlug, navigate]);
+
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('client_token') : null;
+    if (!token) {
+      setBookingSessionProfile(false);
+      return;
+    }
+    let cancelled = false;
+    getClientMe()
+      .then((res) => {
+        if (cancelled) return;
+        const c = res.client;
+        if (c?.name?.trim() && c?.phone?.trim()) {
+          setClientData((d) => ({
+            ...d,
+            name: String(c.name).trim(),
+            phone: String(c.phone).trim(),
+            email: (c.email && String(c.email).trim()) || d.email,
+          }));
+          setBookingSessionProfile(true);
+        } else {
+          setBookingSessionProfile(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBookingSessionProfile(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!preselectServiceId || selectedService || services.length === 0) return;
@@ -235,8 +276,26 @@ export default function SalonBooking() {
     setWeekStart(d.toISOString().split('T')[0]);
   };
 
-  const goNext = () => { setDirection(1); setStep(s => s + 1); };
-  const goBack = () => { setDirection(-1); setStep(s => s - 1); };
+  const goNext = () => {
+    setDirection(1);
+    setStep((s) => s + 1);
+  };
+  const goBack = () => {
+    setDirection(-1);
+    setStep((s) => {
+      if (s === 5 && bookingSessionProfile === true) return 3;
+      return s - 1;
+    });
+  };
+
+  const proceedFromTimeStep = () => {
+    setDirection(1);
+    if (bookingSessionProfile === true) {
+      setStep(5);
+      return;
+    }
+    setStep(4);
+  };
 
   const handleBook = async () => {
     if (!normalizedSlug || !selectedService || !selectedDate || !selectedTime || !clientData.name || !clientData.phone) {
@@ -444,7 +503,7 @@ export default function SalonBooking() {
 
           {/* Register prompt */}
           <AnimatePresence mode="wait">
-            {!registered && !showRegister && (
+            {!registered && !showRegister && bookingSessionProfile !== true && (
               <motion.div
                 key="prompt"
                 initial={{ opacity: 0, y: 15 }}
@@ -893,10 +952,18 @@ export default function SalonBooking() {
                       className="mt-6"
                     >
                       <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                        <Button onClick={goNext} size="lg" className="w-full h-14 rounded-2xl text-base">
-                          Dalej
+                        <Button
+                          onClick={proceedFromTimeStep}
+                          size="lg"
+                          className="w-full h-14 rounded-2xl text-base"
+                          disabled={bookingSessionProfile === null}
+                        >
+                          {bookingSessionProfile === null ? 'Chwila…' : 'Dalej'}
                         </Button>
                       </motion.div>
+                      {bookingSessionProfile === null && (
+                        <p className="text-center text-xs text-muted-foreground mt-2">Sprawdzamy Twoje konto…</p>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -909,29 +976,30 @@ export default function SalonBooking() {
                 <motion.h2 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-xl font-bold mb-1">Twoje dane</motion.h2>
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="text-sm text-muted-foreground mb-4">Potrzebujemy ich do potwierdzenia wizyty</motion.p>
 
-                {/* Login hint */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15, duration: 0.4 }}
-                  className="bg-secondary/50 rounded-xl p-4 mb-5 border border-border"
-                >
-                  <div className="flex items-start gap-3">
-                    <User className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Masz już konto?</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Zaloguj się, a dane uzupełnią się automatycznie — nie musisz ich wpisywać za każdym razem.
-                      </p>
-                      <a
-                        className="text-sm font-semibold text-primary mt-2 inline-block hover:underline"
-                        href="/login?client=1"
-                      >
-                        Zaloguj się
-                      </a>
+                {bookingSessionProfile !== true && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="bg-secondary/50 rounded-xl p-4 mb-5 border border-border"
+                  >
+                    <div className="flex items-start gap-3">
+                      <User className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium">Masz już konto?</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Zaloguj się, a dane uzupełnią się automatycznie — nie musisz ich wpisywać za każdym razem.
+                        </p>
+                        <a
+                          className="text-sm font-semibold text-primary mt-2 inline-block hover:underline"
+                          href="/login?client=1"
+                        >
+                          Zaloguj się
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                )}
 
                 <motion.div initial="hidden" animate="visible" variants={stagger} className="space-y-4">
                   {[
@@ -955,9 +1023,16 @@ export default function SalonBooking() {
                   </motion.div>
                 </motion.div>
 
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="text-xs text-muted-foreground mt-4 mb-2">
-                  Kontynuując, rezerwujesz jako gość. Możesz też utworzyć konto po wizycie.
-                </motion.p>
+                {bookingSessionProfile !== true && (
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-xs text-muted-foreground mt-4 mb-2"
+                  >
+                    Kontynuując, rezerwujesz jako gość. Możesz też utworzyć konto po wizycie.
+                  </motion.p>
+                )}
 
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
@@ -1039,7 +1114,9 @@ export default function SalonBooking() {
                   <p className="text-xs text-destructive text-center mt-3">{bookingError}</p>
                 )}
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.55 }} className="text-xs text-muted-foreground text-center mt-3">
-                  Otrzymasz SMS i email z potwierdzeniem wizyty oraz linkiem do rejestracji
+                  {bookingSessionProfile === true
+                    ? 'Wyślemy Ci SMS z potwierdzeniem. Jeśli masz podany e-mail w profilu, dostaniesz też wiadomość na skrzynkę.'
+                    : 'Otrzymasz SMS i e-mail z potwierdzeniem wizyty oraz linkiem do rejestracji konta (jeśli go jeszcze nie masz).'}
                 </motion.p>
               </div>
             )}

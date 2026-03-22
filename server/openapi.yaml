@@ -79,6 +79,32 @@ components:
         phone: { type: string }
         hours: { type: string }
         description: { type: string }
+    ClientMeResponse:
+      type: object
+      properties:
+        client:
+          type: object
+          description: Profil klienta w aktywnym salonie
+        salonPanelAvailable:
+          type: boolean
+          description: true gdy istnieje konto użytkownika panelu salonu (User) z tym samym e-mailem
+      required: [client, salonPanelAvailable]
+    ClientRegisterSessionStartResponse:
+      type: object
+      properties:
+        sessionToken: { type: string }
+        linkedSalonUser:
+          type: boolean
+          description: Ten sam e-mail ma już konto panelu salonu — można przełączyć się w ustawieniach /login
+      required: [sessionToken, linkedSalonUser]
+    ClientRegisterVerifyResponse:
+      allOf:
+        - $ref: '#/components/schemas/ClientAuthResponse'
+        - type: object
+          properties:
+            ok: { type: boolean }
+            linkedSalonUser: { type: boolean }
+          required: [ok, linkedSalonUser]
     PublicBookingError:
       type: object
       properties:
@@ -563,6 +589,9 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientMeResponse' }
     put:
       summary: Aktualizacja profilu klienta
       security: [{ BearerAuth: [] }]
@@ -606,6 +635,149 @@ paths:
       responses:
         '200':
           description: OK
+
+  /api/client/ratings/pending:
+    get:
+      summary: Wizyty oczekujące na ocenę (okno 24h po zakończeniu)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/ratings:
+    post:
+      summary: Wystawienie oceny 1–5 za wizytę (jedna na appointmentId)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                appointmentId: { type: string }
+                stars: { type: integer, minimum: 1, maximum: 5 }
+              required: [appointmentId, stars]
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: Poza oknem / zły status wizyty
+        '409':
+          description: Już ocenione
+
+  /api/client/favorites:
+    get:
+      summary: Ulubione salony (Purebook + Google)
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/favorites/salons:
+    post:
+      summary: Dodaj salon Purebook do ulubionych
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                salonId: { type: string }
+              required: [salonId]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/favorites/salons/{salonId}:
+    delete:
+      summary: Usuń salon Purebook z ulubionych
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: salonId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /api/client/favorites/google-places:
+    post:
+      summary: Dodaj miejsce Google do ulubionych
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                googlePlaceId: { type: string }
+                displayName: { type: string }
+                displayAddress: { type: string }
+                lat: { type: number }
+                lng: { type: number }
+              required: [googlePlaceId, displayName]
+      responses:
+        '200':
+          description: OK
+
+  /api/client/favorites/google-places/{id}:
+    delete:
+      summary: Usuń ulubione miejsce Google (id rekordu z GET /favorites)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+
+  /api/public/salons/catalog:
+    get:
+      summary: Katalog salonów Purebook (wyszukiwarka, średnia ocen — publiczne, mobile)
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: OK
+
+  /api/public/places/nearby:
+    get:
+      summary: Salony fryzjerskie/kosmetyczne z Google (Nearby) + dopasowanie do honly
+      parameters:
+        - in: query
+          name: lat
+          required: true
+          schema: { type: number }
+        - in: query
+          name: lng
+          required: true
+          schema: { type: number }
+        - in: query
+          name: radius
+          schema: { type: number, description: "Metry, max 50000" }
+        - in: query
+          name: q
+          schema: { type: string, description: "Słowo kluczowe (Nearby Search keyword), max 80 znaków" }
+      responses:
+        '200':
+          description: OK — googleConfigured false gdy brak GOOGLE_MAPS_API_KEY na serwerze
+        '400':
+          description: Nieprawidłowe współrzędne
 
   /api/public/salons/{slug}:
     get:
@@ -820,6 +992,149 @@ paths:
               examples:
                 email_taken:
                   value: { error: email_taken }
+
+  /api/public/client/register/session:
+    post:
+      summary: Rejestracja klienta — krok 1 (e-mail i hasło)
+      description: Tworzy sesję wieloetapowej rejestracji. Zwraca sessionToken na kolejne kroki (także dla aplikacji mobilnej).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                confirmPassword: { type: string, minLength: 8 }
+              required: [email, password, confirmPassword]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRegisterSessionStartResponse' }
+        '400':
+          description: Invalid payload / hasła niezgodne
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, enum: [invalid_payload, password_mismatch] }
+        '409':
+          description: Konto klienta z tym e-mailem już istnieje
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, enum: [email_taken] }
+
+  /api/public/client/register/session/phone:
+    post:
+      summary: Rejestracja klienta — krok 2 (telefon + wysłanie kodu)
+      description: Zapisuje numer i wysyła jeden wspólny kod SMS + e-mail (testy).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionToken: { type: string }
+                phone: { type: string, description: "Format +48 123 456 789" }
+              required: [sessionToken, phone]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+        '400':
+          description: Invalid payload / telefon
+        '404':
+          description: Sesja nie istnieje
+        '410':
+          description: Sesja wygasła
+
+  /api/public/client/register/session/resend-code:
+    post:
+      summary: Ponowne wysłanie kodu weryfikacyjnego (SMS + e-mail)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionToken: { type: string }
+              required: [sessionToken]
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Brak numeru w sesji
+        '404':
+          description: Sesja nie istnieje
+        '410':
+          description: Sesja wygasła
+
+  /api/public/client/register/session/verify:
+    post:
+      summary: Rejestracja klienta — krok 3 (kod z SMS/e-mail)
+      description: Po poprawnym kodzie zakłada konto, scala wizyty po numerze telefonu i salony. Zwraca JWT jak /api/client/login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sessionToken: { type: string }
+                code: { type: string, minLength: 4, maxLength: 8 }
+              required: [sessionToken, code]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRegisterVerifyResponse' }
+        '400':
+          description: Nieprawidłowy kod / wygasł / za dużo prób
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [invalid_payload, invalid_code, code_expired, phone_not_set, too_many_attempts]
+        '404':
+          description: Sesja nie istnieje
+        '409':
+          description: E-mail zajęty lub numer powiązany z innym kontem
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    enum: [email_taken, phone_linked_other_account]
+        '410':
+          description: Sesja wygasła
+        '503':
+          description: Brak salonu w systemie (skonfiguruj DEFAULT_REGISTRATION_SALON_ID)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, enum: [no_salon] }
 
   /api/salon/profile:
     get:

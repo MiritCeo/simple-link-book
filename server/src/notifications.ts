@@ -81,19 +81,31 @@ export async function sendSms(to: string, message: string, senderName?: string |
   }
 }
 
+function sendGridSandboxEnabled() {
+  const v = process.env.SENDGRID_SANDBOX_MODE?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 export async function sendEmail(to: string, subject: string, html: string) {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const from = process.env.SENDGRID_FROM;
+  const apiKey = process.env.SENDGRID_API_KEY?.trim();
+  const from = process.env.SENDGRID_FROM?.trim();
   if (!apiKey || !from) return;
   const fetchFn = getFetch();
   if (!fetchFn) return;
 
-  const payload = {
+  const sandbox = sendGridSandboxEnabled();
+  const payload: Record<string, unknown> = {
     personalizations: [{ to: [{ email: to }] }],
-    from: { email: from, ...(process.env.SENDGRID_FROM_NAME ? { name: process.env.SENDGRID_FROM_NAME } : {}) },
+    from: {
+      email: from,
+      ...(process.env.SENDGRID_FROM_NAME?.trim() ? { name: process.env.SENDGRID_FROM_NAME.trim() } : {}),
+    },
     subject,
     content: [{ type: "text/html", value: html }],
   };
+  if (sandbox) {
+    payload.mail_settings = { sandbox_mode: { enable: true } };
+  }
 
   try {
     const res = await fetchFn("https://api.sendgrid.com/v3/mail/send", {
@@ -104,6 +116,10 @@ export async function sendEmail(to: string, subject: string, html: string) {
       },
       body: JSON.stringify(payload),
     });
+    if (res.ok && sandbox) {
+      // eslint-disable-next-line no-console
+      console.info("SendGrid: sandbox — żądanie OK, e-mail nie został dostarczony (tylko walidacja API)", { to, subject });
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       // eslint-disable-next-line no-console

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const isClientLogin = new URLSearchParams(location.search).get('client') === '1';
+  const prefilledEmail = (location.state as { prefilledEmail?: string } | null)?.prefilledEmail;
+
+  useEffect(() => {
+    if (prefilledEmail) setEmail(prefilledEmail);
+  }, [prefilledEmail]);
 
   if (isClientLogin) {
     return <ClientLoginPage />;
@@ -47,7 +52,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="w-16 h-16 flex items-center justify-center mx-auto mb-4">
-            <img src="/honlylogo.svg?v=20260318" alt="honly" className="w-12 h-12" />
+            <img src="/happlogo.svg?v=20260324" alt="honly" className="w-12 h-12" />
           </div>
           <h1 className="text-2xl font-bold">honly</h1>
           <p className="text-sm text-muted-foreground mt-1">Zaloguj się do panelu salonu</p>
