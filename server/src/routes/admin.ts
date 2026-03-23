@@ -111,6 +111,7 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
   }
   const updated = await prisma.user.update({ where: { id: user.id }, data });
 
+  let activationEmail: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string } | undefined;
   if (parsed.data.active === true && user.active === false) {
     const salon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
     const html = `
@@ -127,7 +128,13 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
         <p>Pozdrawiamy,<br/>Zespół honly</p>
       </div>
     `;
-    await sendEmail(updated.email, "Konto salonu aktywne — witamy w testach honly", html);
+    const emailResult = await sendEmail(updated.email, "Konto salonu aktywne — witamy w testach honly", html);
+    activationEmail = {
+      attempted: true,
+      sent: !!emailResult?.ok,
+      sandbox: emailResult?.ok ? !!emailResult.sandbox : undefined,
+      reason: emailResult && !emailResult.ok ? emailResult.reason : undefined,
+    };
   }
 
   return res.json({
@@ -138,6 +145,7 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
       active: updated.active,
       createdAt: updated.createdAt,
     },
+    activationEmail,
   });
 });
 

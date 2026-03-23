@@ -89,9 +89,13 @@ function sendGridSandboxEnabled() {
 export async function sendEmail(to: string, subject: string, html: string) {
   const apiKey = process.env.SENDGRID_API_KEY?.trim();
   const from = process.env.SENDGRID_FROM?.trim();
-  if (!apiKey || !from) return;
+  if (!apiKey || !from) {
+    return { ok: false as const, reason: "missing_config" as const };
+  }
   const fetchFn = getFetch();
-  if (!fetchFn) return;
+  if (!fetchFn) {
+    return { ok: false as const, reason: "fetch_unavailable" as const };
+  }
 
   const sandbox = sendGridSandboxEnabled();
   const payload: Record<string, unknown> = {
@@ -124,10 +128,13 @@ export async function sendEmail(to: string, subject: string, html: string) {
       const text = await res.text().catch(() => "");
       // eslint-disable-next-line no-console
       console.warn("SendGrid error", { status: res.status, body: text });
+      return { ok: false as const, reason: "sendgrid_error" as const, status: res.status, body: text };
     }
+    return { ok: true as const, sandbox };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("SendGrid error", err);
+    return { ok: false as const, reason: "exception" as const };
   }
 }
 

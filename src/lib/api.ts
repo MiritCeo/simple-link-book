@@ -896,7 +896,10 @@ export async function createAdminOwner(payload: { email: string; phone: string; 
 }
 
 export async function updateAdminOwner(id: string, payload: { active?: boolean; password?: string }) {
-  return apiFetch<{ owner: any }>(`/api/admin/owners/${id}`, {
+  return apiFetch<{
+    owner: any;
+    activationEmail?: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string };
+  }>(`/api/admin/owners/${id}`, {
     method: "PATCH",
     auth: true,
     body: JSON.stringify(payload),

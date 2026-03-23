@@ -140,9 +140,32 @@ export default function SuperAdminPage() {
                     className="rounded-xl h-9 text-xs gap-1.5"
                     onClick={async () => {
                       try {
-                        await updateAdminOwner(owner.id, { active: !owner.active });
+                        const res = await updateAdminOwner(owner.id, { active: !owner.active });
                         await loadOwners();
-                        toast.success(owner.active ? 'Owner dezaktywowany' : 'Owner aktywowany');
+                        if (owner.active) {
+                          toast.success('Owner dezaktywowany');
+                          return;
+                        }
+                        const info = res.activationEmail;
+                        if (!info?.attempted) {
+                          toast.success("Owner aktywowany");
+                          return;
+                        }
+                        if (info.sent && info.sandbox) {
+                          toast.success("Owner aktywowany. E-mail wysłano w trybie sandbox (bez dostarczenia).");
+                        } else if (info.sent) {
+                          toast.success("Owner aktywowany i e-mail został wysłany.");
+                        } else {
+                          const reasonMap: Record<string, string> = {
+                            missing_config: "brak konfiguracji SendGrid (SENDGRID_API_KEY / SENDGRID_FROM)",
+                            fetch_unavailable: "brak dostępnego fetch w backendzie",
+                            sendgrid_error: "błąd API SendGrid",
+                            exception: "błąd podczas wysyłki",
+                          };
+                          toast.warning(
+                            `Owner aktywowany, ale e-mail nie został wysłany: ${reasonMap[info.reason || ""] || "nieznany powód"}.`,
+                          );
+                        }
                       } catch (err: any) {
                         toast.error(err.message || 'Błąd zapisu');
                       }
