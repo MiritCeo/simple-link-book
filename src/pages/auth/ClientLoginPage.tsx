@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { clientLogin } from "@/lib/api";
+import AuthSplitLayout from "./AuthSplitLayout";
 
 export default function ClientLoginPage() {
   const navigate = useNavigate();
@@ -29,51 +30,58 @@ export default function ClientLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <img src="/happlogo.svg?v=20260324" alt="honly" className="w-12 h-12 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold">Logowanie klienta</h1>
-          <p className="text-sm text-muted-foreground mt-1">Zaloguj się, aby zobaczyć swoje wizyty.</p>
-        </div>
-
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">Email</label>
-            <Input
-              type="email"
-              placeholder="email@example.com"
-              className="h-12 rounded-xl"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">Hasło</label>
-            <Input
-              type="password"
-              placeholder="••••••••"
-              className="h-12 rounded-xl"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" size="lg" className="w-full h-14 rounded-2xl text-base" disabled={!canSubmit}>
-            {loading ? "Logowanie..." : "Zaloguj się"}
-          </Button>
-          <Link to="/konto/rejestracja" className="text-xs text-muted-foreground text-center block hover:underline">
-            Nie masz konta? Zarejestruj się
-          </Link>
-          <Link to="/konto/reset-hasla" className="text-xs text-muted-foreground text-center block hover:underline">
-            Nie pamiętasz hasła?
-          </Link>
-          <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={() => navigate(-1)}>
-            Wróć
-          </Button>
-        </form>
+    <AuthSplitLayout
+      eyebrow="Konto klienta"
+      title="Twoje wizyty zawsze pod ręką."
+      subtitle="Logujesz się raz i zarządzasz terminami, ulubionymi salonami oraz historią wizyt."
+      points={[
+        'Szybkie umawianie kolejnych wizyt',
+        'Podgląd i zmiana terminów w kilku kliknięciach',
+        'Wszystkie ulubione salony i wizyty w jednym koncie',
+      ]}
+    >
+      <div className="text-center mb-8">
+        <img src="/happlogo.svg?v=20260324" alt="honly" className="w-12 h-12 mx-auto mb-4" />
+        <h1 className="text-2xl font-bold">Logowanie klienta</h1>
+        <p className="text-sm text-muted-foreground mt-1">Zaloguj się, aby zobaczyć swoje wizyty.</p>
       </div>
-    </div>
+
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <div>
+          <label className="text-sm font-medium mb-1.5 block">Email</label>
+          <Input
+            type="email"
+            placeholder="email@example.com"
+            className="h-12 rounded-xl"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium mb-1.5 block">Hasło</label>
+          <Input
+            type="password"
+            placeholder="••••••••"
+            className="h-12 rounded-xl"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+          />
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" size="lg" className="w-full h-14 rounded-2xl text-base" disabled={!canSubmit}>
+          {loading ? "Logowanie..." : "Zaloguj się"}
+        </Button>
+        <Link to="/konto/rejestracja" className="text-xs text-muted-foreground text-center block hover:underline">
+          Nie masz konta? Zarejestruj się
+        </Link>
+        <Link to="/konto/reset-hasla" className="text-xs text-muted-foreground text-center block hover:underline">
+          Nie pamiętasz hasła?
+        </Link>
+        <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={() => navigate(-1)}>
+          Wróć
+        </Button>
+      </form>
+    </AuthSplitLayout>
   );
 }
 

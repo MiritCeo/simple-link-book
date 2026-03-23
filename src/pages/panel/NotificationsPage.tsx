@@ -284,7 +284,7 @@ export default function NotificationsPage() {
               <p className="text-xs leading-relaxed">
                 Cześć Joanna! 👋 Przypominamy o wizycie jutro (22.02) o 09:00 w {senderName}.
                 Usługa: Strzyżenie damskie. Do zobaczenia!
-                Odwołaj: honly.pl/cancel/abc123
+                Odwołaj: honly.app/cancel/abc123
               </p>
             </div>
             <p className="text-[10px] text-muted-foreground mt-2">~1 SMS (148 znaków)</p>

@@ -20,6 +20,8 @@ const renderTemplate = (input: string, ctx: Record<string, string>) => {
   return Object.entries(ctx).reduce((acc, [key, value]) => acc.replaceAll(`{${key}}`, value), input);
 };
 
+const publicAppUrl = (process.env.PUBLIC_APP_URL?.trim() || "https://honly.app").replace(/\/$/, "");
+
 export const ensureCancelToken = async (appointmentId: string) => {
   const existing = await prisma.appointmentToken.findFirst({
     where: {
@@ -86,7 +88,7 @@ export async function sendEventNotification(
     service: serviceLabel,
     staff: appointment.staff?.name || "Dowolny",
     salon_name: appointment.salon?.name || "Salon",
-    cancel_link: `https://honly.pl/cancel/${cancelToken.token}`,
+    cancel_link: `${publicAppUrl}/cancel/${cancelToken.token}`,
   };
 
   const shouldSendSms = setting.smsEnabled && (!channels || channels.includes("SMS"));

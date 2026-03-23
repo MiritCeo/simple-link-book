@@ -10,6 +10,7 @@ import { ensureCancelToken } from "../notificationService.js";
 import { appointmentEndDate, canRateAppointment } from "../lib/appointmentTime.js";
 
 const router = Router();
+const publicAppUrl = (process.env.PUBLIC_APP_URL?.trim() || "https://honly.app").replace(/\/$/, "");
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -194,7 +195,7 @@ router.post("/password-reset", async (req, res) => {
     data: { clientAccountId: account.id, token, expiresAt },
   });
 
-  const resetLink = `https://honly.pl/konto/reset-hasla?token=${token}`;
+  const resetLink = `${publicAppUrl}/konto/reset-hasla?token=${token}`;
   await sendEmail(account.email, "Reset hasła", `Kliknij, aby ustawić nowe hasło: ${resetLink}`);
 
   const isProd = process.env.NODE_ENV === "production";

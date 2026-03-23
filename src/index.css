@@ -100,14 +100,42 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
-    font-family: 'DM Sans', system-ui, sans-serif;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    @apply bg-background text-foreground font-sans antialiased;
+    font-weight: 400;
     -webkit-tap-highlight-color: transparent;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'DM Serif Display', Georgia, serif;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-sans;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  h1 {
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  h2 {
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-weight: 600;
+    letter-spacing: -0.015em;
   }
 
   /* Mobile app-like behavior */
@@ -127,10 +155,13 @@
   }
 
   .font-display {
-    font-family: 'DM Serif Display', Georgia, serif;
+    font-family: Poppins, system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 
   .font-body {
-    font-family: 'DM Sans', system-ui, sans-serif;
+    font-family: Poppins, system-ui, sans-serif;
+    font-weight: 400;
   }
 }
