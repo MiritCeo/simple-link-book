@@ -22,6 +22,7 @@ const mobileNavItems = [
   navItems.find(item => item.path === '/panel/kalendarz')!,
   navItems.find(item => item.path === '/panel/wizyty')!,
   navItems.find(item => item.path === '/panel/grafik')!,
+  navItems.find(item => item.path === '/panel/ustawienia')!,
 ];
 
 export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salonName?: string | null }) {
@@ -127,7 +128,7 @@ export default function BottomNav() {
   const navigate = useNavigate();
   const role = getRole();
   const visibleMobileItems = role === 'STAFF'
-    ? mobileNavItems.filter(item => !['/panel/dashboard', '/panel/grafik'].includes(item.path))
+    ? mobileNavItems.filter(item => !['/panel/dashboard', '/panel/grafik', '/panel/ustawienia'].includes(item.path))
     : mobileNavItems;
 
   return (
