@@ -50,6 +50,7 @@ router.post("/register", async (req, res) => {
       passwordHash,
       role: "OWNER",
       salonId: salon.id,
+      active: false,
     },
   });
   await prisma.userSalon.create({
@@ -60,16 +61,13 @@ router.post("/register", async (req, res) => {
     },
   });
 
-  const token = jwt.sign({ userId: user.id, salonId: salon.id, role: user.role }, process.env.JWT_SECRET || "dev", {
-    expiresIn: "7d",
-  });
-
   return res.json({
-    token,
+    ok: true,
+    pendingApproval: true,
     salonId: salon.id,
     userId: user.id,
     role: user.role,
-    salons: [{ id: salon.id, name: salon.name, slug: salon.slug, role: user.role }],
+    salons: [{ id: salon.id, name: salon.name, slug: salon.slug, role: user.role, active: false }],
   });
 });
 

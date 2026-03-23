@@ -129,7 +129,7 @@ export default function SuperAdminPage() {
                       {owner.salon?.name || 'Brak salonu'}
                     </Badge>
                     {!owner.active && (
-                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Nieaktywny</Badge>
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">Oczekuje aktywacji</Badge>
                     )}
                   </div>
                 </div>

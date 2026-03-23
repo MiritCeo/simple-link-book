@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { login } from '@/lib/api';
@@ -44,7 +44,14 @@ export default function LoginPage() {
       }
       navigate('/panel/kalendarz');
     } catch (err: any) {
-      toast.error(err.message || 'Nie udało się zalogować');
+      const code = err?.message;
+      if (code === "account_inactive") {
+        toast.error("Konto salonu oczekuje na aktywację przez Super Administratora.");
+      } else if (code === "invalid_credentials") {
+        toast.error("Nieprawidłowy email lub hasło.");
+      } else {
+        toast.error(err.message || 'Nie udało się zalogować');
+      }
     }
   };
 
@@ -82,7 +89,13 @@ export default function LoginPage() {
       </form>
 
       <p className="text-xs text-muted-foreground text-center mt-6">
-        Nie masz konta? <button className="text-primary font-medium">Zarejestruj salon</button>
+        Nie masz konta?{" "}
+        <Link to="/rejestracja-salonu" className="text-primary font-medium hover:underline">
+          Zarejestruj salon
+        </Link>
+      </p>
+      <p className="text-[11px] text-amber-800/90 dark:text-amber-200/90 text-center mt-2">
+        Rejestracja salonu jest obecnie w wersji testowej i dostępna dla wybranych partnerów.
       </p>
     </AuthSplitLayout>
   );

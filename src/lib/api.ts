@@ -72,6 +72,27 @@ export async function login(email: string, password: string) {
   return data;
 }
 
+export async function registerSalon(payload: {
+  email: string;
+  phone: string;
+  password: string;
+  salonName: string;
+  salonSlug: string;
+}) {
+  const data = await apiFetch<{
+    ok: boolean;
+    pendingApproval: boolean;
+    salonId: string | null;
+    userId: string;
+    role: "OWNER" | "STAFF" | "SUPER_ADMIN";
+    salons: any[];
+  }>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return data;
+}
+
 export async function clientLogin(email: string, password: string) {
   const data = await apiFetch<{ token: string; clientId: string; salonId: string; salons?: any[] }>(
     "/api/client/login",

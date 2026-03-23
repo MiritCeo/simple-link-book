@@ -10,6 +10,7 @@ import SalonSelectPage from "./pages/auth/SalonSelectPage";
 import ClientLoginPage from "./pages/auth/ClientLoginPage";
 import ClientResetPasswordPage from "./pages/auth/ClientResetPasswordPage";
 import ClientRegisterPage from "./pages/auth/ClientRegisterPage";
+import SalonRegisterPage from "./pages/auth/SalonRegisterPage";
 import PanelLayout from "./components/layout/PanelLayout";
 import DashboardPage from "./pages/panel/DashboardPage";
 import CalendarPage from "./pages/panel/CalendarPage";
@@ -51,6 +52,7 @@ const App = () => (
 
           {/* Auth */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/rejestracja-salonu" element={<SalonRegisterPage />} />
           <Route path="/logowanie" element={<Navigate to="/login" replace />} />
           <Route path="/konto/logowanie" element={<ClientLoginPage />} />
           <Route path="/konto/rejestracja" element={<ClientRegisterPage />} />

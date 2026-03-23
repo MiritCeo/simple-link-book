@@ -22,6 +22,7 @@ export default function AuthSplitLayout({ eyebrow, title, subtitle, points, chil
               <p className="mt-1 text-xs text-muted-foreground">
                 iOS i Android. Wygodniej umawiasz i edytujesz wizyty z telefonu.
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">Już wkrótce do pobrania w App Store i Google Play.</p>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-1.5">
                   <BadgeCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
@@ -34,7 +35,7 @@ export default function AuthSplitLayout({ eyebrow, title, subtitle, points, chil
               </ul>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <a
-                  href="https://honly.app"
+                  href="https://www.apple.com/ios/app-store/"
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-2.5 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-95"
@@ -43,7 +44,7 @@ export default function AuthSplitLayout({ eyebrow, title, subtitle, points, chil
                   App Store
                 </a>
                 <a
-                  href="https://honly.app"
+                  href="https://www.android.com/"
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-primary/35 bg-background px-2.5 py-2 text-xs font-semibold text-foreground transition hover:bg-muted"
@@ -87,6 +88,7 @@ export default function AuthSplitLayout({ eyebrow, title, subtitle, points, chil
                   </span>
                 </div>
               </div>
+              <p className="mt-2 text-xs text-white/85">Już wkrótce do pobrania w App Store i Google Play.</p>
               <ul className="mt-4 space-y-2.5 text-sm text-white/92">
                 <li className="flex items-start gap-2.5">
                   <CalendarClock className="mt-0.5 h-4.5 w-4.5 shrink-0" />
@@ -99,7 +101,7 @@ export default function AuthSplitLayout({ eyebrow, title, subtitle, points, chil
               </ul>
               <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <a
-                  href="https://honly.app"
+                  href="https://www.apple.com/ios/app-store/"
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-semibold text-[#8f3f57] transition hover:bg-white/90"
@@ -109,7 +111,7 @@ export default function AuthSplitLayout({ eyebrow, title, subtitle, points, chil
                   <ArrowRight className="h-4 w-4" />
                 </a>
                 <a
-                  href="https://honly.app"
+                  href="https://www.android.com/"
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/35 bg-white/10 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"

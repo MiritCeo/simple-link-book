@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import prisma from "../prisma.js";
 import type { AuthRequest } from "../middleware/auth.js";
+import { sendEmail } from "../notifications.js";
 
 const router = Router();
 
@@ -109,6 +110,26 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
     data.passwordHash = await bcrypt.hash(parsed.data.password, 10);
   }
   const updated = await prisma.user.update({ where: { id: user.id }, data });
+
+  if (parsed.data.active === true && user.active === false) {
+    const salon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
+    const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#212121">
+        <h2 style="margin:0 0 12px">Konto salonu zostało aktywowane</h2>
+        <p>Cześć!</p>
+        <p>Dziękujemy za dołączenie do zamkniętych testów honly.</p>
+        <p>Twoje konto${salon?.name ? ` dla salonu <strong>${salon.name}</strong>` : ""} zostało aktywowane i możesz już zalogować się do panelu.</p>
+        <p style="margin:16px 0">
+          <a href="https://honly.app/login" style="display:inline-block;background:#b8566f;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px">
+            Przejdź do logowania
+          </a>
+        </p>
+        <p>Pozdrawiamy,<br/>Zespół honly</p>
+      </div>
+    `;
+    await sendEmail(updated.email, "Konto salonu aktywne — witamy w testach honly", html);
+  }
+
   return res.json({
     owner: {
       id: updated.id,
