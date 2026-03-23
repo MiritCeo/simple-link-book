@@ -717,11 +717,29 @@ export async function uploadStaffPhoto(file: File) {
   return res.json() as Promise<{ url: string }>;
 }
 
-export async function deleteStaff(id: string) {
-  return apiFetch<{ ok: boolean }>(`/api/salon/staff/${id}`, {
+export async function deleteStaff(id: string, payload?: { replacementStaffId?: string }) {
+  const token = getToken();
+  const res = await fetch(`${API_URL}/api/salon/staff/${id}`, {
     method: "DELETE",
-    auth: true,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload || {}),
   });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || `Request failed: ${res.status}`) as Error & {
+      code?: string;
+      messagePl?: string;
+      stats?: { total: number; upcoming: number; past: number };
+    };
+    err.code = body.error;
+    err.messagePl = body.message;
+    err.stats = body.stats;
+    throw err;
+  }
+  return res.json() as Promise<{ ok: boolean; staff: any; reassignedAppointments?: number }>;
 }
 
 export async function getInventoryItems() {

@@ -1317,15 +1317,27 @@ paths:
       responses:
         '200': { description: OK }
     delete:
-      summary: Dezaktywacja pracownika
+      summary: Usunięcie (dezaktywacja) pracownika
       security: [{ BearerAuth: [] }]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                replacementStaffId:
+                  type: string
+                  description: "ID pracownika, do którego mają zostać przepisane wizyty (wymagane gdy usuwany pracownik ma wizyty)."
       responses:
         '200': { description: OK }
+        '409':
+          description: Pracownik ma przypisane wizyty i wymaga wskazania replacementStaffId
 
   /api/salon/staff/{id}/account:
     post:

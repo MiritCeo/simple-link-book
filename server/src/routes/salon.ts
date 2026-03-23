@@ -822,21 +822,68 @@ router.put("/staff/:id/account", async (req: AuthRequest, res) => {
 
 router.delete("/staff/:id", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
+  const schema = z.object({
+    replacementStaffId: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usuwania pracownika" });
+
+  const salonId = getSalonId(req);
   const existing = await prisma.staff.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== getSalonId(req)) {
+  if (!existing || existing.salonId !== salonId) {
     return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
   }
-  const apptCount = await prisma.appointment.count({
-    where: { staffId: req.params.id },
-  });
+
+  const now = new Date();
+  const nowDate = now.toISOString().slice(0, 10);
+  const nowTime = now.toTimeString().slice(0, 5);
+  const [apptCount, upcomingCount] = await Promise.all([
+    prisma.appointment.count({ where: { salonId, staffId: req.params.id } }),
+    prisma.appointment.count({
+      where: {
+        salonId,
+        staffId: req.params.id,
+        OR: [
+          { date: { gt: nowDate } },
+          { date: nowDate, time: { gte: nowTime } },
+        ],
+      },
+    }),
+  ]);
+  const pastCount = Math.max(0, apptCount - upcomingCount);
+
+  let reassignedAppointments = 0;
   if (apptCount > 0) {
-    return res.status(409).json({ error: "Pracownik ma powiązane wizyty" });
+    const replacementStaffId = parsed.data.replacementStaffId;
+    if (!replacementStaffId) {
+      return res.status(409).json({
+        error: "staff_has_appointments",
+        message: "Pracownik ma przypisane wizyty. Wybierz pracownika zastępczego, aby przepisać wizyty.",
+        stats: { total: apptCount, upcoming: upcomingCount, past: pastCount },
+      });
+    }
+    if (replacementStaffId === req.params.id) {
+      return res.status(400).json({ error: "replacement_same_staff" });
+    }
+    const replacement = await prisma.staff.findFirst({
+      where: { id: replacementStaffId, salonId, active: true },
+      select: { id: true },
+    });
+    if (!replacement) {
+      return res.status(400).json({ error: "replacement_staff_not_found" });
+    }
+    const reassign = await prisma.appointment.updateMany({
+      where: { salonId, staffId: req.params.id },
+      data: { staffId: replacementStaffId },
+    });
+    reassignedAppointments = reassign.count;
   }
+
   const staff = await prisma.staff.update({ where: { id: req.params.id }, data: { active: false } });
   if (staff.userId) {
     await prisma.user.update({ where: { id: staff.userId }, data: { active: false } });
   }
-  return res.json({ ok: true, staff });
+  return res.json({ ok: true, staff, reassignedAppointments });
 });
 
 router.get("/clients", async (req: AuthRequest, res) => {

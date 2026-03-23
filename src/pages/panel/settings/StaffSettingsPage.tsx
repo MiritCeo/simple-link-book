@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { dedupeSalonStaff, getSalonStaff, updateStaff } from '@/lib/api';
+import { dedupeSalonStaff, deleteStaff, getSalonStaff } from '@/lib/api';
 import { toast } from 'sonner';
 import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
@@ -27,6 +29,10 @@ export default function StaffSettingsPage() {
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dedupeLoading, setDedupeLoading] = useState(false);
+  const [deleteDialogStaff, setDeleteDialogStaff] = useState<any | null>(null);
+  const [replacementStaffId, setReplacementStaffId] = useState<string>('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteStats, setDeleteStats] = useState<{ total: number; upcoming: number; past: number } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -47,6 +53,11 @@ export default function StaffSettingsPage() {
   }, [search, staff]);
   const openCreate = () => navigate('/panel/ustawienia/pracownicy/nowy');
   const openEdit = (id: string) => navigate(`/panel/ustawienia/pracownicy/${id}`);
+  const replacementOptions = useMemo(
+    () =>
+      staff.filter((s: any) => s.active !== false && deleteDialogStaff && s.id !== deleteDialogStaff.id),
+    [staff, deleteDialogStaff],
+  );
 
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6 pb-8">
@@ -188,37 +199,29 @@ export default function StaffSettingsPage() {
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5 text-destructive">
-                      <Trash2 className="w-3.5 h-3.5" />{staff.active === false ? 'Aktywuj' : 'Dezaktywuj'}
+                      <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5 text-destructive">
+                        <Trash2 className="w-3.5 h-3.5" />Usuń
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent className="rounded-2xl">
                       <AlertDialogHeader>
-                      <AlertDialogTitle>{staff.active === false ? 'Aktywować pracownika?' : 'Dezaktywować pracownika?'}</AlertDialogTitle>
+                        <AlertDialogTitle>Usunąć pracownika?</AlertDialogTitle>
                         <AlertDialogDescription>
-                        {staff.active === false ? 'Pracownik wróci do listy.' : 'Pracownik nie będzie dostępny w rezerwacjach.'}
+                          Jeśli pracownik ma przypisane wizyty, system poprosi o przepisanie ich do innej osoby.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel className="rounded-xl">Anuluj</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="rounded-xl"
-                    onClick={() => {
-                    const nextActive = staff.active === false;
-                    updateStaff(staff.id, {
-                      name: staff.name,
-                      role: staff.role,
-                      phone: staff.phone,
-                      active: nextActive,
-                      serviceIds: staff.services?.map((s: any) => s.id) ?? [],
-                    })
-                      .then(() => getSalonStaff().then(res => setStaff(res.staff || [])))
-                      .then(() => toast.success(nextActive ? 'Pracownik aktywowany' : 'Pracownik dezaktywowany'))
-                      .catch((err) => toast.error(err.message || 'Błąd zapisu'));
-                    }}
-                  >
-                  {staff.active === false ? 'Aktywuj' : 'Dezaktywuj'}
-                  </AlertDialogAction>
+                        <AlertDialogAction
+                          className="rounded-xl"
+                          onClick={() => {
+                            setDeleteDialogStaff(staff);
+                            setReplacementStaffId('');
+                            setDeleteStats(null);
+                          }}
+                        >
+                          Dalej
+                        </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
@@ -248,6 +251,93 @@ export default function StaffSettingsPage() {
           Przejdź do modułu „Grafik”, aby ustawiać dostępności, wyjątki i reguły rotacyjne.
         </div>
       </div>
+
+      <Dialog
+        open={!!deleteDialogStaff}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteDialogStaff(null);
+            setReplacementStaffId('');
+            setDeleteStats(null);
+          }
+        }}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Usuń pracownika</DialogTitle>
+            <DialogDescription>
+              {deleteDialogStaff ? `Pracownik: ${deleteDialogStaff.name}` : 'Wybierz sposób usunięcia pracownika.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {deleteStats && (
+              <div className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground mb-1">Wykryto przypisane wizyty</p>
+                <p>Łącznie: {deleteStats.total}</p>
+                <p>Nadchodzące: {deleteStats.upcoming}</p>
+                <p>Historyczne: {deleteStats.past}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Przepisz wizyty do pracownika</label>
+              <Select value={replacementStaffId} onValueChange={setReplacementStaffId}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue placeholder="Wybierz pracownika (gdy są wizyty)" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {replacementOptions.map((s: any) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Jeśli pracownik nie ma wizyt, usunięcie przejdzie bez wyboru.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setDeleteDialogStaff(null)}>
+              Anuluj
+            </Button>
+            <Button
+              className="rounded-xl"
+              disabled={deleteLoading}
+              onClick={async () => {
+                if (!deleteDialogStaff) return;
+                setDeleteLoading(true);
+                try {
+                  const result = await deleteStaff(deleteDialogStaff.id, replacementStaffId ? { replacementStaffId } : undefined);
+                  const refreshed = await getSalonStaff();
+                  setStaff(refreshed.staff || []);
+                  setDeleteDialogStaff(null);
+                  setReplacementStaffId('');
+                  setDeleteStats(null);
+                  toast.success(
+                    result.reassignedAppointments && result.reassignedAppointments > 0
+                      ? `Pracownik usunięty. Przepisano ${result.reassignedAppointments} wizyt.`
+                      : 'Pracownik usunięty.',
+                  );
+                } catch (err: any) {
+                  if (err?.code === 'staff_has_appointments') {
+                    setDeleteStats(err.stats || null);
+                    toast.warning(err.messagePl || 'Pracownik ma przypisane wizyty — wybierz zastępstwo.');
+                  } else {
+                    toast.error(err.messagePl || err.message || 'Nie udało się usunąć pracownika');
+                  }
+                } finally {
+                  setDeleteLoading(false);
+                }
+              }}
+            >
+              {deleteLoading ? 'Usuwanie...' : 'Usuń pracownika'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </PageTransition>
   );
