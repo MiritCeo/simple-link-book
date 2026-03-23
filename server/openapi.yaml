@@ -786,7 +786,7 @@ paths:
   /api/public/maps/config:
     get:
       summary: Runtime konfiguracja mapy dla frontendu/mobile
-      description: Zwraca klucz Google Maps JS API. Priorytet: GOOGLE_MAPS_API_KEY, fallback VITE_GOOGLE_MAPS_API_KEY.
+      description: "Zwraca klucz Google Maps JS API. Priorytet: GOOGLE_MAPS_API_KEY, fallback VITE_GOOGLE_MAPS_API_KEY."
       responses:
         '200':
           description: OK
