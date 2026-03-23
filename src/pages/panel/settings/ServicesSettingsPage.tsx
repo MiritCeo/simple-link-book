@@ -112,6 +112,26 @@ export default function ServicesSettingsPage() {
   };
 
   const refresh = () => getSalonServices().then(res => setServices(res.services || []));
+  const toUpdatePayload = (service: any, overrides?: Partial<{
+    name: string;
+    category: string;
+    duration: number;
+    price: number;
+    description?: string;
+    color?: string;
+    active?: boolean;
+    bookingVisible?: boolean;
+  }>) => ({
+    name: String(service?.name || '').trim(),
+    category: String(service?.category || '').trim(),
+    duration: Number(service?.duration || 0),
+    price: Number(service?.price || 0),
+    description: typeof service?.description === 'string' ? service.description : undefined,
+    color: typeof service?.color === 'string' ? service.color : undefined,
+    active: typeof service?.active === 'boolean' ? service.active : undefined,
+    bookingVisible: typeof service?.bookingVisible === 'boolean' ? service.bookingVisible : undefined,
+    ...(overrides || {}),
+  });
 
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6 pb-8">
@@ -185,7 +205,7 @@ export default function ServicesSettingsPage() {
                     <Switch
                       checked={service.bookingVisible !== false}
                       onCheckedChange={(checked) => {
-                        updateService(service.id, { ...service, bookingVisible: checked })
+                        updateService(service.id, toUpdatePayload(service, { bookingVisible: checked }))
                           .then(() => refresh())
                           .then(() => toast.success(checked ? 'Usługa widoczna w rezerwacji' : 'Usługa ukryta w rezerwacji'))
                           .catch((err) => toast.error(err.message || 'Błąd zapisu'));
@@ -235,7 +255,7 @@ export default function ServicesSettingsPage() {
                     className="rounded-xl"
                     onClick={() => {
                       const nextActive = service.active === false;
-                      updateService(service.id, { ...service, active: nextActive })
+                      updateService(service.id, toUpdatePayload(service, { active: nextActive }))
                         .then(() => refresh())
                         .then(() => toast.success(nextActive ? 'Usługa aktywowana' : 'Usługa dezaktywowana'))
                         .catch((err) => toast.error(err.message || 'Błąd zapisu'));
