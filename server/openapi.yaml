@@ -1240,15 +1240,27 @@ paths:
       responses:
         '200': { description: OK }
     delete:
-      summary: Dezaktywacja usługi (soft delete)
+      summary: Usunięcie (dezaktywacja) usługi
       security: [{ BearerAuth: [] }]
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                replacementServiceId:
+                  type: string
+                  description: "ID usługi zastępczej dla przypisanych wizyt (wymagane gdy usuwana usługa ma wizyty)."
       responses:
         '200': { description: OK }
+        '409':
+          description: Usługa ma przypisane wizyty i wymaga wskazania replacementServiceId
 
   /api/salon/staff:
     get:

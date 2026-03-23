@@ -13,6 +13,10 @@ import { motion } from 'framer-motion';
 import { getSalonAppointments, getSalonClients, getSalonStaff } from '@/lib/api';
 
 export default function DashboardPage() {
+  const isDeletedStaff = (member: any) =>
+    member?.active === false || /\[USUNIĘTY\]$/i.test(String(member?.role || ''));
+  const isDeletedService = (service: any) =>
+    service?.active === false || /\[USUNIĘTA\]$/i.test(String(service?.name || ''));
   const toMinutes = (time?: string) => {
     if (!time) return 0;
     const [h, m] = String(time).split(':').map(Number);
@@ -24,7 +28,7 @@ export default function DashboardPage() {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
   const getServiceBadges = (apt: any) => {
-    const services = apt.appointmentServices || [];
+    const services = (apt.appointmentServices || []).filter((s: any) => !isDeletedService(s.service));
     return services.map((s: any) => {
       const color = s.service?.color;
       const textColor = getReadableTextColor(color);
@@ -83,7 +87,7 @@ export default function DashboardPage() {
   }, [appointments, today]);
   const activeApt = upcomingAppointments.find(a => a.id === activeAptId);
   const openDetails = (id: string) => { setActiveAptId(id); setDetailsOpen(true); };
-  const activeStaff = useMemo(() => staff.filter((s: any) => s.active !== false), [staff]);
+  const activeStaff = useMemo(() => staff.filter((s: any) => !isDeletedStaff(s)), [staff]);
 
   useEffect(() => {
     if (!activeStaff.length) {
@@ -168,7 +172,7 @@ export default function DashboardPage() {
   ];
 
   // Specialist workload
-  const specialistLoad = staff.map((sp: any) => {
+  const specialistLoad = activeStaff.map((sp: any) => {
     const appts = todayAppts.filter(a => a.staff?.name === sp.name);
     const totalMin = appts.reduce((s, a) => s + a.duration, 0);
     return { ...sp, appointments: appts.length, totalMinutes: totalMin };

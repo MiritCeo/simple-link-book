@@ -599,21 +599,116 @@ router.put("/services/:id", async (req: AuthRequest, res) => {
 
 router.delete("/services/:id", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
-  const existing = await prisma.service.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== getSalonId(req)) {
+  const schema = z.object({
+    replacementServiceId: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usuwania usługi" });
+
+  const salonId = getSalonId(req);
+  const serviceId = req.params.id;
+  const existing = await prisma.service.findUnique({ where: { id: serviceId } });
+  if (!existing || existing.salonId !== salonId) {
     return res.status(404).json({ error: "Nie znaleziono usługi w tym salonie" });
   }
-  const apptCount = await prisma.appointmentService.count({
-    where: { serviceId: req.params.id },
-  });
-  if (apptCount > 0) {
-    return res.status(409).json({ error: "Usługa ma powiązane wizyty" });
+
+  const now = new Date();
+  const nowDate = now.toISOString().slice(0, 10);
+  const nowTime = now.toTimeString().slice(0, 5);
+  const [apptCount, upcomingCount] = await Promise.all([
+    prisma.appointmentService.count({
+      where: { serviceId, appointment: { salonId } },
+    }),
+    prisma.appointmentService.count({
+      where: {
+        serviceId,
+        appointment: {
+          salonId,
+          OR: [
+            { date: { gt: nowDate } },
+            { date: nowDate, time: { gte: nowTime } },
+          ],
+        },
+      },
+    }),
+  ]);
+  const pastCount = Math.max(0, apptCount - upcomingCount);
+
+  const replacementServiceId = parsed.data.replacementServiceId;
+  if (apptCount > 0 && !replacementServiceId) {
+    return res.status(409).json({
+      error: "service_has_appointments",
+      message: "Usługa ma przypisane wizyty. Wybierz usługę zastępczą, aby przepisać wizyty.",
+      stats: { total: apptCount, upcoming: upcomingCount, past: pastCount },
+    });
   }
-  const service = await prisma.service.update({
-    where: { id: req.params.id },
-    data: { active: false },
+  if (replacementServiceId && replacementServiceId === serviceId) {
+    return res.status(400).json({ error: "replacement_same_service" });
+  }
+  if (replacementServiceId) {
+    const replacement = await prisma.service.findFirst({
+      where: { id: replacementServiceId, salonId, active: true },
+      select: { id: true },
+    });
+    if (!replacement) {
+      return res.status(400).json({ error: "replacement_service_not_found" });
+    }
+  }
+
+  let reassignedAppointments = 0;
+  await prisma.$transaction(async (tx) => {
+    if (apptCount > 0 && replacementServiceId) {
+      const links = await tx.appointmentService.findMany({
+        where: { serviceId, appointment: { salonId } },
+        select: { appointmentId: true },
+      });
+      const appointmentIds = Array.from(new Set(links.map(l => l.appointmentId)));
+      const replacementExisting = await tx.appointmentService.findMany({
+        where: { serviceId: replacementServiceId, appointmentId: { in: appointmentIds } },
+        select: { appointmentId: true },
+      });
+      const existingSet = new Set(replacementExisting.map(l => l.appointmentId));
+      const toCreate = appointmentIds.filter(id => !existingSet.has(id));
+      if (toCreate.length) {
+        await tx.appointmentService.createMany({
+          data: toCreate.map(appointmentId => ({ appointmentId, serviceId: replacementServiceId })),
+          skipDuplicates: true,
+        });
+      }
+      await tx.appointmentService.deleteMany({ where: { serviceId, appointmentId: { in: appointmentIds } } });
+
+      // Po przepisaniu usług aktualizujemy sumaryczny czas trwania wizyt.
+      const remainingLinks = await tx.appointmentService.findMany({
+        where: { appointmentId: { in: appointmentIds } },
+        include: { service: { select: { duration: true } } },
+      });
+      const durationByAppointment = new Map<string, number>();
+      for (const row of remainingLinks) {
+        durationByAppointment.set(
+          row.appointmentId,
+          (durationByAppointment.get(row.appointmentId) || 0) + (row.service?.duration || 0),
+        );
+      }
+      for (const appointmentId of appointmentIds) {
+        const duration = durationByAppointment.get(appointmentId) || 0;
+        if (duration > 0) {
+          await tx.appointment.update({ where: { id: appointmentId }, data: { duration } });
+        }
+      }
+      reassignedAppointments = appointmentIds.length;
+    }
+
+    const deletedName = /\[USUNIĘTA\]$/i.test(existing.name || "")
+      ? existing.name
+      : `${existing.name} [USUNIĘTA]`;
+    await tx.service.update({
+      where: { id: serviceId },
+      data: { active: false, name: deletedName },
+    });
   });
-  return res.json({ ok: true, service });
+
+  const service = await prisma.service.findUnique({ where: { id: serviceId } });
+  return res.json({ ok: true, service, reassignedAppointments });
 });
 
 router.get("/staff", async (req: AuthRequest, res) => {

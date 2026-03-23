@@ -669,11 +669,29 @@ export async function updateService(id: string, payload: { name: string; categor
   });
 }
 
-export async function deleteService(id: string) {
-  return apiFetch<{ ok: boolean }>(`/api/salon/services/${id}`, {
+export async function deleteService(id: string, payload?: { replacementServiceId?: string }) {
+  const token = getToken();
+  const res = await fetch(`${API_URL}/api/salon/services/${id}`, {
     method: "DELETE",
-    auth: true,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload || {}),
   });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || `Request failed: ${res.status}`) as Error & {
+      code?: string;
+      messagePl?: string;
+      stats?: { total: number; upcoming: number; past: number };
+    };
+    err.code = body.error;
+    err.messagePl = body.message;
+    err.stats = body.stats;
+    throw err;
+  }
+  return res.json() as Promise<{ ok: boolean; service: any; reassignedAppointments?: number }>;
 }
 
 export async function createStaff(payload: {

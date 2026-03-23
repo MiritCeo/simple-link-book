@@ -185,6 +185,8 @@ const DraggableAppointmentChip = ({
 };
 
 export default function CalendarPage() {
+  const isDeletedStaff = (sp: any) =>
+    sp?.active === false || /\[USUNIĘTY\]$/i.test(String(sp?.role || ''));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [view, setView] = useState<'day-list' | 'day-timeline' | 'day-cards' | 'week' | 'month'>('day-list');
   const [staffFilterIds, setStaffFilterIds] = useState<string[]>(() => {
@@ -289,6 +291,7 @@ export default function CalendarPage() {
   const [draggingApt, setDraggingApt] = useState<any | null>(null);
   const [draggingMode, setDraggingMode] = useState<'timeline' | 'chip' | null>(null);
   const [dragPreview, setDragPreview] = useState<{ columnId: string; top: number; time: string } | null>(null);
+  const visibleStaff = useMemo(() => staff.filter((sp: any) => !isDeletedStaff(sp)), [staff]);
 
   const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
   const dayNamesFull = ['Niedziela', 'Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota'];
@@ -391,9 +394,9 @@ export default function CalendarPage() {
   }, [clientSearch, clients]);
   const specialistServiceIds = useMemo(() => {
     if (selectedSpecialistId === 'any') return null;
-    const sp = staff.find((s: any) => s.id === selectedSpecialistId);
+    const sp = visibleStaff.find((s: any) => s.id === selectedSpecialistId);
     return sp?.services?.map((s: any) => s.id) ?? [];
-  }, [selectedSpecialistId, staff]);
+  }, [selectedSpecialistId, visibleStaff]);
   const filteredServices = useMemo(() => {
     const activeServices = services.filter((s: any) => s.active !== false);
     const base = specialistServiceIds ? activeServices.filter((s: any) => specialistServiceIds.includes(s.id)) : activeServices;
@@ -419,13 +422,13 @@ export default function CalendarPage() {
     loadSchedule(editStaffId);
   }, [selectedSpecialistId, editStaffId, staffSchedules]);
   const filteredSpecialists = useMemo(() => {
-    const activeStaff = staff.filter((sp: any) => sp.active !== false);
+    const activeStaff = visibleStaff;
     if (selectedServiceIds.length === 0) return activeStaff;
     return activeStaff.filter((sp: any) => selectedServiceIds.every(id => sp.services?.some((s: any) => s.id === id)));
-  }, [selectedServiceIds, staff]);
+  }, [selectedServiceIds, visibleStaff]);
   const selectedSpecialistDetails = useMemo(
-    () => staff.find((sp: any) => sp.id === selectedSpecialistId),
-    [selectedSpecialistId, staff],
+    () => visibleStaff.find((sp: any) => sp.id === selectedSpecialistId),
+    [selectedSpecialistId, visibleStaff],
   );
   const estimatedDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
   const effectiveDuration = customDuration || estimatedDuration || 30;
@@ -914,14 +917,14 @@ export default function CalendarPage() {
   };
 
   const specialistAvailability = useMemo(() => {
-    return staff.filter((sp: any) => sp.active !== false).map((sp: any) => {
+    return visibleStaff.map((sp: any) => {
       const dayAppts = appointments.filter((a: any) => a.date === selectedDate && a.staff?.name === sp.name);
       const minutes = dayAppts.reduce((sum, a) => sum + a.duration, 0);
       const capacity = 8 * 60;
       const pct = Math.min(Math.round((minutes / capacity) * 100), 100);
       return { ...sp, minutes, pct, available: minutes < capacity };
     });
-  }, [selectedDate, appointments, staff]);
+  }, [selectedDate, appointments, visibleStaff]);
   const availabilityById = useMemo(() => {
     const map = new Map<string, { pct: number; available: boolean }>();
     specialistAvailability.forEach(sp => map.set(sp.id, { pct: sp.pct, available: sp.available }));
@@ -942,7 +945,7 @@ export default function CalendarPage() {
           columns.push({ id: 'any', name: 'Dowolny', staffId: null });
           return;
         }
-        const sp = staff.find((s: any) => s.id === id);
+        const sp = visibleStaff.find((s: any) => s.id === id);
         if (sp) columns.push({ id: sp.id, name: sp.name, staffId: sp.id });
       });
       return columns;
@@ -1051,7 +1054,7 @@ export default function CalendarPage() {
                       </SelectTrigger>
                       <SelectContent className="bg-popover z-50">
                         <SelectItem value="salon">Cały salon</SelectItem>
-                        {staff.filter((sp: any) => sp.active !== false).map((sp: any) => (
+                        {visibleStaff.map((sp: any) => (
                           <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1646,7 +1649,7 @@ export default function CalendarPage() {
                 variant="outline"
                 size="sm"
                 className="rounded-xl h-8 text-xs"
-                onClick={() => setStaffFilterIds(staff.filter((sp: any) => sp.active !== false).map((sp: any) => sp.id))}
+                onClick={() => setStaffFilterIds(visibleStaff.map((sp: any) => sp.id))}
               >
                 Zaznacz wszystkich
               </Button>
@@ -1669,7 +1672,7 @@ export default function CalendarPage() {
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {(staffFilterActiveOnly ? staff.filter((sp: any) => sp.active !== false) : staff).map((sp: any) => (
+            {(staffFilterActiveOnly ? visibleStaff.filter((sp: any) => sp.active !== false) : visibleStaff).map((sp: any) => (
               <label key={sp.id} className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={staffFilterIds.includes(sp.id)}
@@ -2153,7 +2156,7 @@ export default function CalendarPage() {
                     </SelectTrigger>
                     <SelectContent className="bg-popover z-50">
                       <SelectItem value="any">Dowolny</SelectItem>
-                      {staff.filter((sp: any) => sp.active !== false).map((sp: any) => (
+                      {visibleStaff.map((sp: any) => (
                         <SelectItem key={sp.id} value={sp.id}>{sp.name}</SelectItem>
                       ))}
                     </SelectContent>

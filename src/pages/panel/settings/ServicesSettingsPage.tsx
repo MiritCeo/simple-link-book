@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,10 +26,15 @@ import { motion } from 'framer-motion';
 export default function ServicesSettingsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<'active' | 'inactive' | 'deleted'>('active');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [activeServiceId, setActiveServiceId] = useState<string | null>(null);
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteDialogService, setDeleteDialogService] = useState<any | null>(null);
+  const [replacementServiceId, setReplacementServiceId] = useState<string>('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteStats, setDeleteStats] = useState<{ total: number; upcoming: number; past: number } | null>(null);
   const [form, setForm] = useState({ name: '', category: '', duration: 30, price: 0, description: '', color: '' });
 
   useEffect(() => {
@@ -40,11 +46,30 @@ export default function ServicesSettingsPage() {
     return () => { mounted = false; };
   }, []);
 
+  const activeServices = useMemo(() => services.filter((s: any) => s.active === true), [services]);
+  const inactiveServices = useMemo(
+    () => services.filter((s: any) => s.active === false && !/\[USUNIĘTA\]$/i.test(String(s.name || ''))),
+    [services],
+  );
+  const deletedServices = useMemo(
+    () => services.filter((s: any) => s.active === false && /\[USUNIĘTA\]$/i.test(String(s.name || ''))),
+    [services],
+  );
+  const tabData = useMemo(() => {
+    if (tab === 'inactive') return inactiveServices;
+    if (tab === 'deleted') return deletedServices;
+    return activeServices;
+  }, [tab, activeServices, inactiveServices, deletedServices]);
+
   const filtered = useMemo(() => {
-    if (!search) return services;
+    if (!search) return tabData;
     const q = search.toLowerCase();
-    return services.filter((s: any) => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
-  }, [search, services]);
+    return tabData.filter((s: any) => s.name.toLowerCase().includes(q) || s.category.toLowerCase().includes(q));
+  }, [search, tabData]);
+  const replacementOptions = useMemo(
+    () => activeServices.filter((s: any) => !deleteDialogService || s.id !== deleteDialogService.id),
+    [activeServices, deleteDialogService],
+  );
 
   const activeService = services.find((s: any) => s.id === activeServiceId);
   const openCreate = () => {
@@ -97,6 +122,18 @@ export default function ServicesSettingsPage() {
         </motion.div>
       </div>
 
+      <div className="mb-3 flex flex-wrap gap-2">
+        <Button size="sm" variant={tab === 'active' ? 'default' : 'outline'} className="rounded-xl h-8 text-xs" onClick={() => setTab('active')}>
+          Aktywne ({activeServices.length})
+        </Button>
+        <Button size="sm" variant={tab === 'inactive' ? 'default' : 'outline'} className="rounded-xl h-8 text-xs" onClick={() => setTab('inactive')}>
+          Nieaktywne ({inactiveServices.length})
+        </Button>
+        <Button size="sm" variant={tab === 'deleted' ? 'default' : 'outline'} className="rounded-xl h-8 text-xs" onClick={() => setTab('deleted')}>
+          Usunięte ({deletedServices.length})
+        </Button>
+      </div>
+
       <p className="text-xs text-muted-foreground mb-3">{filtered.length} usług</p>
 
       {loading ? (
@@ -105,25 +142,31 @@ export default function ServicesSettingsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-card rounded-2xl border border-border p-6 text-sm text-muted-foreground text-center">
-          Brak usług
+          Brak usług w tej zakładce
         </div>
       ) : (
         <MotionList className="space-y-2">
           {filtered.map(service => (
             <MotionItem key={service.id}>
+              {(() => {
+                const isDeleted = /\[USUNIĘTA\]$/i.test(String(service.name || ''));
+                return (
               <HoverCard className="bg-card rounded-2xl p-4 border border-border flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     {service.color && (
                       <span className="inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: service.color }} />
                     )}
-                    <p className="font-medium text-sm">{service.name}</p>
+                    <p className="font-medium text-sm">{service.name.replace(/\s*\[USUNIĘTA\]$/i, '')}</p>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{service.description || 'Brak opisu'}</p>
                 <div className="flex items-center gap-2 mt-2">
                     <Badge variant="secondary" className="text-[10px]">{service.category}</Badge>
-                  {service.active === false && (
+                  {service.active === false && !isDeleted && (
                     <Badge variant="outline" className="text-[10px] text-muted-foreground">Nieaktywna</Badge>
+                  )}
+                  {isDeleted && (
+                    <Badge variant="outline" className="text-[10px] text-destructive">Usunięta</Badge>
                   )}
                     <span className="text-[11px] text-muted-foreground">{service.duration} min</span>
                     <span className="text-[11px] text-muted-foreground">{service.price} zł</span>
@@ -133,9 +176,10 @@ export default function ServicesSettingsPage() {
                 <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5" onClick={() => openEdit(service.id)}>
                     <Pencil className="w-3.5 h-3.5" />Edytuj
                   </Button>
+                  {!isDeleted && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5 text-destructive">
+                    <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5">
                       <Trash2 className="w-3.5 h-3.5" />{service.active === false ? 'Aktywuj' : 'Dezaktywuj'}
                       </Button>
                     </AlertDialogTrigger>
@@ -163,12 +207,126 @@ export default function ServicesSettingsPage() {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                  )}
+                  {!isDeleted && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5 text-destructive">
+                        <Trash2 className="w-3.5 h-3.5" />Usuń
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="rounded-2xl">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Usunąć usługę?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Usługa trafi do zakładki Usunięte. Jeśli ma przypisane wizyty, trzeba wskazać usługę zastępczą.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl">Anuluj</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="rounded-xl"
+                          onClick={() => {
+                            setDeleteDialogService(service);
+                            setReplacementServiceId('');
+                            setDeleteStats(null);
+                          }}
+                        >
+                          Dalej
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  )}
                 </div>
               </HoverCard>
+                );
+              })()}
             </MotionItem>
           ))}
         </MotionList>
       )}
+
+      <Dialog
+        open={!!deleteDialogService}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteDialogService(null);
+            setReplacementServiceId('');
+            setDeleteStats(null);
+          }
+        }}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Usuń usługę</DialogTitle>
+            <DialogDescription>
+              {deleteDialogService ? `Usługa: ${String(deleteDialogService.name || '').replace(/\s*\[USUNIĘTA\]$/i, '')}` : 'Wybierz sposób usunięcia usługi.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {deleteStats && (
+              <div className="rounded-xl border border-border p-3 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground mb-1">Wykryto przypisane wizyty</p>
+                <p>Łącznie: {deleteStats.total}</p>
+                <p>Nadchodzące: {deleteStats.upcoming}</p>
+                <p>Historyczne: {deleteStats.past}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Przepisz wizyty do usługi</label>
+              <Select value={replacementServiceId} onValueChange={setReplacementServiceId}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue placeholder="Wybierz usługę zastępczą (gdy są wizyty)" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {replacementOptions.map((s: any) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {String(s.name || '').replace(/\s*\[USUNIĘTA\]$/i, '')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setDeleteDialogService(null)}>
+              Anuluj
+            </Button>
+            <Button
+              className="rounded-xl"
+              disabled={deleteLoading}
+              onClick={async () => {
+                if (!deleteDialogService) return;
+                setDeleteLoading(true);
+                try {
+                  const result = await deleteService(deleteDialogService.id, replacementServiceId ? { replacementServiceId } : undefined);
+                  await refresh();
+                  setDeleteDialogService(null);
+                  setReplacementServiceId('');
+                  setDeleteStats(null);
+                  toast.success(
+                    result.reassignedAppointments && result.reassignedAppointments > 0
+                      ? `Usługa usunięta. Przepisano ${result.reassignedAppointments} wizyt.`
+                      : 'Usługa usunięta.',
+                  );
+                } catch (err: any) {
+                  if (err?.code === 'service_has_appointments') {
+                    setDeleteStats(err.stats || null);
+                    toast.warning(err.messagePl || 'Usługa ma przypisane wizyty — wybierz zastępstwo.');
+                  } else {
+                    toast.error(err.messagePl || err.message || 'Nie udało się usunąć usługi');
+                  }
+                } finally {
+                  setDeleteLoading(false);
+                }
+              }}
+            >
+              {deleteLoading ? 'Usuwanie...' : 'Usuń usługę'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="rounded-2xl">
