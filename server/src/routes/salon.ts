@@ -564,6 +564,7 @@ router.post("/services", async (req: AuthRequest, res) => {
     price: z.number().int().min(0),
     description: z.string().optional(),
     color: z.string().optional(),
+    bookingVisible: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usługi" });
@@ -583,6 +584,7 @@ router.put("/services/:id", async (req: AuthRequest, res) => {
     description: z.string().optional(),
     color: z.string().optional(),
     active: z.boolean().optional(),
+    bookingVisible: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usługi" });

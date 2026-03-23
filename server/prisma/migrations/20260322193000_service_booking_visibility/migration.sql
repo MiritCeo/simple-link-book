@@ -1,0 +1,2 @@
+ALTER TABLE `Service`
+ADD COLUMN `bookingVisible` BOOLEAN NOT NULL DEFAULT true;

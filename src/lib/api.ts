@@ -653,7 +653,15 @@ export async function updateAppointment(id: string, payload: {
   });
 }
 
-export async function createService(payload: { name: string; category: string; duration: number; price: number; description?: string; color?: string }) {
+export async function createService(payload: {
+  name: string;
+  category: string;
+  duration: number;
+  price: number;
+  description?: string;
+  color?: string;
+  bookingVisible?: boolean;
+}) {
   return apiFetch<{ service: any }>("/api/salon/services", {
     method: "POST",
     auth: true,
@@ -661,7 +669,16 @@ export async function createService(payload: { name: string; category: string; d
   });
 }
 
-export async function updateService(id: string, payload: { name: string; category: string; duration: number; price: number; description?: string; color?: string; active?: boolean }) {
+export async function updateService(id: string, payload: {
+  name: string;
+  category: string;
+  duration: number;
+  price: number;
+  description?: string;
+  color?: string;
+  active?: boolean;
+  bookingVisible?: boolean;
+}) {
   return apiFetch<{ service: any }>(`/api/salon/services/${id}`, {
     method: "PUT",
     auth: true,

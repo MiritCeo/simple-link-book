@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,7 +36,15 @@ export default function ServicesSettingsPage() {
   const [replacementServiceId, setReplacementServiceId] = useState<string>('');
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteStats, setDeleteStats] = useState<{ total: number; upcoming: number; past: number } | null>(null);
-  const [form, setForm] = useState({ name: '', category: '', duration: 30, price: 0, description: '', color: '' });
+  const [form, setForm] = useState({
+    name: '',
+    category: '',
+    duration: 30,
+    price: 0,
+    description: '',
+    color: '',
+    bookingVisible: true,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -84,7 +93,7 @@ export default function ServicesSettingsPage() {
   }, [services]);
   const openCreate = () => {
     setActiveServiceId(null);
-    setForm({ name: '', category: '', duration: 30, price: 0, description: '', color: '' });
+    setForm({ name: '', category: '', duration: 30, price: 0, description: '', color: '', bookingVisible: true });
     setDialogOpen(true);
   };
   const openEdit = (id: string) => {
@@ -97,6 +106,7 @@ export default function ServicesSettingsPage() {
       price: svc?.price || 0,
       description: svc?.description || '',
       color: svc?.color || '',
+      bookingVisible: svc?.bookingVisible !== false,
     });
     setDialogOpen(true);
   };
@@ -170,6 +180,22 @@ export default function ServicesSettingsPage() {
                     <p className="font-medium text-sm">{service.name.replace(/\s*\[USUNIĘTA\]$/i, '')}</p>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{service.description || 'Brak opisu'}</p>
+                {!isDeleted && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Switch
+                      checked={service.bookingVisible !== false}
+                      onCheckedChange={(checked) => {
+                        updateService(service.id, { ...service, bookingVisible: checked })
+                          .then(() => refresh())
+                          .then(() => toast.success(checked ? 'Usługa widoczna w rezerwacji' : 'Usługa ukryta w rezerwacji'))
+                          .catch((err) => toast.error(err.message || 'Błąd zapisu'));
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      Widoczna w rezerwacji
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 mt-2">
                     <Badge variant="secondary" className="text-[10px]">{service.category}</Badge>
                   {service.active === false && !isDeleted && (
@@ -177,6 +203,9 @@ export default function ServicesSettingsPage() {
                   )}
                   {isDeleted && (
                     <Badge variant="outline" className="text-[10px] text-destructive">Usunięta</Badge>
+                  )}
+                  {service.bookingVisible === false && !isDeleted && (
+                    <Badge variant="outline" className="text-[10px] text-muted-foreground">Ukryta w rezerwacji</Badge>
                   )}
                     <span className="text-[11px] text-muted-foreground">{service.duration} min</span>
                     <span className="text-[11px] text-muted-foreground">{service.price} zł</span>
@@ -400,6 +429,16 @@ export default function ServicesSettingsPage() {
                   className="h-10 rounded-xl"
                 />
               </div>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-border p-3">
+              <div>
+                <p className="text-sm font-medium">Widoczna w formularzu rezerwacji</p>
+                <p className="text-xs text-muted-foreground">Gdy wyłączone, usługa zostaje w panelu, ale klient jej nie zobaczy.</p>
+              </div>
+              <Switch
+                checked={form.bookingVisible}
+                onCheckedChange={(checked) => setForm(f => ({ ...f, bookingVisible: checked }))}
+              />
             </div>
           </div>
 

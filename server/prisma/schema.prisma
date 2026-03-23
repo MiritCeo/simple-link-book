@@ -110,6 +110,7 @@ model Service {
   description String?
   color       String?
   active      Boolean  @default(true)
+  bookingVisible Boolean @default(true)
 
   salon   Salon  @relation(fields: [salonId], references: [id])
   salonId String

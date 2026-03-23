@@ -304,7 +304,7 @@ router.get("/salons/:slug", async (req, res) => {
   const salon = await prisma.salon.findUnique({
     where: { slug },
     include: {
-      services: { where: { active: true } },
+      services: { where: { active: true, bookingVisible: true } },
       staff: {
         where: { active: true },
         include: {
@@ -342,7 +342,7 @@ router.get("/salons/:slug/availability", async (req, res) => {
   if (!salon) return res.status(404).json({ error: "Nie znaleziono salonu o podanym linku" });
 
   const service = await prisma.service.findFirst({
-    where: { salonId: salon.id, id: parsed.data.serviceId, active: true },
+    where: { salonId: salon.id, id: parsed.data.serviceId, active: true, bookingVisible: true },
   });
   if (!service) return res.status(404).json({ error: "Nie znaleziono usługi w tym salonie" });
 
@@ -455,7 +455,7 @@ router.post("/salons/:slug/appointments", async (req, res) => {
   }
 
   const services = await prisma.service.findMany({
-    where: { salonId: salon.id, id: { in: ids }, active: true },
+    where: { salonId: salon.id, id: { in: ids }, active: true, bookingVisible: true },
   });
   if (services.length !== ids.length) {
     return res.status(400).json({ error: "service_not_found", message: "Nie znaleziono usług w tym salonie" });
