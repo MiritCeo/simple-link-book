@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut } from 'lucide-react';
+import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut, Trash2, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { toast } from 'sonner';
-import { createAdminOwner, getAdminOwners, updateAdminOwner } from '@/lib/api';
+import { createAdminOwner, deleteAdminOwner, getAdminOwners, updateAdminOwner } from '@/lib/api';
 import { clearAuth, getRole } from '@/lib/auth';
 
 export default function SuperAdminPage() {
@@ -16,6 +16,9 @@ export default function SuperAdminPage() {
   const [owners, setOwners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [passwordDialogOwner, setPasswordDialogOwner] = useState<any | null>(null);
+  const [deleteDialogOwner, setDeleteDialogOwner] = useState<any | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     email: '',
@@ -138,6 +141,18 @@ export default function SuperAdminPage() {
                     variant="outline"
                     size="sm"
                     className="rounded-xl h-9 text-xs gap-1.5"
+                    onClick={() => {
+                      setPasswordDialogOwner(owner);
+                      setNewPassword('');
+                    }}
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    Zmień hasło
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl h-9 text-xs gap-1.5"
                     onClick={async () => {
                       try {
                         const res = await updateAdminOwner(owner.id, { active: !owner.active });
@@ -175,6 +190,15 @@ export default function SuperAdminPage() {
                   >
                     {owner.active ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
                     {owner.active ? 'Dezaktywuj' : 'Aktywuj'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl h-9 text-xs gap-1.5 text-destructive"
+                    onClick={() => setDeleteDialogOwner(owner)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Usuń salon
                   </Button>
                 </div>
               </HoverCard>
@@ -244,6 +268,117 @@ export default function SuperAdminPage() {
               }}
             >
               Dodaj ownera
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!passwordDialogOwner}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPasswordDialogOwner(null);
+            setNewPassword('');
+          }
+        }}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Ręczna zmiana hasła ownera</DialogTitle>
+            <DialogDescription>
+              {passwordDialogOwner
+                ? `Owner: ${passwordDialogOwner.email}`
+                : 'Ustaw nowe hasło i wyślij je e-mailem do ownera.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">Nowe hasło</label>
+            <Input
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="h-11 rounded-xl"
+              placeholder="Minimum 8 znaków"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Po zapisie owner otrzyma e-mail z nowym hasłem.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setPasswordDialogOwner(null)}>
+              Anuluj
+            </Button>
+            <Button
+              className="rounded-xl"
+              onClick={async () => {
+                if (!passwordDialogOwner) return;
+                if (!newPassword || newPassword.length < 8) {
+                  toast.error('Hasło musi mieć minimum 8 znaków');
+                  return;
+                }
+                try {
+                  const res = await updateAdminOwner(passwordDialogOwner.id, { password: newPassword });
+                  await loadOwners();
+                  setPasswordDialogOwner(null);
+                  setNewPassword('');
+                  const info = res.passwordEmail;
+                  if (!info?.attempted) {
+                    toast.success('Hasło zmienione');
+                    return;
+                  }
+                  if (info.sent && info.sandbox) {
+                    toast.success('Hasło zmienione. E-mail przyjęty w trybie sandbox (bez dostarczenia).');
+                  } else if (info.sent) {
+                    toast.success(`Hasło zmienione. E-mail z nowym hasłem został wysłany${info.messageId ? ` (ID: ${info.messageId})` : ''}.`);
+                  } else {
+                    toast.warning('Hasło zmienione, ale e-mail z nowym hasłem nie został wysłany.');
+                  }
+                } catch (err: any) {
+                  toast.error(err.message || 'Nie udało się zmienić hasła');
+                }
+              }}
+            >
+              Zapisz i wyślij e-mail
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!deleteDialogOwner}
+        onOpenChange={(open) => {
+          if (!open) setDeleteDialogOwner(null);
+        }}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Usunąć salon całkowicie?</DialogTitle>
+            <DialogDescription>
+              {deleteDialogOwner?.salon?.name
+                ? `Ta operacja usunie salon "${deleteDialogOwner.salon.name}" wraz z danymi powiązanymi i ownerem.`
+                : 'Ta operacja usunie ownera i dane salonu bez możliwości cofnięcia.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setDeleteDialogOwner(null)}>
+              Anuluj
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl"
+              onClick={async () => {
+                if (!deleteDialogOwner) return;
+                try {
+                  await deleteAdminOwner(deleteDialogOwner.id);
+                  await loadOwners();
+                  setDeleteDialogOwner(null);
+                  toast.success('Salon i owner zostali usunięci');
+                } catch (err: any) {
+                  toast.error(err.message || 'Nie udało się usunąć salonu');
+                }
+              }}
+            >
+              Usuń na stałe
             </Button>
           </DialogFooter>
         </DialogContent>

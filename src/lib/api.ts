@@ -972,9 +972,17 @@ export async function updateAdminOwner(id: string, payload: { active?: boolean; 
   return apiFetch<{
     owner: any;
     activationEmail?: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string; messageId?: string };
+    passwordEmail?: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string; messageId?: string };
   }>(`/api/admin/owners/${id}`, {
     method: "PATCH",
     auth: true,
     body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminOwner(id: string) {
+  return apiFetch<{ ok: boolean; deleted: { salonId: string | null; ownerId: string } }>(`/api/admin/owners/${id}`, {
+    method: "DELETE",
+    auth: true,
   });
 }

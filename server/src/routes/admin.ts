@@ -112,6 +112,7 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
   const updated = await prisma.user.update({ where: { id: user.id }, data });
 
   let activationEmail: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string; messageId?: string } | undefined;
+  let passwordEmail: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string; messageId?: string } | undefined;
   if (parsed.data.active === true) {
     const salon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
     const html = `
@@ -138,6 +139,33 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
     };
   }
 
+  if (parsed.data.password) {
+    const salon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
+    const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#212121">
+        <h2 style="margin:0 0 12px">Hasło do konta zostało zmienione</h2>
+        <p>Cześć!</p>
+        <p>Super administrator ręcznie ustawił nowe hasło do Twojego konta${salon?.name ? ` (${salon.name})` : ""}.</p>
+        <p>Nowe hasło: <strong>${parsed.data.password}</strong></p>
+        <p style="margin:16px 0">
+          <a href="https://honly.app/login" style="display:inline-block;background:#b8566f;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px">
+            Przejdź do logowania
+          </a>
+        </p>
+        <p>Po zalogowaniu zalecamy natychmiastową zmianę hasła w ustawieniach konta.</p>
+        <p>Pozdrawiamy,<br/>Zespół honly</p>
+      </div>
+    `;
+    const emailResult = await sendEmail(updated.email, "Nowe hasło do konta salonu w honly", html);
+    passwordEmail = {
+      attempted: true,
+      sent: !!emailResult?.ok,
+      sandbox: emailResult?.ok ? !!emailResult.sandbox : undefined,
+      messageId: emailResult?.ok ? emailResult.messageId : undefined,
+      reason: emailResult && !emailResult.ok ? emailResult.reason : undefined,
+    };
+  }
+
   return res.json({
     owner: {
       id: updated.id,
@@ -147,7 +175,98 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
       createdAt: updated.createdAt,
     },
     activationEmail,
+    passwordEmail,
   });
+});
+
+router.delete("/owners/:id", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const owner = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!owner || owner.role !== "OWNER") return res.status(404).json({ error: "Nie znaleziono właściciela" });
+
+  if (!owner.salonId) {
+    await prisma.userSalon.deleteMany({ where: { userId: owner.id } });
+    await prisma.user.delete({ where: { id: owner.id } });
+    return res.json({ ok: true, deleted: { salonId: null, ownerId: owner.id } });
+  }
+
+  const salonId = owner.salonId;
+  await prisma.$transaction(async (tx) => {
+    const [appointments, staff, services, clients, inventoryItems] = await Promise.all([
+      tx.appointment.findMany({ where: { salonId }, select: { id: true } }),
+      tx.staff.findMany({ where: { salonId }, select: { id: true, userId: true } }),
+      tx.service.findMany({ where: { salonId }, select: { id: true } }),
+      tx.client.findMany({ where: { salonId }, select: { id: true } }),
+      tx.inventoryItem.findMany({ where: { salonId }, select: { id: true } }),
+    ]);
+
+    const appointmentIds = appointments.map(a => a.id);
+    const staffIds = staff.map(s => s.id);
+    const serviceIds = services.map(s => s.id);
+    const clientIds = clients.map(c => c.id);
+    const inventoryItemIds = inventoryItems.map(i => i.id);
+
+    const clientAccounts = clientIds.length
+      ? await tx.clientAccount.findMany({ where: { clientId: { in: clientIds } }, select: { id: true } })
+      : [];
+    const clientAccountIds = clientAccounts.map(a => a.id);
+
+    if (appointmentIds.length) {
+      await tx.notificationLog.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+      await tx.appointmentToken.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+      await tx.appointmentService.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+      await tx.salonRating.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+    }
+    if (serviceIds.length) {
+      await tx.staffService.deleteMany({ where: { serviceId: { in: serviceIds } } });
+      await tx.appointmentService.deleteMany({ where: { serviceId: { in: serviceIds } } });
+    }
+    if (staffIds.length) {
+      await tx.staffAvailability.deleteMany({ where: { staffId: { in: staffIds } } });
+      await tx.staffException.deleteMany({ where: { staffId: { in: staffIds } } });
+      await tx.staffService.deleteMany({ where: { staffId: { in: staffIds } } });
+    }
+    if (inventoryItemIds.length) {
+      await tx.inventoryMovement.deleteMany({ where: { itemId: { in: inventoryItemIds } } });
+    }
+    if (clientAccountIds.length) {
+      await tx.clientPasswordReset.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
+      await tx.clientFavoriteGooglePlace.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
+      await tx.clientFavoriteSalon.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
+      await tx.salonRating.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
+    }
+
+    await tx.notificationTemplate.deleteMany({ where: { salonId } });
+    await tx.notificationSetting.deleteMany({ where: { salonId } });
+    await tx.salonBreak.deleteMany({ where: { salonId } });
+    await tx.salonException.deleteMany({ where: { salonId } });
+    await tx.salonHour.deleteMany({ where: { salonId } });
+
+    await tx.clientFavoriteSalon.deleteMany({ where: { salonId } });
+    await tx.salonRating.deleteMany({ where: { salonId } });
+    await tx.clientAccountSalon.deleteMany({ where: { salonId } });
+    await tx.userSalon.deleteMany({ where: { salonId } });
+
+    await tx.appointment.deleteMany({ where: { salonId } });
+    await tx.staff.deleteMany({ where: { salonId } });
+    await tx.service.deleteMany({ where: { salonId } });
+    await tx.client.deleteMany({ where: { salonId } });
+
+    await tx.inventoryMovement.deleteMany({ where: { createdBy: { salonId } } });
+    await tx.inventoryItem.deleteMany({ where: { salonId } });
+    await tx.inventoryCategory.deleteMany({ where: { salonId } });
+    await tx.inventoryUnit.deleteMany({ where: { salonId } });
+    await tx.inventorySetting.deleteMany({ where: { salonId } });
+
+    if (clientAccountIds.length) {
+      await tx.clientAccount.deleteMany({ where: { id: { in: clientAccountIds } } });
+    }
+
+    await tx.user.deleteMany({ where: { salonId } });
+    await tx.salon.delete({ where: { id: salonId } });
+  });
+
+  return res.json({ ok: true, deleted: { salonId, ownerId: owner.id } });
 });
 
 export default router;

@@ -1728,4 +1728,32 @@ paths:
                     allOf:
                       - $ref: '#/components/schemas/ActivationEmailStatus'
                     nullable: true
+                  passwordEmail:
+                    allOf:
+                      - $ref: '#/components/schemas/ActivationEmailStatus'
+                    nullable: true
+    delete:
+      summary: Całkowite usunięcie ownera i salonu (SUPER_ADMIN)
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  deleted:
+                    type: object
+                    properties:
+                      salonId:
+                        type: string
+                        nullable: true
+                      ownerId: { type: string }
 
