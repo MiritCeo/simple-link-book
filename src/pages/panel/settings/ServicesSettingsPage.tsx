@@ -72,6 +72,16 @@ export default function ServicesSettingsPage() {
   );
 
   const activeService = services.find((s: any) => s.id === activeServiceId);
+  const categorySuggestions = useMemo(() => {
+    const unique = Array.from(
+      new Set(
+        services
+          .map((s: any) => String(s.category || '').trim())
+          .filter(Boolean),
+      ),
+    );
+    return unique.sort((a, b) => a.localeCompare(b, 'pl'));
+  }, [services]);
   const openCreate = () => {
     setActiveServiceId(null);
     setForm({ name: '', category: '', duration: 30, price: 0, description: '', color: '' });
@@ -342,7 +352,23 @@ export default function ServicesSettingsPage() {
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Kategoria</label>
-              <Input value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} placeholder="Np. Fryzjerstwo" className="h-11 rounded-xl" />
+              <Input
+                value={form.category}
+                onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
+                placeholder="Np. Fryzjerstwo"
+                className="h-11 rounded-xl"
+                list="service-category-suggestions"
+              />
+              <datalist id="service-category-suggestions">
+                {categorySuggestions.map((cat) => (
+                  <option key={cat} value={cat} />
+                ))}
+              </datalist>
+              {!!categorySuggestions.length && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Możesz wybrać istniejącą kategorię lub wpisać nową.
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
