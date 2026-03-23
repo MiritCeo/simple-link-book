@@ -9,12 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PageTransition } from '@/components/motion';
 import { toast } from 'sonner';
 import { normalizeAssetUrl } from '@/lib/url';
-import { createStaffAccount, getSalonServices, getSalonStaff, updateStaff, updateStaffAccount, uploadStaffPhoto } from '@/lib/api';
+import { createStaff, createStaffAccount, getSalonServices, getSalonStaff, updateStaff, updateStaffAccount, uploadStaffPhoto } from '@/lib/api';
 import { cropAndCompressImage } from '@/lib/image';
 
 export default function StaffEditPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const isCreateMode = id === 'nowy';
   const [loading, setLoading] = useState(true);
   const [staff, setStaff] = useState<any | null>(null);
   const [services, setServices] = useState<any[]>([]);
@@ -32,16 +33,30 @@ export default function StaffEditPage() {
     if (!id) return;
     setLoading(true);
     try {
-      const [staffRes, servicesRes] = await Promise.all([getSalonStaff(), getSalonServices()]);
-      const staffRec = (staffRes.staff || []).find((s: any) => s.id === id) || null;
-      setStaff(staffRec);
-      setServices(servicesRes.services || []);
-      if (staffRec) {
-        setForm({ name: staffRec.name || '', role: staffRec.role || '', phone: staffRec.phone || '', photoUrl: staffRec.photoUrl || '' });
-        setSelectedServiceIds(staffRec.services?.map((s: any) => s.id) ?? []);
-        setAccountEmail(staffRec.user?.email || '');
-        setAccountRole(staffRec.user?.role || 'STAFF');
-        setInventoryRole(staffRec.inventoryRole || 'STAFF');
+      if (isCreateMode) {
+        const servicesRes = await getSalonServices();
+        setServices(servicesRes.services || []);
+        setStaff(null);
+        setForm({ name: '', role: '', phone: '', photoUrl: '' });
+        setSelectedServiceIds([]);
+        setServiceSearch('');
+        setAccountEmail('');
+        setAccountPassword('');
+        setResetPassword('');
+        setAccountRole('STAFF');
+        setInventoryRole('STAFF');
+      } else {
+        const [staffRes, servicesRes] = await Promise.all([getSalonStaff(), getSalonServices()]);
+        const staffRec = (staffRes.staff || []).find((s: any) => s.id === id) || null;
+        setStaff(staffRec);
+        setServices(servicesRes.services || []);
+        if (staffRec) {
+          setForm({ name: staffRec.name || '', role: staffRec.role || '', phone: staffRec.phone || '', photoUrl: staffRec.photoUrl || '' });
+          setSelectedServiceIds(staffRec.services?.map((s: any) => s.id) ?? []);
+          setAccountEmail(staffRec.user?.email || '');
+          setAccountRole(staffRec.user?.role || 'STAFF');
+          setInventoryRole(staffRec.inventoryRole || 'STAFF');
+        }
       }
     } finally {
       setLoading(false);
@@ -51,7 +66,7 @@ export default function StaffEditPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, isCreateMode]);
 
   const filteredServices = useMemo(() => {
     const active = services.filter((s: any) => s.active !== false);
@@ -70,7 +85,7 @@ export default function StaffEditPage() {
     );
   }
 
-  if (!staff) {
+  if (!isCreateMode && !staff) {
     return (
       <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6 pb-8">
         <div className="flex items-center gap-2 mb-4">
@@ -96,10 +111,10 @@ export default function StaffEditPage() {
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="min-w-0">
-          <h1 className="text-xl font-bold lg:text-2xl truncate">Edytuj pracownika</h1>
-          <p className="text-sm text-muted-foreground truncate">{staff.name}</p>
+          <h1 className="text-xl font-bold lg:text-2xl truncate">{isCreateMode ? 'Dodaj pracownika' : 'Edytuj pracownika'}</h1>
+          <p className="text-sm text-muted-foreground truncate">{isCreateMode ? 'Utwórz nowego pracownika i konto logowania' : staff.name}</p>
         </div>
-        {staff.active === false && (
+        {!isCreateMode && staff.active === false && (
           <Badge variant="outline" className="text-[10px] text-muted-foreground">Nieaktywny</Badge>
         )}
       </div>
@@ -214,7 +229,7 @@ export default function StaffEditPage() {
         <div className="space-y-4">
           <div className="bg-card rounded-2xl border border-border p-4">
             <h2 className="text-sm font-semibold mb-3">Konto pracownika</h2>
-            {staff.user ? (
+            {!isCreateMode && staff.user ? (
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span>Email</span>
@@ -320,32 +335,34 @@ export default function StaffEditPage() {
                   <label className="text-xs font-medium mb-1.5 block">Hasło</label>
                   <Input value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="••••••••" className="h-10 rounded-xl" />
                 </div>
-                <Button
-                  size="sm"
-                  className="rounded-xl h-8 text-xs"
-                  onClick={async () => {
-                    if (!accountEmail || accountPassword.length < 8) {
-                      toast.error('Podaj email i hasło (min. 8 znaków)');
-                      return;
-                    }
-                    try {
-                      await createStaffAccount(staff.id, { email: accountEmail, password: accountPassword });
-                      await updateStaffAccount(staff.id, { role: accountRole });
-                      await loadData();
-                      toast.success('Konto pracownika utworzone');
-                    } catch (err: any) {
-                      toast.error(err.message || 'Błąd zapisu');
-                    }
-                  }}
-                >
-                  Utwórz konto
-                </Button>
+                {!isCreateMode && (
+                  <Button
+                    size="sm"
+                    className="rounded-xl h-8 text-xs"
+                    onClick={async () => {
+                      if (!accountEmail || accountPassword.length < 8) {
+                        toast.error('Podaj email i hasło (min. 8 znaków)');
+                        return;
+                      }
+                      try {
+                        await createStaffAccount(staff.id, { email: accountEmail, password: accountPassword });
+                        await updateStaffAccount(staff.id, { role: accountRole });
+                        await loadData();
+                        toast.success('Konto pracownika utworzone');
+                      } catch (err: any) {
+                        toast.error(err.message || 'Błąd zapisu');
+                      }
+                    }}
+                  >
+                    Utwórz konto
+                  </Button>
+                )}
               </div>
             )}
           </div>
 
           <div className="bg-card rounded-2xl border border-border p-4">
-            <h2 className="text-sm font-semibold mb-3">Zapisz zmiany</h2>
+            <h2 className="text-sm font-semibold mb-3">{isCreateMode ? 'Utwórz pracownika' : 'Zapisz zmiany'}</h2>
             <Button
               className="rounded-xl w-full gap-2"
               onClick={async () => {
@@ -354,6 +371,22 @@ export default function StaffEditPage() {
                   return;
                 }
                 try {
+                  if (isCreateMode) {
+                    if (!accountEmail.trim() || accountPassword.length < 8) {
+                      toast.error('Podaj email i hasło (min. 8 znaków)');
+                      return;
+                    }
+                    await createStaff({
+                      ...form,
+                      serviceIds: selectedServiceIds,
+                      inventoryRole,
+                      accountEmail: accountEmail.trim(),
+                      accountPassword,
+                    });
+                    toast.success('Pracownik dodany');
+                    navigate('/panel/ustawienia/pracownicy');
+                    return;
+                  }
                   await updateStaff(staff.id, { ...form, serviceIds: selectedServiceIds, inventoryRole });
                   await loadData();
                   toast.success('Pracownik zaktualizowany');
@@ -362,7 +395,7 @@ export default function StaffEditPage() {
                 }
               }}
             >
-              <Save className="w-4 h-4" />Zapisz dane pracownika
+              <Save className="w-4 h-4" />{isCreateMode ? 'Utwórz pracownika' : 'Zapisz dane pracownika'}
             </Button>
           </div>
         </div>
