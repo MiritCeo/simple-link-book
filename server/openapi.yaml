@@ -58,6 +58,34 @@ components:
               name: { type: string }
               slug: { type: string }
               role: { type: string }
+    SalonRegisterResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+        pendingApproval: { type: boolean }
+        salonId: { type: string }
+        userId: { type: string }
+        role: { type: string, enum: [OWNER] }
+        salons:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              slug: { type: string }
+              role: { type: string, enum: [OWNER] }
+              active: { type: boolean }
+      required: [ok, pendingApproval, salonId, userId, role, salons]
+    ActivationEmailStatus:
+      type: object
+      properties:
+        attempted: { type: boolean }
+        sent: { type: boolean }
+        sandbox: { type: boolean, nullable: true }
+        reason: { type: string, nullable: true, description: "np. missing_config, fetch_unavailable, sendgrid_error, exception" }
+        messageId: { type: string, nullable: true, description: "SendGrid x-message-id (gdy request został przyjęty)" }
+      required: [attempted, sent]
     ClientAuthResponse:
       type: object
       properties:
@@ -211,10 +239,10 @@ paths:
               required: [email, phone, password, salonName, salonSlug]
       responses:
         '200':
-          description: OK
+          description: OK (konto oczekuje aktywacji przez SUPER_ADMIN)
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthResponse' }
+              schema: { $ref: '#/components/schemas/SalonRegisterResponse' }
         '400':
           description: Invalid payload
           content:
@@ -754,6 +782,30 @@ paths:
       responses:
         '200':
           description: OK
+
+  /api/public/maps/config:
+    get:
+      summary: Runtime konfiguracja mapy dla frontendu/mobile
+      description: Zwraca klucz Google Maps JS API. Priorytet: GOOGLE_MAPS_API_KEY, fallback VITE_GOOGLE_MAPS_API_KEY.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  googleMapsApiKey:
+                    type: string
+                    nullable: true
+                    description: null gdy klucz nie jest skonfigurowany
+              examples:
+                configured:
+                  value:
+                    googleMapsApiKey: AIza...
+                missing:
+                  value:
+                    googleMapsApiKey: null
 
   /api/public/places/nearby:
     get:
@@ -1595,5 +1647,23 @@ paths:
           application/json:
             schema: { type: object }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  owner:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                      phone: { type: string }
+                      active: { type: boolean }
+                      createdAt: { type: string }
+                  activationEmail:
+                    allOf:
+                      - $ref: '#/components/schemas/ActivationEmailStatus'
+                    nullable: true
 
