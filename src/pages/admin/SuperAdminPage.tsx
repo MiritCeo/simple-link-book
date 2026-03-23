@@ -152,9 +152,11 @@ export default function SuperAdminPage() {
                           return;
                         }
                         if (info.sent && info.sandbox) {
-                          toast.success("Owner aktywowany. E-mail wysłano w trybie sandbox (bez dostarczenia).");
+                          toast.success("Owner aktywowany. SendGrid przyjął e-mail w trybie sandbox (bez dostarczenia).");
                         } else if (info.sent) {
-                          toast.success("Owner aktywowany i e-mail został wysłany.");
+                          toast.success(
+                            `Owner aktywowany. SendGrid przyjął e-mail${info.messageId ? ` (ID: ${info.messageId})` : ""}.`,
+                          );
                         } else {
                           const reasonMap: Record<string, string> = {
                             missing_config: "brak konfiguracji SendGrid (SENDGRID_API_KEY / SENDGRID_FROM)",

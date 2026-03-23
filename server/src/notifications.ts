@@ -132,9 +132,14 @@ export async function sendEmail(to: string, subject: string, html: string) {
       },
       body: JSON.stringify(payload),
     });
+    const messageId = res.headers.get("x-message-id") || undefined;
     if (res.ok && sandbox) {
       // eslint-disable-next-line no-console
-      console.info("SendGrid: sandbox — żądanie OK, e-mail nie został dostarczony (tylko walidacja API)", { to, subject });
+      console.info("SendGrid: sandbox — żądanie OK, e-mail nie został dostarczony (tylko walidacja API)", {
+        to,
+        subject,
+        messageId,
+      });
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -142,7 +147,7 @@ export async function sendEmail(to: string, subject: string, html: string) {
       console.warn("SendGrid error", { status: res.status, body: text });
       return { ok: false as const, reason: "sendgrid_error" as const, status: res.status, body: text };
     }
-    return { ok: true as const, sandbox };
+    return { ok: true as const, sandbox, messageId };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn("SendGrid error", err);

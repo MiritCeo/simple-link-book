@@ -111,7 +111,7 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
   }
   const updated = await prisma.user.update({ where: { id: user.id }, data });
 
-  let activationEmail: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string } | undefined;
+  let activationEmail: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string; messageId?: string } | undefined;
   if (parsed.data.active === true) {
     const salon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
     const html = `
@@ -133,6 +133,7 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
       attempted: true,
       sent: !!emailResult?.ok,
       sandbox: emailResult?.ok ? !!emailResult.sandbox : undefined,
+      messageId: emailResult?.ok ? emailResult.messageId : undefined,
       reason: emailResult && !emailResult.ok ? emailResult.reason : undefined,
     };
   }
