@@ -225,13 +225,13 @@ export default function StaffSettingsPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
+        <DialogContent className="rounded-2xl w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90dvh] overflow-hidden p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
             <DialogTitle>Dodaj pracownika</DialogTitle>
             <DialogDescription>Utwórz nowego pracownika w salonie</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto px-6 py-4">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Imię i nazwisko</label>
               <Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Np. Anna Kowalska" className="h-11 rounded-xl" />
@@ -344,7 +344,7 @@ export default function StaffSettingsPage() {
             </div>
           </div>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="px-6 py-4 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button variant="outline" className="rounded-xl" onClick={() => setDialogOpen(false)}>Anuluj</Button>
             <Button
               className="rounded-xl"
