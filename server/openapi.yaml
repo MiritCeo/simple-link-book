@@ -1267,6 +1267,44 @@ paths:
       responses:
         '200': { description: OK }
 
+  /api/salon/staff/dedupe:
+    post:
+      summary: Scalanie duplikatów pracowników w salonie
+      description: |
+        Łączy duplikaty po znormalizowanym imieniu i nazwisku (bez wielkości liter, zbędnych spacji i polskich znaków).
+        Przenosi wizyty, usługi i grafik do rekordu głównego.
+        Może zwrócić konflikty, gdy dwa duplikaty mają różne konta userId.
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inspected: { type: integer }
+                  groups: { type: integer }
+                  mergedGroups: { type: integer }
+                  removed: { type: integer }
+                  kept: { type: integer }
+                  conflicts: { type: integer }
+                  details:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        keptId: { type: string }
+                        removedIds:
+                          type: array
+                          items: { type: string }
+                        conflictIds:
+                          type: array
+                          items: { type: string }
+        '403':
+          description: Brak dostępu (tylko OWNER)
+
   /api/salon/staff/{id}:
     put:
       summary: Aktualizacja pracownika

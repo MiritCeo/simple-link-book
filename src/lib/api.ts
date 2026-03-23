@@ -591,6 +591,21 @@ export async function dedupeSalonAppointments() {
   });
 }
 
+export async function dedupeSalonStaff() {
+  return apiFetch<{
+    inspected: number;
+    groups: number;
+    mergedGroups: number;
+    removed: number;
+    kept: number;
+    conflicts: number;
+    details: Array<{ name: string; keptId: string; removedIds: string[]; conflictIds?: string[] }>;
+  }>("/api/salon/staff/dedupe", {
+    method: "POST",
+    auth: true,
+  });
+}
+
 export async function deleteClient(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/salon/clients/${id}`, {
     method: "DELETE",

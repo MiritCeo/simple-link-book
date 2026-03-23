@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { getSalonStaff, updateStaff } from '@/lib/api';
+import { dedupeSalonStaff, getSalonStaff, updateStaff } from '@/lib/api';
 import { toast } from 'sonner';
 import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
@@ -26,6 +26,7 @@ export default function StaffSettingsPage() {
   const [search, setSearch] = useState('');
   const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dedupeLoading, setDedupeLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -69,11 +70,64 @@ export default function StaffSettingsPage() {
             className="pl-10 h-11 rounded-xl"
           />
         </div>
-        <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-          <Button className="rounded-xl h-11 gap-1.5" onClick={openCreate}>
-            <Plus className="w-4 h-4" />Dodaj pracownika
-          </Button>
-        </motion.div>
+        <div className="flex items-center gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="rounded-xl h-11"
+                disabled={dedupeLoading || loading}
+              >
+                {dedupeLoading ? 'Scalanie...' : 'Scal duplikaty'}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="rounded-2xl">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Scalić duplikaty pracowników?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Operacja połączy duplikaty po imieniu i nazwisku, przeniesie wizyty/grafik/usługi do rekordu głównego i usunie powtórzenia.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-xl">Anuluj</AlertDialogCancel>
+                <AlertDialogAction
+                  className="rounded-xl"
+                  onClick={async () => {
+                    setDedupeLoading(true);
+                    try {
+                      const result = await dedupeSalonStaff();
+                      const refreshed = await getSalonStaff();
+                      setStaff(refreshed.staff || []);
+                      if (result.removed > 0) {
+                        toast.success(
+                          `Scalono duplikaty: usunięto ${result.removed}, pozostawiono ${result.kept}.`,
+                        );
+                      } else {
+                        toast.info('Nie znaleziono duplikatów pracowników do scalenia.');
+                      }
+                      if (result.conflicts > 0) {
+                        toast.warning(
+                          `Wykryto ${result.conflicts} konfliktów kont użytkownika. Sprawdź raport w API (/api/salon/staff/dedupe).`,
+                        );
+                      }
+                    } catch (err: any) {
+                      toast.error(err.message || 'Nie udało się scalić duplikatów');
+                    } finally {
+                      setDedupeLoading(false);
+                    }
+                  }}
+                >
+                  Scal teraz
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+            <Button className="rounded-xl h-11 gap-1.5" onClick={openCreate}>
+              <Plus className="w-4 h-4" />Dodaj pracownika
+            </Button>
+          </motion.div>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground mb-3">{filtered.length} pracowników</p>

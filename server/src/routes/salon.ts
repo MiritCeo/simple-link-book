@@ -63,6 +63,19 @@ const isTimeValue = (time?: string | null) => {
 };
 
 const todayISO = () => new Date().toISOString().split("T")[0];
+const normalizePersonName = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+const inventoryRoleRank: Record<string, number> = {
+  STAFF: 1,
+  MANAGER: 2,
+  ADMIN: 3,
+};
 
 const hasOverlap = (startA: number, endA: number, startB: number, endB: number) => {
   return startA < endB && endA > startB;
@@ -957,6 +970,16 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
   let updatedClients = 0;
   let skippedRows = 0;
   const errors: Array<{ row: number; reason: string }> = [];
+  const importedStaff = await prisma.staff.findMany({
+    where: { salonId },
+    orderBy: [{ active: "desc" }, { createdAt: "asc" }],
+  });
+  const staffByNormalizedName = new Map<string, (typeof importedStaff)[0]>();
+  for (const s of importedStaff) {
+    const key = normalizePersonName(s.name || "");
+    if (!key || staffByNormalizedName.has(key)) continue;
+    staffByNormalizedName.set(key, s);
+  }
 
   for (const [idx, row] of parsed.data.rows.entries()) {
     const phone = (row.phone || "").trim();
@@ -1058,9 +1081,8 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
 
     const duration = services.reduce((sum, s) => sum + s.duration, 0);
     const staffName = (row.staff || "").trim();
-    let staff = staffName
-      ? await prisma.staff.findFirst({ where: { salonId, name: staffName, active: true } })
-      : null;
+    const normalizedStaffName = normalizePersonName(staffName);
+    let staff = normalizedStaffName ? staffByNormalizedName.get(normalizedStaffName) || null : null;
     if (!staff && staffName) {
       staff = await prisma.staff.create({
         data: {
@@ -1071,6 +1093,9 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
           active: true,
         },
       });
+      if (normalizedStaffName) {
+        staffByNormalizedName.set(normalizedStaffName, staff);
+      }
     }
     const statusKey = (row.status || "").toLowerCase().trim();
     const status = (statusMap[statusKey] || "SCHEDULED") as any;
@@ -1123,6 +1148,127 @@ router.post("/clients/import", async (req: AuthRequest, res) => {
     createdServices,
     skippedRows,
     errors,
+  });
+});
+
+router.post("/staff/dedupe", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const salonId = getSalonId(req);
+  const staffList = await prisma.staff.findMany({
+    where: { salonId },
+    include: {
+      staffServices: { select: { serviceId: true } },
+      _count: { select: { appointments: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const grouped = new Map<string, typeof staffList>();
+  for (const st of staffList) {
+    const key = normalizePersonName(st.name || "");
+    if (!key) continue;
+    const bucket = grouped.get(key) || [];
+    bucket.push(st);
+    grouped.set(key, bucket);
+  }
+
+  let mergedGroups = 0;
+  let removed = 0;
+  let conflicts = 0;
+  const details: Array<{ name: string; keptId: string; removedIds: string[]; conflictIds?: string[] }> = [];
+
+  for (const [nameKey, group] of grouped.entries()) {
+    if (group.length <= 1) continue;
+    mergedGroups += 1;
+    const ordered = [...group].sort((a, b) => {
+      const scoreA =
+        (a.userId ? 100 : 0) +
+        (a.active ? 10 : 0) +
+        (a._count?.appointments ? 1 : 0) +
+        (inventoryRoleRank[a.inventoryRole] || 0);
+      const scoreB =
+        (b.userId ? 100 : 0) +
+        (b.active ? 10 : 0) +
+        (b._count?.appointments ? 1 : 0) +
+        (inventoryRoleRank[b.inventoryRole] || 0);
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    let keeper = ordered[0];
+    const removedIds: string[] = [];
+    const conflictIds: string[] = [];
+
+    for (const dup of ordered.slice(1)) {
+      if (dup.userId && keeper.userId && dup.userId !== keeper.userId) {
+        conflicts += 1;
+        conflictIds.push(dup.id);
+        continue;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const shouldPromoteInventoryRole =
+          (inventoryRoleRank[dup.inventoryRole] || 0) > (inventoryRoleRank[keeper.inventoryRole] || 0);
+        const keeperUpdate: Record<string, unknown> = {};
+        if (!keeper.phone && dup.phone) keeperUpdate.phone = dup.phone;
+        if (!keeper.photoUrl && dup.photoUrl) keeperUpdate.photoUrl = dup.photoUrl;
+        if (!keeper.active && dup.active) keeperUpdate.active = true;
+        if (!keeper.userId && dup.userId) keeperUpdate.userId = dup.userId;
+        if (shouldPromoteInventoryRole) keeperUpdate.inventoryRole = dup.inventoryRole;
+        if (Object.keys(keeperUpdate).length) {
+          keeper = await tx.staff.update({
+            where: { id: keeper.id },
+            data: keeperUpdate,
+            include: {
+              staffServices: { select: { serviceId: true } },
+              _count: { select: { appointments: true } },
+            },
+          });
+        }
+
+        const serviceIds = Array.from(new Set(dup.staffServices.map(s => s.serviceId)));
+        if (serviceIds.length) {
+          await tx.staffService.createMany({
+            data: serviceIds.map(serviceId => ({ staffId: keeper.id, serviceId })),
+            skipDuplicates: true,
+          });
+        }
+        await tx.appointment.updateMany({
+          where: { staffId: dup.id },
+          data: { staffId: keeper.id },
+        });
+        await tx.staffAvailability.updateMany({
+          where: { staffId: dup.id },
+          data: { staffId: keeper.id },
+        });
+        await tx.staffException.updateMany({
+          where: { staffId: dup.id },
+          data: { staffId: keeper.id },
+        });
+        await tx.staffService.deleteMany({ where: { staffId: dup.id } });
+        await tx.staff.delete({ where: { id: dup.id } });
+      });
+
+      removed += 1;
+      removedIds.push(dup.id);
+    }
+
+    details.push({
+      name: ordered[0].name || nameKey,
+      keptId: keeper.id,
+      removedIds,
+      ...(conflictIds.length ? { conflictIds } : {}),
+    });
+  }
+
+  return res.json({
+    inspected: staffList.length,
+    groups: grouped.size,
+    mergedGroups,
+    removed,
+    kept: staffList.length - removed,
+    conflicts,
+    details,
   });
 });
 
