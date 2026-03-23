@@ -98,6 +98,15 @@ export async function sendEmail(to: string, subject: string, html: string) {
   }
 
   const sandbox = sendGridSandboxEnabled();
+  const plain = html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
   const payload: Record<string, unknown> = {
     personalizations: [{ to: [{ email: to }] }],
     from: {
@@ -105,7 +114,10 @@ export async function sendEmail(to: string, subject: string, html: string) {
       ...(process.env.SENDGRID_FROM_NAME?.trim() ? { name: process.env.SENDGRID_FROM_NAME.trim() } : {}),
     },
     subject,
-    content: [{ type: "text/html", value: html }],
+    content: [
+      { type: "text/plain", value: plain || subject },
+      { type: "text/html", value: html },
+    ],
   };
   if (sandbox) {
     payload.mail_settings = { sandbox_mode: { enable: true } };

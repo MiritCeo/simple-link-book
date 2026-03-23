@@ -112,7 +112,7 @@ router.patch("/owners/:id", async (req: AuthRequest, res) => {
   const updated = await prisma.user.update({ where: { id: user.id }, data });
 
   let activationEmail: { attempted: boolean; sent: boolean; sandbox?: boolean; reason?: string } | undefined;
-  if (parsed.data.active === true && user.active === false) {
+  if (parsed.data.active === true) {
     const salon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
     const html = `
       <div style="font-family:Arial,sans-serif;line-height:1.6;color:#212121">
