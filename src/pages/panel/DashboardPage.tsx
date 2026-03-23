@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarDays, CalendarX2, Users, TrendingUp, Clock, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { statusLabels, statusColors } from '@/data/mockData';
 import { getReadableTextColor } from '@/lib/color';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
@@ -11,6 +13,16 @@ import { motion } from 'framer-motion';
 import { getSalonAppointments, getSalonClients, getSalonStaff } from '@/lib/api';
 
 export default function DashboardPage() {
+  const toMinutes = (time?: string) => {
+    if (!time) return 0;
+    const [h, m] = String(time).split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  const formatTime = (minutes: number) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
   const getServiceBadges = (apt: any) => {
     const services = apt.appointmentServices || [];
     return services.map((s: any) => {
@@ -62,6 +74,8 @@ export default function DashboardPage() {
   const cancelledToday = todayAppts.filter(a => mapStatus(a.status) === 'cancelled');
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeAptId, setActiveAptId] = useState<string | null>(null);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [pinnedStaffIds, setPinnedStaffIds] = useState<string[]>([]);
   const upcomingAppointments = useMemo(() => {
     return appointments
       .filter(a => a.date >= today && ['scheduled', 'confirmed'].includes(mapStatus(a.status)))
@@ -69,6 +83,47 @@ export default function DashboardPage() {
   }, [appointments, today]);
   const activeApt = upcomingAppointments.find(a => a.id === activeAptId);
   const openDetails = (id: string) => { setActiveAptId(id); setDetailsOpen(true); };
+  const activeStaff = useMemo(() => staff.filter((s: any) => s.active !== false), [staff]);
+
+  useEffect(() => {
+    if (!activeStaff.length) {
+      setPinnedStaffIds([]);
+      return;
+    }
+    const storageKey = 'dashboard_pinned_staff_ids';
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+    const saved = raw ? (JSON.parse(raw) as string[]) : [];
+    const validSaved = saved.filter(id => activeStaff.some((s: any) => s.id === id)).slice(0, 4);
+    if (validSaved.length) {
+      setPinnedStaffIds(validSaved);
+      return;
+    }
+    setPinnedStaffIds(activeStaff.slice(0, 4).map((s: any) => s.id));
+  }, [activeStaff]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('dashboard_pinned_staff_ids', JSON.stringify(pinnedStaffIds.slice(0, 4)));
+  }, [pinnedStaffIds]);
+
+  const pinnedStaff = useMemo(
+    () => pinnedStaffIds.map(id => activeStaff.find((s: any) => s.id === id)).filter(Boolean) as any[],
+    [pinnedStaffIds, activeStaff],
+  );
+  const timelineAppointments = useMemo(() => {
+    return todayAppts.filter((a: any) => pinnedStaff.some((s: any) => s.id === a.staff?.id));
+  }, [todayAppts, pinnedStaff]);
+  const timelineStart = useMemo(() => {
+    if (!timelineAppointments.length) return 8 * 60;
+    const minStart = Math.min(...timelineAppointments.map((a: any) => toMinutes(a.time)));
+    return Math.max(6 * 60, Math.floor(minStart / 30) * 30 - 30);
+  }, [timelineAppointments]);
+  const timelineEnd = useMemo(() => {
+    if (!timelineAppointments.length) return 20 * 60;
+    const maxEnd = Math.max(...timelineAppointments.map((a: any) => toMinutes(a.time) + (a.duration || 30)));
+    return Math.min(23 * 60, Math.ceil(maxEnd / 30) * 30 + 30);
+  }, [timelineAppointments]);
+  const timelineRange = Math.max(30, timelineEnd - timelineStart);
 
   const capacitySlots = Math.max(1, staff.length * 8); // rough: 8 slots per staff/day
   const occupancyPercent = Math.min(100, Math.round((todayAppts.length / capacitySlots) * 100));
@@ -112,16 +167,6 @@ export default function DashboardPage() {
     },
   ];
 
-  // Mock hourly data for a simple bar chart
-  const hours = Array.from({ length: 11 }, (_, i) => {
-    const h = i + 9;
-    const count = todayAppts.filter(a => {
-      const aptH = parseInt(a.time.split(':')[0]);
-      return aptH === h;
-    }).length;
-    return { hour: `${h}:00`, count, max: 3 };
-  });
-
   // Specialist workload
   const specialistLoad = staff.map((sp: any) => {
     const appts = todayAppts.filter(a => a.staff?.name === sp.name);
@@ -163,34 +208,122 @@ export default function DashboardPage() {
       <div className="lg:grid lg:grid-cols-3 lg:gap-6">
         {/* Left: activity chart + upcoming */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Hourly activity */}
+          {/* Timeline */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.4 }}
             className="bg-card rounded-2xl p-5 border border-border"
           >
-            <h2 className="font-semibold mb-4">Aktywność dziś</h2>
-            <div className="flex items-end gap-1.5 h-28">
-              {hours.map((h, i) => (
-                <div key={h.hour} className="flex-1 flex flex-col items-center gap-1">
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: `${(h.count / 3) * 100}%` }}
-                    transition={{ delay: 0.3 + i * 0.04, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
-                    className={`w-full rounded-t-md min-h-[4px] ${h.count > 0 ? 'bg-primary' : 'bg-border'}`}
-                    style={{ maxHeight: '100%' }}
-                  />
-                  <span className="text-[9px] text-muted-foreground hidden sm:block">{h.hour.split(':')[0]}</span>
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <div>
+                <h2 className="font-semibold">Timeline dnia</h2>
+                <p className="text-xs text-muted-foreground">Widok dla maksymalnie 4 przypiętych pracowników</p>
+              </div>
+              <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs" onClick={() => setPinsOpen(true)}>
+                Przypnij pracowników
+              </Button>
+            </div>
+            {pinnedStaff.length === 0 ? (
+              <div className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
+                Wybierz pracowników do przypięcia, aby zobaczyć timeline.
+              </div>
+            ) : (
+              <div className="space-y-3 overflow-x-auto pb-1">
+                <div className="min-w-[720px]">
+                  <div className="relative ml-[132px] h-6 text-[10px] text-muted-foreground">
+                    {Array.from({ length: Math.floor(timelineRange / 60) + 1 }, (_, i) => {
+                      const minute = timelineStart + i * 60;
+                      const left = ((minute - timelineStart) / timelineRange) * 100;
+                      return (
+                        <div key={minute} className="absolute -translate-x-1/2" style={{ left: `${left}%` }}>
+                          {formatTime(minute)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="space-y-2">
+                    {pinnedStaff.map((sp: any) => {
+                      const rowAppts = todayAppts
+                        .filter((a: any) => a.staff?.id === sp.id)
+                        .sort((a: any, b: any) => a.time.localeCompare(b.time));
+                      return (
+                        <div key={sp.id} className="flex items-center gap-3">
+                          <div className="w-[120px] shrink-0">
+                            <p className="text-xs font-medium truncate">{sp.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{sp.role}</p>
+                          </div>
+                          <div className="relative h-12 flex-1 rounded-xl bg-muted/50 border border-border">
+                            {Array.from({ length: Math.floor(timelineRange / 60) + 1 }, (_, i) => {
+                              const minute = timelineStart + i * 60;
+                              const left = ((minute - timelineStart) / timelineRange) * 100;
+                              return <div key={minute} className="absolute top-0 bottom-0 w-px bg-border/60" style={{ left: `${left}%` }} />;
+                            })}
+                            {rowAppts.map((apt: any) => {
+                              const start = toMinutes(apt.time);
+                              const end = start + (apt.duration || 30);
+                              const left = ((start - timelineStart) / timelineRange) * 100;
+                              const width = Math.max(5, ((end - start) / timelineRange) * 100);
+                              return (
+                                <button
+                                  key={apt.id}
+                                  type="button"
+                                  className="absolute top-1 bottom-1 rounded-lg bg-primary/85 text-primary-foreground px-2 text-[10px] text-left overflow-hidden hover:bg-primary"
+                                  style={{ left: `${left}%`, width: `${width}%` }}
+                                  onClick={() => openDetails(apt.id)}
+                                  title={`${apt.time} • ${apt.client?.name || 'Klient'}`}
+                                >
+                                  <span className="truncate block">{apt.time} • {apt.client?.name || 'Klient'}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div className="flex justify-between mt-2 text-[10px] text-muted-foreground sm:hidden">
-              <span>9:00</span>
-              <span>14:00</span>
-              <span>19:00</span>
-            </div>
+              </div>
+            )}
           </motion.div>
+
+          <Dialog open={pinsOpen} onOpenChange={setPinsOpen}>
+            <DialogContent className="rounded-2xl">
+              <DialogHeader>
+                <DialogTitle>Przypięci pracownicy</DialogTitle>
+                <DialogDescription>Wybierz do 4 osób widocznych na timeline dashboardu.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                {activeStaff.map((sp: any) => {
+                  const checked = pinnedStaffIds.includes(sp.id);
+                  const disabled = !checked && pinnedStaffIds.length >= 4;
+                  return (
+                    <label key={sp.id} className={`flex items-center gap-3 rounded-xl border p-3 ${disabled ? 'opacity-60' : 'cursor-pointer'}`}>
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          setPinnedStaffIds(prev => {
+                            if (value) {
+                              if (prev.includes(sp.id) || prev.length >= 4) return prev;
+                              return [...prev, sp.id];
+                            }
+                            return prev.filter(id => id !== sp.id);
+                          });
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{sp.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{sp.role}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" className="rounded-xl" onClick={() => setPinsOpen(false)}>Zamknij</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           {/* Upcoming appointments */}
           <div>
@@ -289,50 +422,36 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Szczegóły wizyty</DialogTitle>
-            <DialogDescription>Szczegóły wizyty</DialogDescription>
-          </DialogHeader>
+      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <SheetContent side="right" className="w-[420px] sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Szczegóły wizyty</SheetTitle>
+            <SheetDescription>Informacje o wizycie i kliencie</SheetDescription>
+          </SheetHeader>
           {activeApt ? (
-            <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Klient</span>
-                <span className="text-sm font-medium">{activeApt.client?.name}</span>
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-border p-3 space-y-2">
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Klient</span><span className="text-sm font-medium">{activeApt.client?.name}</span></div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Telefon</span><span className="text-sm font-medium">{activeApt.client?.phone || '—'}</span></div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Email</span><span className="text-sm font-medium">{activeApt.client?.email || '—'}</span></div>
               </div>
-              <div>
-                <span className="text-sm text-muted-foreground">Usługa</span>
-                <div className="mt-1 flex flex-wrap items-center gap-1">
-                  {getServiceBadges(activeApt)}
+              <div className="rounded-xl border border-border p-3 space-y-2">
+                <div>
+                  <span className="text-sm text-muted-foreground">Usługi</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">{getServiceBadges(activeApt)}</div>
                 </div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Specjalista</span><span className="text-sm font-medium">{activeApt.staff?.name || 'Dowolny'}</span></div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Data</span><span className="text-sm font-medium">{activeApt.date}</span></div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Godzina</span><span className="text-sm font-medium">{activeApt.time}</span></div>
+                <div className="flex justify-between"><span className="text-sm text-muted-foreground">Status</span><span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span></div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Specjalista</span>
-                <span className="text-sm font-medium">{activeApt.staff?.name || 'Dowolny'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Data</span>
-                <span className="text-sm font-medium">{activeApt.date}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Godzina</span>
-                <span className="text-sm font-medium">{activeApt.time}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Status</span>
-                <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
-              </div>
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <Button
                   variant="outline"
                   size="sm"
                   className="rounded-xl h-9"
                   disabled={!activeApt.client?.phone}
-                  onClick={() => {
-                    if (!activeApt.client?.phone) return;
-                    window.open(`tel:${activeApt.client.phone}`, '_self');
-                  }}
+                  onClick={() => activeApt.client?.phone && window.open(`tel:${activeApt.client.phone}`, '_self')}
                 >
                   Zadzwoń
                 </Button>
@@ -341,33 +460,27 @@ export default function DashboardPage() {
                   size="sm"
                   className="rounded-xl h-9"
                   disabled={!activeApt.client?.phone}
-                  onClick={() => {
-                    if (!activeApt.client?.phone) return;
-                    window.open(`sms:${activeApt.client.phone}`, '_self');
-                  }}
+                  onClick={() => activeApt.client?.phone && window.open(`sms:${activeApt.client.phone}`, '_self')}
                 >
                   SMS
+                </Button>
+                <Button
+                  className="rounded-xl h-9"
+                  onClick={() => {
+                    if (!activeApt?.id) return;
+                    setDetailsOpen(false);
+                    navigate(`/panel/wizyty?edit=${activeApt.id}`);
+                  }}
+                >
+                  Edytuj
                 </Button>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Brak danych wizyty</p>
+            <p className="mt-4 text-sm text-muted-foreground">Brak danych wizyty</p>
           )}
-          <DialogFooter className="pt-2">
-            <Button variant="outline" className="rounded-xl" onClick={() => setDetailsOpen(false)}>Zamknij</Button>
-            <Button
-              className="rounded-xl"
-              onClick={() => {
-                if (!activeApt?.id) return;
-                setDetailsOpen(false);
-                navigate(`/panel/wizyty?edit=${activeApt.id}`);
-              }}
-            >
-              Edytuj wizytę
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </PageTransition>
   );
 }

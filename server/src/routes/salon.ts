@@ -879,7 +879,13 @@ router.delete("/staff/:id", async (req: AuthRequest, res) => {
     reassignedAppointments = reassign.count;
   }
 
-  const staff = await prisma.staff.update({ where: { id: req.params.id }, data: { active: false } });
+  const deletedRole = /\[USUNIĘTY\]$/i.test(existing.role || "")
+    ? existing.role
+    : `${existing.role} [USUNIĘTY]`;
+  const staff = await prisma.staff.update({
+    where: { id: req.params.id },
+    data: { active: false, role: deletedRole },
+  });
   if (staff.userId) {
     await prisma.user.update({ where: { id: staff.userId }, data: { active: false } });
   }

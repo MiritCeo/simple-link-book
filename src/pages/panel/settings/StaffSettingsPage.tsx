@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { dedupeSalonStaff, deleteStaff, getSalonStaff } from '@/lib/api';
+import { dedupeSalonStaff, deleteStaff, getSalonStaff, updateStaff } from '@/lib/api';
 import { toast } from 'sonner';
 import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
@@ -27,6 +27,7 @@ export default function StaffSettingsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [staff, setStaff] = useState<any[]>([]);
+  const [tab, setTab] = useState<'active' | 'inactive' | 'deleted'>('active');
   const [loading, setLoading] = useState(true);
   const [dedupeLoading, setDedupeLoading] = useState(false);
   const [deleteDialogStaff, setDeleteDialogStaff] = useState<any | null>(null);
@@ -46,11 +47,38 @@ export default function StaffSettingsPage() {
     return () => { mounted = false; };
   }, []);
 
+  const activeStaff = useMemo(() => staff.filter((s: any) => s.active === true), [staff]);
+  const inactiveStaff = useMemo(
+    () =>
+      staff.filter(
+        (s: any) =>
+          s.active === false &&
+          s.user?.active !== false &&
+          !/\[USUNIĘTY\]$/i.test(String(s.role || '')),
+      ),
+    [staff],
+  );
+  const deletedStaff = useMemo(
+    () =>
+      staff.filter(
+        (s: any) =>
+          s.active === false &&
+          (s.user?.active === false || /\[USUNIĘTY\]$/i.test(String(s.role || ''))),
+      ),
+    [staff],
+  );
+
+  const tabData = useMemo(() => {
+    if (tab === 'inactive') return inactiveStaff;
+    if (tab === 'deleted') return deletedStaff;
+    return activeStaff;
+  }, [tab, activeStaff, inactiveStaff, deletedStaff]);
+
   const filtered = useMemo(() => {
-    if (!search) return staff;
+    if (!search) return tabData;
     const q = search.toLowerCase();
-    return staff.filter((s: any) => s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q));
-  }, [search, staff]);
+    return tabData.filter((s: any) => s.name.toLowerCase().includes(q) || s.role.toLowerCase().includes(q));
+  }, [search, tabData]);
   const openCreate = () => navigate('/panel/ustawienia/pracownicy/nowy');
   const openEdit = (id: string) => navigate(`/panel/ustawienia/pracownicy/${id}`);
   const replacementOptions = useMemo(
@@ -141,6 +169,33 @@ export default function StaffSettingsPage() {
         </div>
       </div>
 
+      <div className="mb-3 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={tab === 'active' ? 'default' : 'outline'}
+          className="rounded-xl h-8 text-xs"
+          onClick={() => setTab('active')}
+        >
+          Aktywni ({activeStaff.length})
+        </Button>
+        <Button
+          size="sm"
+          variant={tab === 'inactive' ? 'default' : 'outline'}
+          className="rounded-xl h-8 text-xs"
+          onClick={() => setTab('inactive')}
+        >
+          Nieaktywni ({inactiveStaff.length})
+        </Button>
+        <Button
+          size="sm"
+          variant={tab === 'deleted' ? 'default' : 'outline'}
+          className="rounded-xl h-8 text-xs"
+          onClick={() => setTab('deleted')}
+        >
+          Usunięci ({deletedStaff.length})
+        </Button>
+      </div>
+
       <p className="text-xs text-muted-foreground mb-3">{filtered.length} pracowników</p>
 
       {loading ? (
@@ -149,12 +204,15 @@ export default function StaffSettingsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-card rounded-2xl border border-border p-6 text-sm text-muted-foreground text-center">
-          Brak pracowników
+          Brak pracowników w tej zakładce
         </div>
       ) : (
         <MotionList className="space-y-2">
           {filtered.map(staff => (
             <MotionItem key={staff.id}>
+              {(() => {
+                const isDeleted = staff.user?.active === false || /\[USUNIĘTY\]$/i.test(String(staff.role || ''));
+                return (
               <HoverCard className="bg-card rounded-2xl p-4 border border-border flex items-start justify-between gap-3">
                 <div className="min-w-0 flex items-start gap-3">
                   <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden text-xs font-semibold">
@@ -171,8 +229,11 @@ export default function StaffSettingsPage() {
                     <Badge variant="secondary" className="text-[10px]">
                       {staff.services?.length ?? 0} usług
                     </Badge>
-                  {staff.active === false && (
+                  {staff.active === false && !isDeleted && (
                     <Badge variant="outline" className="text-[10px] text-muted-foreground">Nieaktywny</Badge>
+                  )}
+                  {isDeleted && (
+                    <Badge variant="outline" className="text-[10px] text-destructive">Usunięty</Badge>
                   )}
                     {(staff.services || []).slice(0, 2).map((service: any) => (
                       <span key={service.id} className="text-[11px] text-muted-foreground">
@@ -197,6 +258,53 @@ export default function StaffSettingsPage() {
                   <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5" onClick={() => openEdit(staff.id)}>
                     <Pencil className="w-3.5 h-3.5" />Edytuj
                   </Button>
+                  {!isDeleted && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5">
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {staff.active === false ? 'Aktywuj' : 'Dezaktywuj'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="rounded-2xl">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{staff.active === false ? 'Aktywować pracownika?' : 'Dezaktywować pracownika?'}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {staff.active === false
+                            ? 'Pracownik wróci do zakładki Aktywni.'
+                            : 'Pracownik trafi do zakładki Nieaktywni.'}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl">Anuluj</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="rounded-xl"
+                          onClick={async () => {
+                            const nextActive = staff.active === false;
+                            try {
+                              await updateStaff(staff.id, {
+                                name: staff.name,
+                                role: staff.role,
+                                phone: staff.phone,
+                                photoUrl: staff.photoUrl,
+                                active: nextActive,
+                                serviceIds: staff.services?.map((s: any) => s.id) ?? [],
+                                inventoryRole: staff.inventoryRole,
+                              });
+                              const refreshed = await getSalonStaff();
+                              setStaff(refreshed.staff || []);
+                              toast.success(nextActive ? 'Pracownik aktywowany' : 'Pracownik dezaktywowany');
+                            } catch (err: any) {
+                              toast.error(err.message || 'Błąd zapisu');
+                            }
+                          }}
+                        >
+                          {staff.active === false ? 'Aktywuj' : 'Dezaktywuj'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  )}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="outline" size="sm" className="rounded-xl h-9 text-xs gap-1.5 text-destructive">
@@ -207,7 +315,8 @@ export default function StaffSettingsPage() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Usunąć pracownika?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Jeśli pracownik ma przypisane wizyty, system poprosi o przepisanie ich do innej osoby.
+                          Pracownik zniknie z listy głównej i trafi do zakładki Usunięci.
+                          Jeśli ma przypisane wizyty, system poprosi o przepisanie ich do innej osoby.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -227,6 +336,8 @@ export default function StaffSettingsPage() {
                   </AlertDialog>
                 </div>
               </HoverCard>
+                );
+              })()}
             </MotionItem>
           ))}
         </MotionList>
