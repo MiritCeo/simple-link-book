@@ -1,8 +1,9 @@
 import type { CSSProperties } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { mapStylesByPreset, type MapStylePreset } from "@/lib/googleMapStyles";
 import { cn } from "@/lib/utils";
+import { getPublicMapsClientConfig } from "@/lib/api";
 import { markerIconDataUrl, type MapPinVariant } from "./mapMarkerIcons";
 
 export type SalonMapMarkerVariant = MapPinVariant;
@@ -123,17 +124,60 @@ function SalonMapInner({
 export function SalonMapPanel(
   props: Omit<InnerProps, "apiKey"> & { fillContainer?: boolean; wrapperClassName?: string },
 ) {
-  const apiKey = ((import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string | undefined)?.trim();
+  const staticEnvKey = ((import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string | undefined)?.trim();
+  const [apiKey, setApiKey] = useState<string | null>(staticEnvKey || null);
+  const [resolved, setResolved] = useState<boolean>(!!staticEnvKey);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (staticEnvKey) {
+      setApiKey(staticEnvKey);
+      setResolved(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    getPublicMapsClientConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        setApiKey(cfg.googleMapsApiKey?.trim() || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setApiKey(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setResolved(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [staticEnvKey]);
+
+  if (!resolved) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground leading-relaxed">
+        <p className="font-medium text-foreground mb-2">Mapa Google</p>
+        <p>Ładowanie konfiguracji mapy…</p>
+      </div>
+    );
+  }
+
   if (!apiKey) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground leading-relaxed">
         <p className="font-medium text-foreground mb-2">Mapa Google</p>
         <p>
-          Ustaw <code className="rounded bg-muted px-1 py-0.5 text-xs">VITE_GOOGLE_MAPS_API_KEY</code> w pliku{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">.env</code> (Maps JavaScript API + ewentualnie Places dla biblioteki).
+          Brak klucza Google Maps. Ustaw{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">GOOGLE_MAPS_API_KEY</code> w środowisku backendu
+          (runtime) albo <code className="rounded bg-muted px-1 py-0.5 text-xs">VITE_GOOGLE_MAPS_API_KEY</code> przed
+          buildem frontendu.
         </p>
         <p className="mt-2">
-          Dla punktów „w okolicy” backend używa{" "}
+          Dla punktów „w okolicy” backend także używa{" "}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">GOOGLE_MAPS_API_KEY</code> w tym samym pliku (Places Nearby).
         </p>
       </div>

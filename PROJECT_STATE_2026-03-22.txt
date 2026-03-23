@@ -1,0 +1,61 @@
+PROJECT STATE - 2026-03-22
+
+Status ogólny
+- Główne zmiany UX/UI i branding zostały wdrożone.
+- Flow rejestracji salonów z aktywacją przez Super Admina działa.
+- Diagnostyka maila aktywacyjnego została rozszerzona o messageId z SendGrid.
+- Obecny problem z niedostarczonym mailem nie wynika z błędu backendu aplikacji.
+
+Co zostało wdrożone
+1) UX i copy
+- Uproszczono komunikaty dla użytkowników końcowych w module eksploracji salonów.
+- Poprawiono mapę i komunikaty błędów Google na bardziej przyjazne.
+
+2) Rezerwacja wizyty
+- Dla zalogowanego klienta pomijany jest krok pytania o konto/logowanie podczas rezerwacji.
+- Poprawiono nawigację wstecz dla nowego przebiegu kroków.
+
+3) Branding i logo
+- Wdrożono nowe logo happlogo.svg (w tym favicon/social/manifest i assety PNG/ICO).
+- Dodano subtelne czarne obramowanie logo.
+- Zaktualizowano odwołania do assetów i cache busting.
+
+4) Fonty
+- Cały serwis przełączony na Poppins.
+- Uporządkowane wagi i hierarchia nagłówków oraz tekstu.
+
+5) Logowanie i rejestracja
+- Przebudowane widoki logowania (klient/salon) na split-screen.
+- Dodane sekcje benefitów i CTA aplikacji mobilnej (desktop + mobile).
+- Rejestracja salonów aktywna z informacją o wersji testowej.
+
+6) Aktywacja salonu przez Super Admina
+- Nowo zarejestrowany salon-owner tworzy się jako inactive.
+- Super Admin aktywuje konto właściciela.
+- Po aktywacji wysyłany jest e-mail powitalny z linkiem do logowania.
+
+7) Mailing i domeny
+- Ujednolicono treści i linki pod branding honly.
+- Dopuszczone domeny: honly.pl oraz honly.app (zgodnie z ustaleniem).
+- Dodano text/plain obok HTML dla lepszej dostarczalności.
+
+8) Diagnostyka wysyłki e-mail
+- sendEmail zwraca: ok/sandbox/reason oraz messageId (x-message-id).
+- Super Admin toast pokazuje przyjęcie przez SendGrid i ID wiadomości.
+
+Aktualny stan incydentu e-mail aktywacyjnego
+- Potwierdzony messageId: xbEX88hgSyWYM1TvHJZAtg (SendGrid accepted).
+- Status z SendGrid: Deferred.
+- Komunikat: error dialing remote address: dial tcp 149.72.126.143:0->178.211.137.193:25: i/o timeout
+- Wniosek: problem po stronie trasy dostarczenia/serwera odbiorcy (timeout SMTP), nie po stronie kodu aplikacji.
+
+Ważne ustalenia operacyjne
+- "Wysłany" = przyjęty przez SendGrid, nie zawsze "Delivered" do skrzynki.
+- Do pełnej diagnozy per wiadomość należy sprawdzać finalny event w SendGrid Email Activity.
+
+Otwarte tematy na kolejny etap
+- Dopracowanie treści maila aktywacyjnego (bardziej marketingowo + krótki onboarding).
+- Ewentualnie dodanie czytelnej etykiety/tooltipu dla statusu Deferred w UI (na razie odłożone).
+
+Notatka
+- Ten plik jest snapshotem roboczym stanu projektu na potrzeby szybkiego powrotu do pracy.

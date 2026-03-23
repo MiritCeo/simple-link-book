@@ -4,6 +4,12 @@ import { googlePlaceMatchesSalon } from "../lib/matchGoogleSalon.js";
 
 const router = Router();
 
+/** Runtime config dla frontendu (np. klucz mapy bez konieczności rebuildu frontu). */
+router.get("/maps/config", (_req, res) => {
+  const key = process.env.GOOGLE_MAPS_API_KEY?.trim() || process.env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "";
+  return res.json({ googleMapsApiKey: key || null });
+});
+
 /** Katalog salonów Honly (publicznie — do mapy / wyszukiwarki / mobile) */
 router.get("/salons/catalog", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";

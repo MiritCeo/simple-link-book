@@ -156,6 +156,11 @@ export async function getPlacesNearby(params: { lat: number; lng: number; radius
   );
 }
 
+/** Konfiguracja mapy dla frontendu pobierana runtime z backendu. */
+export async function getPublicMapsClientConfig() {
+  return apiFetch<{ googleMapsApiKey: string | null }>("/api/public/maps/config");
+}
+
 export async function getClientRatingPending() {
   return clientApiFetch<{ pending: any[] }>("/api/client/ratings/pending");
 }
