@@ -40,6 +40,26 @@ const requireOwner = (req: AuthRequest, res: any) => {
   return true;
 };
 
+const linkClientAccountToSalonByEmail = async (client: { id: string; salonId: string; email?: string | null }) => {
+  const normalizedEmail = client.email?.trim().toLowerCase();
+  if (!normalizedEmail) return;
+  const account = await prisma.clientAccount.findUnique({ where: { email: normalizedEmail } });
+  if (!account) return;
+  await prisma.clientAccountSalon.upsert({
+    where: {
+      clientAccountId_salonId: { clientAccountId: account.id, salonId: client.salonId },
+    },
+    create: {
+      clientAccountId: account.id,
+      salonId: client.salonId,
+      clientId: client.id,
+    },
+    update: {
+      clientId: client.id,
+    },
+  });
+};
+
 const defaultHours = [
   { weekday: 0, open: "09:00", close: "20:00", active: true },
   { weekday: 1, open: "09:00", close: "20:00", active: true },
@@ -1041,9 +1061,11 @@ router.post("/clients", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
+  const normalizedEmail = parsed.data.email?.trim().toLowerCase();
   const client = await prisma.client.create({
-    data: { ...parsed.data, salonId: getSalonId(req), active: true },
+    data: { ...parsed.data, email: normalizedEmail, salonId: getSalonId(req), active: true },
   });
+  await linkClientAccountToSalonByEmail(client);
   return res.json({ client });
 });
 
@@ -1436,10 +1458,12 @@ router.put("/clients/:id", async (req: AuthRequest, res) => {
   if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
   }
+  const normalizedEmail = parsed.data.email?.trim().toLowerCase();
   const client = await prisma.client.update({
     where: { id: req.params.id },
-    data: parsed.data,
+    data: { ...parsed.data, email: normalizedEmail },
   });
+  await linkClientAccountToSalonByEmail(client);
   return res.json({ client });
 });
 
@@ -1735,6 +1759,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     },
     include: { client: true, staff: true, appointmentServices: { include: { service: true } } },
   });
+  await linkClientAccountToSalonByEmail(client);
   const salon = await prisma.salon.findUnique({ where: { id: appointment.salonId } });
   await sendEventNotification("BOOKING_CONFIRMATION", { ...appointment, salon } as any);
   return res.json({ appointment });

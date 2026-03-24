@@ -6,6 +6,7 @@ import { z } from "zod";
 import prisma from "../prisma.js";
 import { ensureCancelToken, sendEventNotification } from "../notificationService.js";
 import { sendEmail, sendSms } from "../notifications.js";
+import { phonesMatchDigits } from "../lib/phoneDigits.js";
 
 const router = Router();
 
@@ -417,7 +418,41 @@ router.get("/salons/:slug/availability", async (req, res) => {
     slots.forEach(s => slotsSet.add(s));
   }
 
-  const slots = Array.from(slotsSet).sort();
+  const rawSlots = Array.from(slotsSet).sort();
+
+  // Finalna walidacja "bookable now" tym samym mechanizmem co podczas tworzenia wizyty.
+  // Dzięki temu API dostępności nie zwraca godzin, które i tak odpadną na finalnym bookingu.
+  const slots: string[] = [];
+  for (const time of rawSlots) {
+    if (parsed.data.staffId) {
+      const check = await validateAppointmentAvailability({
+        salonId: salon.id,
+        date: parsed.data.date,
+        time,
+        duration: service.duration,
+        staffId: parsed.data.staffId,
+      });
+      if (check.ok) slots.push(time);
+      continue;
+    }
+
+    let anyBookable = false;
+    for (const sid of staffIds) {
+      const check = await validateAppointmentAvailability({
+        salonId: salon.id,
+        date: parsed.data.date,
+        time,
+        duration: service.duration,
+        staffId: sid,
+      });
+      if (check.ok) {
+        anyBookable = true;
+        break;
+      }
+    }
+    if (anyBookable) slots.push(time);
+  }
+
   return res.json({ slots });
 });
 
@@ -467,9 +502,14 @@ router.post("/salons/:slug/appointments", async (req, res) => {
 
   const normalizedClientEmail = parsed.data.client.email?.trim().toLowerCase();
 
-  const existingClient = await prisma.client.findFirst({
-    where: { salonId: salon.id, phone: parsed.data.client.phone },
+  const salonClients = await prisma.client.findMany({
+    where: { salonId: salon.id },
+    select: { id: true, phone: true },
   });
+  const existingClientRef = salonClients.find((c) => phonesMatchDigits(c.phone, parsed.data.client.phone));
+  const existingClient = existingClientRef
+    ? await prisma.client.findUnique({ where: { id: existingClientRef.id } })
+    : null;
   const client = existingClient
     ? await prisma.client.update({
         where: { id: existingClient.id },
@@ -493,14 +533,13 @@ router.post("/salons/:slug/appointments", async (req, res) => {
   if (normalizedClientEmail) {
     const account = await prisma.clientAccount.findUnique({ where: { email: normalizedClientEmail } });
     if (account) {
-      const existingLink = await prisma.clientAccountSalon.findFirst({
-        where: { clientAccountId: account.id, salonId: client.salonId },
+      await prisma.clientAccountSalon.upsert({
+        where: {
+          clientAccountId_salonId: { clientAccountId: account.id, salonId: client.salonId },
+        },
+        create: { clientAccountId: account.id, salonId: client.salonId, clientId: client.id },
+        update: { clientId: client.id },
       });
-      if (!existingLink) {
-        await prisma.clientAccountSalon.create({
-          data: { clientAccountId: account.id, salonId: client.salonId, clientId: client.id },
-        });
-      }
     }
   }
 
