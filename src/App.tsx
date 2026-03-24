@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { GoogleAnalyticsRouteTracker } from "@/components/GoogleAnalyticsRouteTracker";
 import SalonBooking from "./pages/booking/SalonBooking";
 import CancelBooking from "./pages/booking/CancelBooking";
 import LoginPage from "./pages/auth/LoginPage";
@@ -45,6 +46,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GoogleAnalyticsRouteTracker />
         <Routes>
           {/* Public booking */}
           <Route path="/s/:slug" element={<SalonBooking />} />
