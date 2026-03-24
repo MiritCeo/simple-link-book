@@ -20,7 +20,6 @@ const loginSchema = z.object({
 
 const profileSchema = z.object({
   name: z.string().min(2),
-  phone: z.string().regex(/^\+48\s?\d{3}\s?\d{3}\s?\d{3}$/, "Podaj numer telefonu w formacie +48 123 456 789"),
   email: z.string().email().optional(),
 });
 
@@ -376,7 +375,7 @@ router.put("/me", async (req: ClientAuthRequest, res) => {
     return res.status(400).json({ error: "invalid_payload" });
   }
 
-  const { name, phone, email } = parsed.data;
+  const { name, email } = parsed.data;
   const account = await prisma.clientAccount.findUnique({
     where: { clientId: req.client!.clientId },
   });
@@ -397,7 +396,7 @@ router.put("/me", async (req: ClientAuthRequest, res) => {
 
   const client = await prisma.client.update({
     where: { id: req.client!.clientId },
-    data: { name, phone, email: email ?? null },
+    data: { name, email: email ?? null },
   });
 
   return res.json({ client });

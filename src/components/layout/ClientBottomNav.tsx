@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, CalendarDays, LogOut, Heart, Compass } from "lucide-react";
+import { Home, CalendarDays, LogOut, Heart, Compass, User } from "lucide-react";
 
 type NavItem = {
   path: string;
@@ -13,6 +13,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { path: "/konto", label: "Start", icon: Home, exact: true },
   { path: "/konto/wizyty", label: "Moje wizyty", icon: CalendarDays },
+  { path: "/konto/profil", label: "Mój profil", icon: User },
   {
     path: "/konto/ulubione",
     label: "Ulubione",
@@ -33,17 +34,9 @@ function navItemActive(pathname: string, item: NavItem): boolean {
   return pathname === item.path || pathname.startsWith(`${item.path}/`);
 }
 
-type ClientSalon = { id: string; name: string; slug: string; clientId: string };
-
 export function ClientSidebar({
-  salons,
-  activeSalonId,
-  onSwitchSalon,
   clientName,
 }: {
-  salons: ClientSalon[];
-  activeSalonId?: string | null;
-  onSwitchSalon: (salonId: string) => void;
   clientName?: string;
 }) {
   const location = useLocation();
@@ -60,22 +53,6 @@ export function ClientSidebar({
           <span className="text-[10px] text-muted-foreground">Moje konto</span>
         </div>
       </div>
-      {salons.length > 1 && (
-        <div className="px-4 py-3 border-b border-border">
-          <label className="text-[10px] uppercase tracking-wide text-muted-foreground block mb-2">Salon</label>
-          <select
-            value={activeSalonId || ""}
-            onChange={(e) => e.target.value && onSwitchSalon(e.target.value)}
-            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-          >
-            {salons.map((salon) => (
-              <option key={salon.id} value={salon.id}>
-                {salon.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map((item) => {
           const active = navItemActive(location.pathname, item);

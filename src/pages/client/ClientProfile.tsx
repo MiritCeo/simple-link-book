@@ -22,17 +22,6 @@ export default function ClientProfile() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [salonPanelAvailable, setSalonPanelAvailable] = useState(false);
 
-  const formatPhonePL = (input: string) => {
-    const digits = input.replace(/\D/g, '');
-    const withCountry = digits.startsWith('48') ? digits : `48${digits}`;
-    const limited = withCountry.slice(0, 11);
-    const rest = limited.slice(2);
-    const parts = [rest.slice(0, 3), rest.slice(3, 6), rest.slice(6, 9)].filter(Boolean);
-    return `+48 ${parts.join(' ')}`.trim();
-  };
-
-  const isValidPhonePL = (value: string) => /^\+48\s?\d{3}\s?\d{3}\s?\d{3}$/.test(value);
-
   useEffect(() => {
     let mounted = true;
     getClientMe()
@@ -50,15 +39,10 @@ export default function ClientProfile() {
   }, []);
 
   const handleSaveProfile = async () => {
-    if (!isValidPhonePL(profile.phone)) {
-      toast.error('Podaj poprawny numer telefonu w formacie +48 123 456 789');
-      return;
-    }
     try {
       setSavingProfile(true);
       const res = await updateClientProfile({
         name: profile.name,
-        phone: profile.phone,
         email: profile.email || undefined,
       });
       setProfile({
@@ -69,11 +53,7 @@ export default function ClientProfile() {
       setEditingProfile(false);
       toast.success('Dane zostały zaktualizowane');
     } catch (err: any) {
-      if (err?.message?.includes('format')) {
-        toast.error('Podaj numer telefonu w formacie +48 123 456 789');
-      } else {
-        toast.error(err?.message || 'Nie udało się zapisać danych');
-      }
+      toast.error(err?.message || 'Nie udało się zapisać danych');
     } finally {
       setSavingProfile(false);
     }
@@ -149,16 +129,10 @@ export default function ClientProfile() {
               <label className="text-sm font-medium mb-1.5 flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-muted-foreground" />Telefon
               </label>
-              {editingProfile ? (
-                <Input
-                  value={profile.phone}
-                  onChange={e => setProfile(p => ({ ...p, phone: formatPhonePL(e.target.value) }))}
-                  className="h-11 rounded-xl"
-                  placeholder="+48 123 456 789"
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground bg-muted rounded-xl px-3 py-2.5">{profile.phone}</p>
-              )}
+              <p className="text-sm text-muted-foreground bg-muted rounded-xl px-3 py-2.5">{profile.phone}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Numer telefonu jest przypisany do historii wizyt i salonów, dlatego nie można go zmienić w profilu.
+              </p>
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 flex items-center gap-1.5">

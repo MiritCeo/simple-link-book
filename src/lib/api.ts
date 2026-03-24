@@ -208,7 +208,7 @@ export async function removeClientFavoriteGooglePlace(favoriteId: string) {
   });
 }
 
-export async function updateClientProfile(payload: { name: string; phone: string; email?: string }) {
+export async function updateClientProfile(payload: { name: string; email?: string }) {
   return clientApiFetch<{ client: any }>("/api/client/me", {
     method: "PUT",
     body: JSON.stringify(payload),
