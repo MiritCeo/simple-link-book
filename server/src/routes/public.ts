@@ -1,9 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../prisma.js";
 import { ensureCancelToken, sendEventNotification } from "../notificationService.js";
+import { sendEmail, sendSms } from "../notifications.js";
 
 const router = Router();
 
@@ -463,6 +465,8 @@ router.post("/salons/:slug/appointments", async (req, res) => {
 
   const duration = services.reduce((sum, s) => sum + s.duration, 0);
 
+  const normalizedClientEmail = parsed.data.client.email?.trim().toLowerCase();
+
   const existingClient = await prisma.client.findFirst({
     where: { salonId: salon.id, phone: parsed.data.client.phone },
   });
@@ -471,7 +475,7 @@ router.post("/salons/:slug/appointments", async (req, res) => {
         where: { id: existingClient.id },
         data: {
           name: parsed.data.client.name,
-          email: parsed.data.client.email,
+          email: normalizedClientEmail,
           notes: parsed.data.client.notes,
           active: true,
         },
@@ -481,13 +485,13 @@ router.post("/salons/:slug/appointments", async (req, res) => {
           salonId: salon.id,
           name: parsed.data.client.name,
           phone: parsed.data.client.phone,
-          email: parsed.data.client.email,
+          email: normalizedClientEmail,
           notes: parsed.data.client.notes,
         },
       });
 
-  if (client.email) {
-    const account = await prisma.clientAccount.findUnique({ where: { email: client.email } });
+  if (normalizedClientEmail) {
+    const account = await prisma.clientAccount.findUnique({ where: { email: normalizedClientEmail } });
     if (account) {
       const existingLink = await prisma.clientAccountSalon.findFirst({
         where: { clientAccountId: account.id, salonId: client.salonId },
@@ -807,13 +811,49 @@ router.post("/client/register", async (req, res) => {
 
 router.post("/client/resend-code", async (req, res) => {
   const schema = z.object({
+    sessionToken: z.string().min(16).optional(),
     phone: z.string().min(6).optional(),
     email: z.string().email().optional(),
-  }).refine(data => data.phone || data.email, { message: "Podaj telefon lub email" });
+  }).refine(data => data.sessionToken || data.phone || data.email, { message: "Podaj sessionToken lub telefon/email" });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane" });
 
-  const { phone, email } = parsed.data;
+  const { sessionToken, phone, email } = parsed.data;
+
+  // Backward compatibility: mobile może wywoływać stary endpoint podczas nowego flow rejestracji.
+  if (sessionToken) {
+    const session = await prisma.clientRegistrationSession.findUnique({ where: { sessionToken } });
+    if (!session) return res.status(404).json({ error: "session_not_found" });
+    if (!session.phoneDigits) return res.status(400).json({ error: "phone_not_set" });
+
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let plainCode = "";
+    for (let i = 0; i < 6; i += 1) plainCode += chars[crypto.randomInt(chars.length)]!;
+    const codeHash = await bcrypt.hash(plainCode.toUpperCase(), 10);
+
+    await prisma.clientRegistrationSession.update({
+      where: { id: session.id },
+      data: {
+        codeHash,
+        codeExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        codeAttempts: 0,
+      },
+    });
+
+    const smsTo = `+${session.phoneDigits.startsWith("48") ? session.phoneDigits : `48${session.phoneDigits}`}`;
+    const emailResult = await sendEmail(
+      session.email,
+      "Kod weryfikacyjny honly",
+      `<p>Twój kod potwierdzający numer telefonu: <strong>${plainCode}</strong></p><p>Ten sam kod został wysłany SMS-em.</p>`,
+    );
+    await sendSms(smsTo, `Twój kod weryfikacyjny honly: ${plainCode}`);
+
+    if (!emailResult.ok) {
+      return res.status(502).json({ error: "code_send_failed", reason: emailResult.reason });
+    }
+    return res.json({ ok: true });
+  }
+
   const appointment = await prisma.appointment.findFirst({
     where: {
       status: { notIn: ["CANCELLED", "NO_SHOW"] },

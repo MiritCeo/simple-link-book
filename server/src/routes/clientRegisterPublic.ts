@@ -15,6 +15,7 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const CODE_TTL_MS = 15 * 60 * 1000;
 const MAX_CODE_ATTEMPTS = 8;
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const UNASSIGNED_SALON_SLUG = "__honly_unassigned__";
 
 const emailSchema = z.string().email().transform(s => s.trim().toLowerCase());
 const passwordSchema = z.string().min(8);
@@ -77,16 +78,6 @@ async function pickClientsMatchingPhone(
   return [...bySalon.values()];
 }
 
-async function resolveDefaultSalonId(tx: Prisma.TransactionClient): Promise<string | null> {
-  const envId = process.env.DEFAULT_REGISTRATION_SALON_ID?.trim();
-  if (envId) {
-    const s = await tx.salon.findUnique({ where: { id: envId }, select: { id: true } });
-    if (s) return s.id;
-  }
-  const first = await tx.salon.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } });
-  return first?.id ?? null;
-}
-
 async function sendVerificationChannels(email: string, phoneDigits: string, plainCode: string) {
   const smsTo = smsRecipientFromDigits(phoneDigits);
   const msg = `Twój kod weryfikacyjny honly: ${plainCode}`;
@@ -99,6 +90,21 @@ async function sendVerificationChannels(email: string, phoneDigits: string, plai
     // eslint-disable-next-line no-console
     console.info(`[dev] Kod rejestracji dla ${email} / ${smsTo}: ${plainCode} (SMS skonfigurowane: ${hasSms}, email: ${hasMail})`);
   }
+}
+
+async function ensureUnassignedSalon(tx: Prisma.TransactionClient) {
+  const existing = await tx.salon.findUnique({ where: { slug: UNASSIGNED_SALON_SLUG } });
+  if (existing) return existing;
+  return tx.salon.create({
+    data: {
+      slug: UNASSIGNED_SALON_SLUG,
+      name: "Konto klienta (bez salonu)",
+      address: "",
+      phone: "",
+      hours: "",
+      description: "Techniczny salon systemowy dla kont bez przypisań.",
+    },
+  });
 }
 
 /** Krok 1: email + hasło */
@@ -280,16 +286,11 @@ router.post("/client/register/session/verify", async (req, res) => {
         const sorted = [...matched].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         primaryClientId = sorted[0]!.id;
       } else {
-        const salonId = await resolveDefaultSalonId(tx);
-        if (!salonId) {
-          const err = new Error("no_salon");
-          (err as any).code = "no_salon";
-          throw err;
-        }
+        const unassignedSalon = await ensureUnassignedSalon(tx);
         const local = session.email.split("@")[0] || "Klient";
         const created = await tx.client.create({
           data: {
-            salonId,
+            salonId: unassignedSalon.id,
             name: local.slice(0, 80),
             phone: smsRecipientFromDigits(session.phoneDigits!),
             email: session.email,
@@ -359,9 +360,6 @@ router.post("/client/register/session/verify", async (req, res) => {
   } catch (e: any) {
     if (e?.code === "phone_linked_other_account") {
       return res.status(409).json({ error: "phone_linked_other_account" });
-    }
-    if (e?.code === "no_salon") {
-      return res.status(503).json({ error: "no_salon" });
     }
     if (e?.code === "P2002") {
       return res.status(409).json({ error: "email_taken" });

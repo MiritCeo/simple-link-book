@@ -11,6 +11,7 @@ import { appointmentEndDate, canRateAppointment } from "../lib/appointmentTime.j
 
 const router = Router();
 const publicAppUrl = (process.env.PUBLIC_APP_URL?.trim() || "https://honly.app").replace(/\/$/, "");
+const UNASSIGNED_SALON_SLUG = "__honly_unassigned__";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -61,7 +62,7 @@ export const buildClientSalons = async (account: { id: string; clientId: string 
     latitude?: number | null;
     longitude?: number | null;
   }> = [];
-  if (primaryClient?.salon) {
+  if (primaryClient?.salon && primaryClient.salon.slug !== UNASSIGNED_SALON_SLUG) {
     salons.push({
       id: primaryClient.salon.id,
       name: primaryClient.salon.name,
@@ -78,6 +79,7 @@ export const buildClientSalons = async (account: { id: string; clientId: string 
 
   links.forEach(link => {
     if (!link.salon) return;
+    if (link.salon.slug === UNASSIGNED_SALON_SLUG) return;
     if (salons.some(s => s.id === link.salonId)) return;
     salons.push({
       id: link.salon.id,
@@ -232,7 +234,14 @@ router.get("/salons", async (req: ClientAuthRequest, res) => {
   if (!account) return res.status(404).json({ error: "account_not_found" });
   await ensureAccountSalonLink(account.id, account.clientId);
   const salons = await buildClientSalons(account);
-  return res.json({ salons, activeSalonId: req.client!.salonId });
+  const activeSalon = await prisma.salon.findUnique({
+    where: { id: req.client!.salonId },
+    select: { slug: true },
+  });
+  return res.json({
+    salons,
+    activeSalonId: activeSalon?.slug === UNASSIGNED_SALON_SLUG ? null : req.client!.salonId,
+  });
 });
 
 router.post("/switch-salon", async (req: ClientAuthRequest, res) => {

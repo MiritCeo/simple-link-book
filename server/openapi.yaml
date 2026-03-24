@@ -8,7 +8,6 @@ servers:
     description: Production
   - url: http://localhost:4000
     description: Local
-
 components:
   securitySchemes:
     BearerAuth:
@@ -21,7 +20,8 @@ components:
       properties:
         error:
           type: string
-      required: [error]
+      required:
+        - error
     AuthError:
       type: object
       properties:
@@ -41,72 +41,125 @@ components:
             - profile_not_found
             - account_not_found
             - invalid_current_password
-      required: [error]
+      required:
+        - error
     AuthResponse:
       type: object
       properties:
-        token: { type: string }
-        salonId: { type: string, nullable: true }
-        userId: { type: string }
-        role: { type: string }
+        token:
+          type: string
+        salonId:
+          type: string
+          nullable: true
+        userId:
+          type: string
+        role:
+          type: string
         salons:
           type: array
           items:
             type: object
             properties:
-              id: { type: string }
-              name: { type: string }
-              slug: { type: string }
-              role: { type: string }
+              id:
+                type: string
+              name:
+                type: string
+              slug:
+                type: string
+              role:
+                type: string
     SalonRegisterResponse:
       type: object
       properties:
-        ok: { type: boolean }
-        pendingApproval: { type: boolean }
-        salonId: { type: string }
-        userId: { type: string }
-        role: { type: string, enum: [OWNER] }
+        ok:
+          type: boolean
+        pendingApproval:
+          type: boolean
+        salonId:
+          type: string
+        userId:
+          type: string
+        role:
+          type: string
+          enum:
+            - OWNER
         salons:
           type: array
           items:
             type: object
             properties:
-              id: { type: string }
-              name: { type: string }
-              slug: { type: string }
-              role: { type: string, enum: [OWNER] }
-              active: { type: boolean }
-      required: [ok, pendingApproval, salonId, userId, role, salons]
+              id:
+                type: string
+              name:
+                type: string
+              slug:
+                type: string
+              role:
+                type: string
+                enum:
+                  - OWNER
+              active:
+                type: boolean
+      required:
+        - ok
+        - pendingApproval
+        - salonId
+        - userId
+        - role
+        - salons
     ActivationEmailStatus:
       type: object
       properties:
-        attempted: { type: boolean }
-        sent: { type: boolean }
-        sandbox: { type: boolean, nullable: true }
-        reason: { type: string, nullable: true, description: "np. missing_config, fetch_unavailable, sendgrid_error, exception" }
-        messageId: { type: string, nullable: true, description: "SendGrid x-message-id (gdy request został przyjęty)" }
-      required: [attempted, sent]
+        attempted:
+          type: boolean
+        sent:
+          type: boolean
+        sandbox:
+          type: boolean
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+          description: np. missing_config, fetch_unavailable, sendgrid_error, exception
+        messageId:
+          type: string
+          nullable: true
+          description: SendGrid x-message-id (gdy request został przyjęty)
+      required:
+        - attempted
+        - sent
     ClientAuthResponse:
       type: object
       properties:
-        token: { type: string }
-        clientId: { type: string }
-        salonId: { type: string }
+        token:
+          type: string
+        clientId:
+          type: string
+        salonId:
+          type: string
         salons:
           type: array
           items:
-            $ref: '#/components/schemas/ClientSalon'
+            $ref: "#/components/schemas/ClientSalon"
     ClientSalon:
       type: object
       properties:
-        id: { type: string }
-        name: { type: string }
-        slug: { type: string }
-        clientId: { type: string }
-        address: { type: string }
-        phone: { type: string }
-        hours: { type: string }
-        description: { type: string }
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        clientId:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        hours:
+          type: string
+        description:
+          type: string
     ClientMeResponse:
       type: object
       properties:
@@ -115,24 +168,35 @@ components:
           description: Profil klienta w aktywnym salonie
         salonPanelAvailable:
           type: boolean
-          description: true gdy istnieje konto użytkownika panelu salonu (User) z tym samym e-mailem
-      required: [client, salonPanelAvailable]
+          description: true gdy istnieje konto użytkownika panelu salonu (User) z tym
+            samym e-mailem
+      required:
+        - client
+        - salonPanelAvailable
     ClientRegisterSessionStartResponse:
       type: object
       properties:
-        sessionToken: { type: string }
+        sessionToken:
+          type: string
         linkedSalonUser:
           type: boolean
-          description: Ten sam e-mail ma już konto panelu salonu — można przełączyć się w ustawieniach /login
-      required: [sessionToken, linkedSalonUser]
+          description: Ten sam e-mail ma już konto panelu salonu — można przełączyć się w
+            ustawieniach /login
+      required:
+        - sessionToken
+        - linkedSalonUser
     ClientRegisterVerifyResponse:
       allOf:
-        - $ref: '#/components/schemas/ClientAuthResponse'
+        - $ref: "#/components/schemas/ClientAuthResponse"
         - type: object
           properties:
-            ok: { type: boolean }
-            linkedSalonUser: { type: boolean }
-          required: [ok, linkedSalonUser]
+            ok:
+              type: boolean
+            linkedSalonUser:
+              type: boolean
+          required:
+            - ok
+            - linkedSalonUser
     PublicBookingError:
       type: object
       properties:
@@ -152,31 +216,40 @@ components:
             - staff_busy
         message:
           type: string
-      required: [error]
+      required:
+        - error
     Appointment:
       type: object
       properties:
-        id: { type: string }
-        date: { type: string }
-        time: { type: string }
-        duration: { type: integer }
-        status: { type: string }
-        notes: { type: string, nullable: true }
+        id:
+          type: string
+        date:
+          type: string
+        time:
+          type: string
+        duration:
+          type: integer
+        status:
+          type: string
+        notes:
+          type: string
+          nullable: true
   responses:
     Unauthorized:
       description: Unauthorized
       content:
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-
+          schema:
+            $ref: "#/components/schemas/Error"
 paths:
   /api/health:
     get:
       summary: Healthcheck
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - System
   /api/auth/login:
     post:
       summary: Login (panel salonu)
@@ -187,40 +260,52 @@ paths:
             schema:
               type: object
               properties:
-                email: { type: string }
-                password: { type: string }
-              required: [email, password]
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - email
+                - password
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthResponse' }
-        '400':
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-        '401':
+                  value:
+                    error: invalid_payload
+        "401":
           description: Unauthorized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_credentials:
-                  value: { error: invalid_credentials }
-        '403':
+                  value:
+                    error: invalid_credentials
+        "403":
           description: Forbidden
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 account_inactive:
-                  value: { error: account_inactive }
-
+                  value:
+                    error: account_inactive
+      tags:
+        - Auth
   /api/auth/register:
     post:
       summary: Rejestracja salonu (OWNER)
@@ -231,39 +316,56 @@ paths:
             schema:
               type: object
               properties:
-                email: { type: string }
-                phone: { type: string }
-                password: { type: string }
-                salonName: { type: string }
-                salonSlug: { type: string }
-              required: [email, phone, password, salonName, salonSlug]
+                email:
+                  type: string
+                phone:
+                  type: string
+                password:
+                  type: string
+                salonName:
+                  type: string
+                salonSlug:
+                  type: string
+              required:
+                - email
+                - phone
+                - password
+                - salonName
+                - salonSlug
       responses:
-        '200':
+        "200":
           description: OK (konto oczekuje aktywacji przez SUPER_ADMIN)
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SalonRegisterResponse' }
-        '400':
+              schema:
+                $ref: "#/components/schemas/SalonRegisterResponse"
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-        '409':
+                  value:
+                    error: invalid_payload
+        "409":
           description: Email taken
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 email_taken:
-                  value: { error: email_taken }
-
+                  value:
+                    error: email_taken
+      tags:
+        - Auth
   /api/auth/switch-salon:
     post:
       summary: Zmiana aktywnego salonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -271,36 +373,45 @@ paths:
             schema:
               type: object
               properties:
-                salonId: { type: string }
-              required: [salonId]
+                salonId:
+                  type: string
+              required:
+                - salonId
       responses:
-        '200':
+        "200":
           description: OK
-        '400':
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-        '401':
+                  value:
+                    error: invalid_payload
+        "401":
           description: Unauthorized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 unauthorized:
-                  value: { error: unauthorized }
-        '403':
+                  value:
+                    error: unauthorized
+        "403":
           description: Forbidden
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 forbidden:
-                  value: { error: forbidden }
-
+                  value:
+                    error: forbidden
+      tags:
+        - Auth
   /api/client/login:
     post:
       summary: Login klienta
@@ -311,15 +422,20 @@ paths:
             schema:
               type: object
               properties:
-                email: { type: string }
-                password: { type: string }
-              required: [email, password]
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - email
+                - password
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ClientAuthResponse' }
+              schema:
+                $ref: "#/components/schemas/ClientAuthResponse"
               examples:
                 success:
                   value:
@@ -331,57 +447,67 @@ paths:
                         name: Studio Bella
                         slug: studio-bella
                         clientId: c_123
-                        address: "ul. Kwiatowa 1, Warszawa"
-                        phone: "+48 123 456 789"
-                        hours: "Pn-Pt 9:00-18:00"
-                        description: "Salon fryzjerski"
+                        address: ul. Kwiatowa 1, Warszawa
+                        phone: +48 123 456 789
+                        hours: Pn-Pt 9:00-18:00
+                        description: Salon fryzjerski
                       - id: s_456
                         name: Beauty House
                         slug: beauty-house
                         clientId: c_456
-                        address: "ul. Lipowa 5, Warszawa"
-                        phone: "+48 222 333 444"
-                        hours: "Pn-Sb 10:00-20:00"
-                        description: "Salon kosmetyczny"
-        '400':
+                        address: ul. Lipowa 5, Warszawa
+                        phone: +48 222 333 444
+                        hours: Pn-Sb 10:00-20:00
+                        description: Salon kosmetyczny
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-        '401':
+                  value:
+                    error: invalid_payload
+        "401":
           description: Unauthorized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_credentials:
-                  value: { error: invalid_credentials }
-        '403':
+                  value:
+                    error: invalid_credentials
+        "403":
           description: Forbidden
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 account_inactive:
-                  value: { error: account_inactive }
-        '500':
+                  value:
+                    error: account_inactive
+        "500":
           description: Internal error
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 internal_error:
-                  value: { error: internal_error }
-
+                  value:
+                    error: internal_error
+      tags:
+        - Client
   /api/client/salons:
     get:
       summary: Lista salonów klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -391,7 +517,7 @@ paths:
                   salons:
                     type: array
                     items:
-                      $ref: '#/components/schemas/ClientSalon'
+                      $ref: "#/components/schemas/ClientSalon"
                   activeSalonId:
                     type: string
               examples:
@@ -403,39 +529,45 @@ paths:
                         name: Studio Bella
                         slug: studio-bella
                         clientId: c_123
-                        address: "ul. Kwiatowa 1, Warszawa"
-                        phone: "+48 123 456 789"
-                        hours: "Pn-Pt 9:00-18:00"
-                        description: "Salon fryzjerski"
+                        address: ul. Kwiatowa 1, Warszawa
+                        phone: +48 123 456 789
+                        hours: Pn-Pt 9:00-18:00
+                        description: Salon fryzjerski
                       - id: s_456
                         name: Beauty House
                         slug: beauty-house
                         clientId: c_456
-                        address: "ul. Lipowa 5, Warszawa"
-                        phone: "+48 222 333 444"
-                        hours: "Pn-Sb 10:00-20:00"
-                        description: "Salon kosmetyczny"
-        '401':
+                        address: ul. Lipowa 5, Warszawa
+                        phone: +48 222 333 444
+                        hours: Pn-Sb 10:00-20:00
+                        description: Salon kosmetyczny
+        "401":
           description: Unauthorized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 unauthorized:
-                  value: { error: unauthorized }
-        '404':
+                  value:
+                    error: unauthorized
+        "404":
           description: Account not found
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 account_not_found:
-                  value: { error: account_not_found }
-
+                  value:
+                    error: account_not_found
+      tags:
+        - Client
   /api/client/switch-salon:
     post:
       summary: Zmiana aktywnego salonu klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -443,54 +575,67 @@ paths:
             schema:
               type: object
               properties:
-                salonId: { type: string }
-              required: [salonId]
+                salonId:
+                  type: string
+              required:
+                - salonId
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  token: { type: string }
-                  clientId: { type: string }
-                  salonId: { type: string }
+                  token:
+                    type: string
+                  clientId:
+                    type: string
+                  salonId:
+                    type: string
               examples:
                 success:
                   value:
                     token: eyJhbGciOi...
                     clientId: c_456
                     salonId: s_456
-        '400':
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-        '401':
+                  value:
+                    error: invalid_payload
+        "401":
           description: Unauthorized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 unauthorized:
-                  value: { error: unauthorized }
-        '404':
+                  value:
+                    error: unauthorized
+        "404":
           description: Salon not linked
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 salon_not_linked:
-                  value: { error: salon_not_linked }
-
+                  value:
+                    error: salon_not_linked
+      tags:
+        - Client
   /api/client/salons/attach:
     post:
       summary: Dodanie salonu klienta po tokenie
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -498,21 +643,24 @@ paths:
             schema:
               type: object
               properties:
-                token: { type: string }
-              required: [token]
+                token:
+                  type: string
+              required:
+                - token
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  ok: { type: boolean }
+                  ok:
+                    type: boolean
                   salons:
                     type: array
                     items:
-                      $ref: '#/components/schemas/ClientSalon'
+                      $ref: "#/components/schemas/ClientSalon"
               examples:
                 success:
                   value:
@@ -522,43 +670,50 @@ paths:
                         name: Studio Bella
                         slug: studio-bella
                         clientId: c_123
-                        address: "ul. Kwiatowa 1, Warszawa"
-                        phone: "+48 123 456 789"
-                        hours: "Pn-Pt 9:00-18:00"
-                        description: "Salon fryzjerski"
+                        address: ul. Kwiatowa 1, Warszawa
+                        phone: +48 123 456 789
+                        hours: Pn-Pt 9:00-18:00
+                        description: Salon fryzjerski
                       - id: s_456
                         name: Beauty House
                         slug: beauty-house
                         clientId: c_456
-                        address: "ul. Lipowa 5, Warszawa"
-                        phone: "+48 222 333 444"
-                        hours: "Pn-Sb 10:00-20:00"
-                        description: "Salon kosmetyczny"
-        '400':
+                        address: ul. Lipowa 5, Warszawa
+                        phone: +48 222 333 444
+                        hours: Pn-Sb 10:00-20:00
+                        description: Salon kosmetyczny
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-        '401':
+                  value:
+                    error: invalid_payload
+        "401":
           description: Unauthorized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 unauthorized:
-                  value: { error: unauthorized }
-        '404':
+                  value:
+                    error: unauthorized
+        "404":
           description: Token invalid
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 token_invalid:
-                  value: { error: token_invalid }
-
+                  value:
+                    error: token_invalid
+      tags:
+        - Client
   /api/client/password-reset:
     post:
       summary: Reset hasła klienta (request)
@@ -569,20 +724,25 @@ paths:
             schema:
               type: object
               properties:
-                email: { type: string }
-              required: [email]
+                email:
+                  type: string
+              required:
+                - email
       responses:
-        '200':
+        "200":
           description: OK
-        '400':
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-
+                  value:
+                    error: invalid_payload
+      tags:
+        - Client
   /api/client/password-reset/confirm:
     post:
       summary: Reset hasła klienta (confirm)
@@ -593,36 +753,49 @@ paths:
             schema:
               type: object
               properties:
-                token: { type: string }
-                newPassword: { type: string }
-              required: [token, newPassword]
+                token:
+                  type: string
+                newPassword:
+                  type: string
+              required:
+                - token
+                - newPassword
       responses:
-        '200':
+        "200":
           description: OK
-        '400':
+        "400":
           description: Invalid payload / token invalid
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
+                  value:
+                    error: invalid_payload
                 token_invalid:
-                  value: { error: token_invalid }
-
+                  value:
+                    error: token_invalid
+      tags:
+        - Client
   /api/client/me:
     get:
       summary: Profil klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ClientMeResponse' }
+              schema:
+                $ref: "#/components/schemas/ClientMeResponse"
+      tags:
+        - Client
     put:
       summary: Aktualizacja profilu klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -630,18 +803,25 @@ paths:
             schema:
               type: object
               properties:
-                name: { type: string }
-                phone: { type: string }
-                email: { type: string }
-              required: [name, phone]
+                name:
+                  type: string
+                phone:
+                  type: string
+                email:
+                  type: string
+              required:
+                - name
+                - phone
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/password:
     put:
       summary: Zmiana hasła klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -649,33 +829,43 @@ paths:
             schema:
               type: object
               properties:
-                currentPassword: { type: string }
-                newPassword: { type: string }
-              required: [currentPassword, newPassword]
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+              required:
+                - currentPassword
+                - newPassword
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/appointments:
     get:
       summary: Wizyty klienta (z cancelToken)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/ratings/pending:
     get:
       summary: Wizyty oczekujące na ocenę (okno 24h po zakończeniu)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/ratings:
     post:
       summary: Wystawienie oceny 1–5 za wizytę (jedna na appointmentId)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -683,29 +873,39 @@ paths:
             schema:
               type: object
               properties:
-                appointmentId: { type: string }
-                stars: { type: integer, minimum: 1, maximum: 5 }
-              required: [appointmentId, stars]
+                appointmentId:
+                  type: string
+                stars:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+              required:
+                - appointmentId
+                - stars
       responses:
-        '200':
+        "200":
           description: OK
-        '403':
+        "403":
           description: Poza oknem / zły status wizyty
-        '409':
+        "409":
           description: Już ocenione
-
+      tags:
+        - Client
   /api/client/favorites:
     get:
       summary: Ulubione salony (Purebook + Google)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/favorites/salons:
     post:
       summary: Dodaj salon Purebook do ulubionych
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -713,29 +913,36 @@ paths:
             schema:
               type: object
               properties:
-                salonId: { type: string }
-              required: [salonId]
+                salonId:
+                  type: string
+              required:
+                - salonId
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/favorites/salons/{salonId}:
     delete:
       summary: Usuń salon Purebook z ulubionych
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: salonId
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/favorites/google-places:
     post:
       summary: Dodaj miejsce Google do ulubionych
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -743,52 +950,70 @@ paths:
             schema:
               type: object
               properties:
-                googlePlaceId: { type: string }
-                displayName: { type: string }
-                displayAddress: { type: string }
-                lat: { type: number }
-                lng: { type: number }
-              required: [googlePlaceId, displayName]
+                googlePlaceId:
+                  type: string
+                displayName:
+                  type: string
+                displayAddress:
+                  type: string
+                lat:
+                  type: number
+                lng:
+                  type: number
+              required:
+                - googlePlaceId
+                - displayName
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/client/favorites/google-places/{id}:
     delete:
       summary: Usuń ulubione miejsce Google (id rekordu z GET /favorites)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Client
   /api/public/salons/catalog:
     get:
       summary: Katalog salonów Purebook (wyszukiwarka, średnia ocen — publiczne, mobile)
       parameters:
         - in: query
           name: q
-          schema: { type: string }
+          schema:
+            type: string
         - in: query
           name: page
-          schema: { type: integer, default: 1 }
+          schema:
+            type: integer
+            default: 1
         - in: query
           name: limit
-          schema: { type: integer, default: 20 }
+          schema:
+            type: integer
+            default: 20
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Public
   /api/public/maps/config:
     get:
       summary: Runtime konfiguracja mapy dla frontendu/mobile
-      description: "Zwraca klucz Google Maps JS API. Priorytet: GOOGLE_MAPS_API_KEY, fallback VITE_GOOGLE_MAPS_API_KEY."
+      description: "Zwraca klucz Google Maps JS API. Priorytet: GOOGLE_MAPS_API_KEY,
+        fallback VITE_GOOGLE_MAPS_API_KEY."
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -806,7 +1031,8 @@ paths:
                 missing:
                   value:
                     googleMapsApiKey: null
-
+      tags:
+        - Public
   /api/public/places/nearby:
     get:
       summary: Salony fryzjerskie/kosmetyczne z Google (Nearby) + dopasowanie do honly
@@ -814,23 +1040,30 @@ paths:
         - in: query
           name: lat
           required: true
-          schema: { type: number }
+          schema:
+            type: number
         - in: query
           name: lng
           required: true
-          schema: { type: number }
+          schema:
+            type: number
         - in: query
           name: radius
-          schema: { type: number, description: "Metry, max 50000" }
+          schema:
+            type: number
+            description: Metry, max 50000
         - in: query
           name: q
-          schema: { type: string, description: "Słowo kluczowe (Nearby Search keyword), max 80 znaków" }
+          schema:
+            type: string
+            description: Słowo kluczowe (Nearby Search keyword), max 80 znaków
       responses:
-        '200':
+        "200":
           description: OK — googleConfigured false gdy brak GOOGLE_MAPS_API_KEY na serwerze
-        '400':
+        "400":
           description: Nieprawidłowe współrzędne
-
+      tags:
+        - Public
   /api/public/salons/{slug}:
     get:
       summary: Dane publiczne salonu
@@ -838,11 +1071,13 @@ paths:
         - in: path
           name: slug
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Public
   /api/public/salons/{slug}/availability:
     get:
       summary: Dostępne sloty
@@ -850,23 +1085,28 @@ paths:
         - in: path
           name: slug
           required: true
-          schema: { type: string }
+          schema:
+            type: string
         - in: query
           name: date
           required: true
-          schema: { type: string }
+          schema:
+            type: string
         - in: query
           name: serviceId
           required: true
-          schema: { type: string }
+          schema:
+            type: string
         - in: query
           name: staffId
           required: false
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Public
   /api/public/salons/{slug}/appointments:
     post:
       summary: Publiczna rezerwacja
@@ -874,7 +1114,8 @@ paths:
         - in: path
           name: slug
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -882,67 +1123,108 @@ paths:
             schema:
               type: object
               properties:
-                date: { type: string }
-                time: { type: string }
-                notes: { type: string }
-                serviceId: { type: string }
+                date:
+                  type: string
+                time:
+                  type: string
+                notes:
+                  type: string
+                serviceId:
+                  type: string
                 serviceIds:
                   type: array
-                  items: { type: string }
-                staffId: { type: string }
+                  items:
+                    type: string
+                staffId:
+                  type: string
                 client:
                   type: object
                   properties:
-                    name: { type: string }
-                    phone: { type: string }
-                    email: { type: string }
-                    notes: { type: string }
-                  required: [name, phone]
-              required: [date, time, client]
+                    name:
+                      type: string
+                    phone:
+                      type: string
+                    email:
+                      type: string
+                    notes:
+                      type: string
+                  required:
+                    - name
+                    - phone
+              required:
+                - date
+                - time
+                - client
       responses:
-        '200':
+        "200":
           description: OK
-        '400':
+        "400":
           description: Validation or data error
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PublicBookingError' }
+              schema:
+                $ref: "#/components/schemas/PublicBookingError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload, message: "Nieprawidłowe dane rezerwacji" }
+                  value:
+                    error: invalid_payload
+                    message: Nieprawidłowe dane rezerwacji
                 service_missing:
-                  value: { error: service_missing, message: "Wybierz przynajmniej jedną usługę" }
+                  value:
+                    error: service_missing
+                    message: Wybierz przynajmniej jedną usługę
                 service_not_found:
-                  value: { error: service_not_found, message: "Nie znaleziono usług w tym salonie" }
+                  value:
+                    error: service_not_found
+                    message: Nie znaleziono usług w tym salonie
                 staff_not_found:
-                  value: { error: staff_not_found, message: "Nie znaleziono pracownika w tym salonie" }
+                  value:
+                    error: staff_not_found
+                    message: Nie znaleziono pracownika w tym salonie
                 staff_service_mismatch:
-                  value: { error: staff_service_mismatch, message: "Pracownik nie wykonuje wybranych usług" }
-        '404':
+                  value:
+                    error: staff_service_mismatch
+                    message: Pracownik nie wykonuje wybranych usług
+        "404":
           description: Salon not found
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PublicBookingError' }
+              schema:
+                $ref: "#/components/schemas/PublicBookingError"
               examples:
                 salon_not_found:
-                  value: { error: salon_not_found, message: "Nie znaleziono salonu o podanym linku" }
-        '409':
+                  value:
+                    error: salon_not_found
+                    message: Nie znaleziono salonu o podanym linku
+        "409":
           description: Availability conflict
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PublicBookingError' }
+              schema:
+                $ref: "#/components/schemas/PublicBookingError"
               examples:
                 salon_closed:
-                  value: { error: salon_closed, message: "Salon jest zamknięty w tym dniu" }
+                  value:
+                    error: salon_closed
+                    message: Salon jest zamknięty w tym dniu
                 time_unavailable:
-                  value: { error: time_unavailable, message: "Termin jest niedostępny" }
+                  value:
+                    error: time_unavailable
+                    message: Termin jest niedostępny
                 break_time:
-                  value: { error: break_time, message: "Termin wypada w czasie przerwy" }
+                  value:
+                    error: break_time
+                    message: Termin wypada w czasie przerwy
                 staff_unavailable:
-                  value: { error: staff_unavailable, message: "Pracownik jest niedostępny w tym terminie" }
+                  value:
+                    error: staff_unavailable
+                    message: Pracownik jest niedostępny w tym terminie
                 staff_busy:
-                  value: { error: staff_busy, message: "Pracownik jest zajęty w tym terminie" }
-
+                  value:
+                    error: staff_busy
+                    message: Pracownik jest zajęty w tym terminie
+      tags:
+        - Public
   /api/public/cancel/{token}:
     get:
       summary: Szczegóły rezerwacji po tokenie
@@ -950,21 +1232,26 @@ paths:
         - in: path
           name: token
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
+      tags:
+        - Public
     post:
       summary: Odwołanie rezerwacji
       parameters:
         - in: path
           name: token
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Public
   /api/public/cancel/{token}/availability:
     get:
       summary: Dostępne sloty do przełożenia
@@ -972,15 +1259,18 @@ paths:
         - in: path
           name: token
           required: true
-          schema: { type: string }
+          schema:
+            type: string
         - in: query
           name: date
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Public
   /api/public/cancel/{token}/reschedule:
     post:
       summary: Przełożenie rezerwacji
@@ -988,7 +1278,8 @@ paths:
         - in: path
           name: token
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -996,13 +1287,18 @@ paths:
             schema:
               type: object
               properties:
-                date: { type: string }
-                time: { type: string }
-              required: [date, time]
+                date:
+                  type: string
+                time:
+                  type: string
+              required:
+                - date
+                - time
       responses:
-        '200':
+        "200":
           description: OK
-
+      tags:
+        - Public
   /api/public/client/register:
     post:
       summary: Rejestracja klienta po rezerwacji
@@ -1013,42 +1309,55 @@ paths:
             schema:
               type: object
               properties:
-                token: { type: string }
-                email: { type: string }
-                password: { type: string }
-              required: [token, password]
+                token:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - token
+                - password
       responses:
-        '200':
+        "200":
           description: OK
-        '400':
+        "400":
           description: Invalid payload
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 invalid_payload:
-                  value: { error: invalid_payload }
-        '404':
+                  value:
+                    error: invalid_payload
+        "404":
           description: Token invalid
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 token_invalid:
-                  value: { error: token_invalid }
-        '409':
+                  value:
+                    error: token_invalid
+        "409":
           description: Email taken or account exists
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AuthError' }
+              schema:
+                $ref: "#/components/schemas/AuthError"
               examples:
                 email_taken:
-                  value: { error: email_taken }
-
+                  value:
+                    error: email_taken
+      tags:
+        - Auth
   /api/public/client/register/session:
     post:
       summary: Rejestracja klienta — krok 1 (e-mail i hasło)
-      description: Tworzy sesję wieloetapowej rejestracji. Zwraca sessionToken na kolejne kroki (także dla aplikacji mobilnej).
+      description: Tworzy sesję wieloetapowej rejestracji. Zwraca sessionToken na
+        kolejne kroki (także dla aplikacji mobilnej).
       requestBody:
         required: true
         content:
@@ -1056,33 +1365,51 @@ paths:
             schema:
               type: object
               properties:
-                email: { type: string, format: email }
-                password: { type: string, minLength: 8 }
-                confirmPassword: { type: string, minLength: 8 }
-              required: [email, password, confirmPassword]
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                confirmPassword:
+                  type: string
+                  minLength: 8
+              required:
+                - email
+                - password
+                - confirmPassword
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ClientRegisterSessionStartResponse' }
-        '400':
+              schema:
+                $ref: "#/components/schemas/ClientRegisterSessionStartResponse"
+        "400":
           description: Invalid payload / hasła niezgodne
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  error: { type: string, enum: [invalid_payload, password_mismatch] }
-        '409':
+                  error:
+                    type: string
+                    enum:
+                      - invalid_payload
+                      - password_mismatch
+        "409":
           description: Konto klienta z tym e-mailem już istnieje
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  error: { type: string, enum: [email_taken] }
-
+                  error:
+                    type: string
+                    enum:
+                      - email_taken
+      tags:
+        - Auth
   /api/public/client/register/session/phone:
     post:
       summary: Rejestracja klienta — krok 2 (telefon + wysłanie kodu)
@@ -1094,25 +1421,32 @@ paths:
             schema:
               type: object
               properties:
-                sessionToken: { type: string }
-                phone: { type: string, description: "Format +48 123 456 789" }
-              required: [sessionToken, phone]
+                sessionToken:
+                  type: string
+                phone:
+                  type: string
+                  description: Format +48 123 456 789
+              required:
+                - sessionToken
+                - phone
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  ok: { type: boolean }
-        '400':
+                  ok:
+                    type: boolean
+        "400":
           description: Invalid payload / telefon
-        '404':
+        "404":
           description: Sesja nie istnieje
-        '410':
+        "410":
           description: Sesja wygasła
-
+      tags:
+        - Auth
   /api/public/client/register/session/resend-code:
     post:
       summary: Ponowne wysłanie kodu weryfikacyjnego (SMS + e-mail)
@@ -1123,22 +1457,26 @@ paths:
             schema:
               type: object
               properties:
-                sessionToken: { type: string }
-              required: [sessionToken]
+                sessionToken:
+                  type: string
+              required:
+                - sessionToken
       responses:
-        '200':
+        "200":
           description: OK
-        '400':
+        "400":
           description: Brak numeru w sesji
-        '404':
+        "404":
           description: Sesja nie istnieje
-        '410':
+        "410":
           description: Sesja wygasła
-
+      tags:
+        - Auth
   /api/public/client/register/session/verify:
     post:
       summary: Rejestracja klienta — krok 3 (kod z SMS/e-mail)
-      description: Po poprawnym kodzie zakłada konto, scala wizyty po numerze telefonu i salony. Zwraca JWT jak /api/client/login.
+      description: Po poprawnym kodzie zakłada konto, scala wizyty po numerze telefonu
+        i salony. Zwraca JWT jak /api/client/login.
       requestBody:
         required: true
         content:
@@ -1146,16 +1484,23 @@ paths:
             schema:
               type: object
               properties:
-                sessionToken: { type: string }
-                code: { type: string, minLength: 4, maxLength: 8 }
-              required: [sessionToken, code]
+                sessionToken:
+                  type: string
+                code:
+                  type: string
+                  minLength: 4
+                  maxLength: 8
+              required:
+                - sessionToken
+                - code
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ClientRegisterVerifyResponse' }
-        '400':
+              schema:
+                $ref: "#/components/schemas/ClientRegisterVerifyResponse"
+        "400":
           description: Nieprawidłowy kod / wygasł / za dużo prób
           content:
             application/json:
@@ -1164,10 +1509,15 @@ paths:
                 properties:
                   error:
                     type: string
-                    enum: [invalid_payload, invalid_code, code_expired, phone_not_set, too_many_attempts]
-        '404':
+                    enum:
+                      - invalid_payload
+                      - invalid_code
+                      - code_expired
+                      - phone_not_set
+                      - too_many_attempts
+        "404":
           description: Sesja nie istnieje
-        '409':
+        "409":
           description: E-mail zajęty lub numer powiązany z innym kontem
           content:
             application/json:
@@ -1176,27 +1526,38 @@ paths:
                 properties:
                   error:
                     type: string
-                    enum: [email_taken, phone_linked_other_account]
-        '410':
+                    enum:
+                      - email_taken
+                      - phone_linked_other_account
+        "410":
           description: Sesja wygasła
-        '503':
+        "503":
           description: Brak salonu w systemie (skonfiguruj DEFAULT_REGISTRATION_SALON_ID)
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  error: { type: string, enum: [no_salon] }
-
+                  error:
+                    type: string
+                    enum:
+                      - no_salon
+      tags:
+        - Auth
   /api/salon/profile:
     get:
       summary: Profil salonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     put:
       summary: Aktualizacja profilu salonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -1204,49 +1565,67 @@ paths:
             schema:
               type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/services:
     get:
       summary: Lista usług
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Dodanie usługi
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/services/{id}:
     put:
       summary: Aktualizacja usługi
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     delete:
       summary: Usunięcie (dezaktywacja) usługi
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: false
         content:
@@ -1256,86 +1635,119 @@ paths:
               properties:
                 replacementServiceId:
                   type: string
-                  description: "ID usługi zastępczej dla przypisanych wizyt (wymagane gdy usuwana usługa ma wizyty)."
+                  description: ID usługi zastępczej dla przypisanych wizyt (wymagane gdy usuwana
+                    usługa ma wizyty).
       responses:
-        '200': { description: OK }
-        '409':
+        "200":
+          description: OK
+        "409":
           description: Usługa ma przypisane wizyty i wymaga wskazania replacementServiceId
-
+      tags:
+        - Salon
   /api/salon/staff:
     get:
       summary: Lista pracowników
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Dodanie pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/staff/dedupe:
     post:
       summary: Scalanie duplikatów pracowników w salonie
-      description: |
-        Łączy duplikaty po znormalizowanym imieniu i nazwisku (bez wielkości liter, zbędnych spacji i polskich znaków).
+      description: >
+        Łączy duplikaty po znormalizowanym imieniu i nazwisku (bez wielkości
+        liter, zbędnych spacji i polskich znaków).
+
         Przenosi wizyty, usługi i grafik do rekordu głównego.
+
         Może zwrócić konflikty, gdy dwa duplikaty mają różne konta userId.
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  inspected: { type: integer }
-                  groups: { type: integer }
-                  mergedGroups: { type: integer }
-                  removed: { type: integer }
-                  kept: { type: integer }
-                  conflicts: { type: integer }
+                  inspected:
+                    type: integer
+                  groups:
+                    type: integer
+                  mergedGroups:
+                    type: integer
+                  removed:
+                    type: integer
+                  kept:
+                    type: integer
+                  conflicts:
+                    type: integer
                   details:
                     type: array
                     items:
                       type: object
                       properties:
-                        name: { type: string }
-                        keptId: { type: string }
+                        name:
+                          type: string
+                        keptId:
+                          type: string
                         removedIds:
                           type: array
-                          items: { type: string }
+                          items:
+                            type: string
                         conflictIds:
                           type: array
-                          items: { type: string }
-        '403':
+                          items:
+                            type: string
+        "403":
           description: Brak dostępu (tylko OWNER)
-
+      tags:
+        - Salon
   /api/salon/staff/{id}:
     put:
       summary: Aktualizacja pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     delete:
       summary: Usunięcie (dezaktywacja) pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: false
         content:
@@ -1345,99 +1757,135 @@ paths:
               properties:
                 replacementStaffId:
                   type: string
-                  description: "ID pracownika, do którego mają zostać przepisane wizyty (wymagane gdy usuwany pracownik ma wizyty)."
+                  description: ID pracownika, do którego mają zostać przepisane wizyty (wymagane
+                    gdy usuwany pracownik ma wizyty).
       responses:
-        '200': { description: OK }
-        '409':
+        "200":
+          description: OK
+        "409":
           description: Pracownik ma przypisane wizyty i wymaga wskazania replacementStaffId
-
+      tags:
+        - Salon
   /api/salon/staff/{id}/account:
     post:
       summary: Tworzenie konta pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     put:
       summary: Aktualizacja konta pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/clients:
     get:
       summary: Lista klientów
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Dodanie klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/clients/{id}:
     put:
       summary: Aktualizacja klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     delete:
       summary: Dezaktywacja klienta
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/clients/{id}/appointments:
     get:
       summary: Wizyty klienta w salonie
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/clients/import:
     post:
       summary: Import CSV klientów + wizyt
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -1445,271 +1893,374 @@ paths:
             schema:
               type: object
               properties:
-                includeVisits: { type: boolean }
-                updateExisting: { type: boolean }
+                includeVisits:
+                  type: boolean
+                updateExisting:
+                  type: boolean
                 rows:
                   type: array
                   items:
                     type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/appointments:
     get:
       summary: Lista wizyt
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Dodanie wizyty
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/appointments/{id}:
     put:
       summary: Aktualizacja wizyty
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/hours:
     get:
       summary: Godziny salonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     put:
       summary: Zapis godzin salonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/hours/exceptions:
     get:
       summary: Wyjątki godzin salonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Dodanie wyjątku godzin
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/hours/exceptions/{id}:
     delete:
       summary: Usunięcie wyjątku godzin
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/breaks:
     get:
       summary: Przerwy salonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Dodanie przerwy
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/breaks/{id}:
     delete:
       summary: Usunięcie przerwy
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/schedule/{staffId}:
     get:
       summary: Grafik pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: staffId
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Zapis grafiku pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: staffId
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/schedule/{staffId}/exceptions:
     post:
       summary: Dodanie wyjątku grafiku pracownika
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: staffId
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/notifications/settings:
     get:
       summary: Ustawienia powiadomień
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     put:
       summary: Zapis ustawień powiadomień
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/notifications/templates:
     get:
       summary: Szablony powiadomień
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Salon
     post:
       summary: Dodanie szablonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/notifications/templates/{id}:
     put:
       summary: Aktualizacja szablonu
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/notifications/test-sms:
     post:
       summary: Test SMS
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/notifications/send-sms:
     post:
       summary: Wysyłka SMS
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/admin/owners:
     get:
       summary: Lista właścicieli (SUPER_ADMIN)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       responses:
-        '200': { description: OK }
+        "200":
+          description: OK
+      tags:
+        - Admin
     post:
       summary: Dodanie właściciela (SUPER_ADMIN)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200': { description: OK }
-
+        "200":
+          description: OK
+      tags:
+        - Admin
   /api/admin/owners/{id}:
     patch:
       summary: Aktualizacja właściciela (SUPER_ADMIN)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { type: object }
+            schema:
+              type: object
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
@@ -1719,41 +2270,68 @@ paths:
                   owner:
                     type: object
                     properties:
-                      id: { type: string }
-                      email: { type: string }
-                      phone: { type: string }
-                      active: { type: boolean }
-                      createdAt: { type: string }
+                      id:
+                        type: string
+                      email:
+                        type: string
+                      phone:
+                        type: string
+                      active:
+                        type: boolean
+                      createdAt:
+                        type: string
                   activationEmail:
                     allOf:
-                      - $ref: '#/components/schemas/ActivationEmailStatus'
+                      - $ref: "#/components/schemas/ActivationEmailStatus"
                     nullable: true
                   passwordEmail:
                     allOf:
-                      - $ref: '#/components/schemas/ActivationEmailStatus'
+                      - $ref: "#/components/schemas/ActivationEmailStatus"
                     nullable: true
+      tags:
+        - Admin
     delete:
       summary: Całkowite usunięcie ownera i salonu (SUPER_ADMIN)
-      security: [{ BearerAuth: [] }]
+      security:
+        - BearerAuth: []
       parameters:
         - in: path
           name: id
           required: true
-          schema: { type: string }
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  ok: { type: boolean }
+                  ok:
+                    type: boolean
                   deleted:
                     type: object
                     properties:
                       salonId:
                         type: string
                         nullable: true
-                      ownerId: { type: string }
-
+                      ownerId:
+                        type: string
+      tags:
+        - Admin
+tags:
+  - name: Auth
+    description: Logowanie, rejestracja i autoryzacja
+  - name: Client
+    description: Panel i konto klienta
+  - name: Public
+    description: Publiczne endpointy rezerwacji i katalogu
+  - name: Salon
+    description: Panel salonu i zarządzanie danymi
+  - name: Inventory
+    description: Moduł magazynowy salonu
+  - name: Admin
+    description: Super Admin
+  - name: System
+    description: Endpointy systemowe

@@ -23,7 +23,6 @@ function registerFlowError(err: unknown): string {
     code_expired: "Kod wygasł — wyślij nowy.",
     too_many_attempts: "Za dużo nieudanych prób — wyślij nowy kod.",
     phone_linked_other_account: "Ten numer jest już powiązany z innym kontem klienta.",
-    no_salon: "Brak skonfigurowanego salonu w systemie — skontaktuj się z pomocą.",
     internal_error: "Błąd serwera. Spróbuj ponownie później.",
   };
   return map[msg] ?? msg;
