@@ -1219,32 +1219,40 @@ export default function CalendarPage() {
                     <div className="space-y-2">
                       <label className="text-sm font-medium mb-1.5 block">Klient</label>
                       {selectedClientId && selectedClientForAdd ? (
-                        <div className="rounded-xl border border-primary/35 bg-primary/5 p-3 space-y-3">
+                        <div className="rounded-xl border border-border bg-card p-3 shadow-sm space-y-2">
                           <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                              <UserCheck className="h-5 w-5" aria-hidden />
+                            <div
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                              aria-hidden
+                            >
+                              <UserCheck className="h-5 w-5" />
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-primary">Wybrany klient</p>
-                              <p className="text-sm font-semibold leading-tight mt-0.5 truncate">{selectedClientForAdd.name}</p>
-                              <p className="text-xs text-muted-foreground mt-1">{selectedClientForAdd.phone}</p>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <p className="text-sm font-semibold text-foreground">Klient przypisany do wizyty</p>
+                              <p className="text-xs text-muted-foreground">
+                                Wybrano z bazy — poniżej dane; możesz przejść dalej lub zmienić wybór.
+                              </p>
+                              <p className="text-sm font-medium leading-tight pt-0.5 truncate">{selectedClientForAdd.name}</p>
+                              <p className="text-xs text-muted-foreground">{selectedClientForAdd.phone}</p>
                               {selectedClientForAdd.email ? (
                                 <p className="text-xs text-muted-foreground truncate">{selectedClientForAdd.email}</p>
                               ) : null}
                             </div>
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full rounded-xl h-9 text-xs"
-                            onClick={() => {
-                              setSelectedClientId(null);
-                              setClientSearch('');
-                            }}
-                          >
-                            Wybierz innego klienta
-                          </Button>
+                          <div className="pt-1 border-t border-border/80">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="w-full rounded-xl h-9 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                              onClick={() => {
+                                setSelectedClientId(null);
+                                setClientSearch('');
+                              }}
+                            >
+                              Zmień klienta
+                            </Button>
+                          </div>
                         </div>
                       ) : selectedClientId && !selectedClientForAdd ? (
                         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 space-y-2">
