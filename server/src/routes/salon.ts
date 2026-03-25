@@ -527,11 +527,27 @@ router.put("/notifications/templates/:id", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane szablonu" });
+  const salonId = getSalonId(req);
+  const existing = await prisma.notificationTemplate.findFirst({
+    where: { id: req.params.id, salonId },
+  });
+  if (!existing) return res.status(404).json({ error: "Nie znaleziono szablonu" });
   const template = await prisma.notificationTemplate.update({
     where: { id: req.params.id },
     data: parsed.data,
   });
   return res.json({ template });
+});
+
+router.delete("/notifications/templates/:id", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const salonId = getSalonId(req);
+  const existing = await prisma.notificationTemplate.findFirst({
+    where: { id: req.params.id, salonId },
+  });
+  if (!existing) return res.status(404).json({ error: "Nie znaleziono szablonu" });
+  await prisma.notificationTemplate.delete({ where: { id: req.params.id } });
+  return res.json({ ok: true });
 });
 
 router.get("/services", async (req: AuthRequest, res) => {

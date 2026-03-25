@@ -2185,6 +2185,21 @@ paths:
           description: OK
       tags:
         - Salon
+    delete:
+      summary: Usunięcie szablonu
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Salon
   /api/salon/notifications/test-sms:
     post:
       summary: Test SMS

@@ -550,6 +550,13 @@ export async function updateNotificationTemplate(id: string, payload: { subject?
   });
 }
 
+export async function deleteNotificationTemplate(id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/salon/notifications/templates/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
 export async function createClient(payload: { name: string; phone: string; email?: string; notes?: string; allergies?: string }) {
   return apiFetch<{ client: any }>("/api/salon/clients", {
     method: "POST",

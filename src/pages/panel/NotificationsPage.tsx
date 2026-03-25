@@ -1,11 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Bell, Mail, MessageSquare, Clock, ChevronRight, Check, Smartphone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Bell, Mail, MessageSquare, Clock, Check, Smartphone, Trash2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -28,24 +37,28 @@ const eventMeta = [
   { id: 'FOLLOWUP', label: 'Wiadomość po wizycie', description: 'Podziękuj klientowi i zaproś na kolejną wizytę', icon: Mail, timing: '1h' },
 ];
 
+/** Zgodne z `renderTemplate` w notificationService (treść szablonu, bez prefiksu SMS). */
+const templatePlaceholders: Array<{ key: string; desc: string }> = [
+  { key: 'client_name', desc: 'imię i nazwisko klienta' },
+  { key: 'salon_name', desc: 'nazwa salonu' },
+  { key: 'date', desc: 'data wizyty' },
+  { key: 'time', desc: 'godzina wizyty' },
+  { key: 'service', desc: 'lista usług (oddzielone przecinkiem)' },
+  { key: 'staff', desc: 'przypisany pracownik lub „Dowolny”' },
+  { key: 'cancel_link', desc: 'link do odwołania / zarządzania wizytą (dla potwierdzenia system może dopisać go automatycznie, jeśli go brakuje)' },
+];
+
 export default function NotificationsPage() {
   const [settings, setSettings] = useState<NotificationSetting[]>([]);
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(true);
-  const [senderName, setSenderName] = useState('Studio Bella');
-  const [replyEmail, setReplyEmail] = useState('kontakt@studiobella.pl');
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<any | null>(null);
   const [templateForm, setTemplateForm] = useState({ event: 'BOOKING_CONFIRMATION', channel: 'SMS', subject: '', body: '' });
-  const [testPhone, setTestPhone] = useState('');
-  const [testMessage, setTestMessage] = useState('Test SMS z honly.');
-  const [sendingTest, setSendingTest] = useState(false);
-  const [testEmail, setTestEmail] = useState('');
-  const [testEmailSubject, setTestEmailSubject] = useState('Test email z honly');
-  const [testEmailBody, setTestEmailBody] = useState('To jest testowa wiadomość email z honly.');
-  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const eventIcon = (id: string) => eventMeta.find(e => e.id === id)?.icon || Bell;
   const eventLabel = (id: string) => eventMeta.find(e => e.id === id)?.label || id;
@@ -112,9 +125,9 @@ export default function NotificationsPage() {
         </motion.div>
       </div>
 
-      <div className="lg:grid lg:grid-cols-3 lg:gap-6">
-        {/* Left: channels config */}
-        <div className="lg:col-span-2">
+      <div className="w-full max-w-7xl mx-auto lg:grid lg:grid-cols-2 lg:gap-8 xl:gap-10 lg:items-start">
+        {/* Lewa kolumna: kanały + zdarzenia */}
+        <div className="min-w-0 space-y-4">
           {/* Global toggles */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -199,41 +212,77 @@ export default function NotificationsPage() {
               ))}
             </MotionList>
           )}
+        </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.4 }}
-            className="bg-card rounded-2xl p-5 border border-border mt-4"
-          >
+        {/* Prawa kolumna: szablony + zmienne */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.4 }}
+          className="bg-card rounded-2xl p-5 border border-border mt-6 lg:mt-0 min-w-0 lg:sticky lg:top-6"
+        >
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold">Szablony wiadomości</h2>
               <span className="text-[10px] text-muted-foreground">zarządzanie treścią</span>
             </div>
+            <div className="rounded-xl border border-border bg-muted/40 p-3 mb-3">
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <div className="text-xs text-muted-foreground space-y-1.5">
+                  <p className="font-medium text-foreground">Zmienne w treści (wstaw w nawiasach klamrowych)</p>
+                  <p>Przykład: <span className="font-mono text-[11px] text-foreground">Przypomnienie: wizyta w {'{salon_name}'} dnia {'{date}'} o {'{time}'}.</span></p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {templatePlaceholders.map(p => (
+                      <li key={p.key}>
+                        <span className="font-mono text-[11px] text-foreground">{'{' + p.key + '}'}</span>
+                        {' — '}{p.desc}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[11px] pt-1">
+                    Przed treścią SMS system dodaje prefiks z nazwą salonu w nawiasie kwadratowym — pochodzi on z <span className="text-foreground font-medium">nazwy salonu w ustawieniach profilu</span>, tak jak zmienna {'{salon_name}'} w szablonie.
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="space-y-2">
               {templates.map(tpl => (
-                <div key={tpl.id} className="flex items-center justify-between bg-muted rounded-xl px-3 py-2">
-                  <div>
+                <div key={tpl.id} className="flex items-center justify-between gap-2 bg-muted rounded-xl px-3 py-2">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium">{eventLabel(tpl.event)} • {tpl.channel}</p>
                     <p className="text-[11px] text-muted-foreground">{tpl.active ? 'Aktywny' : 'Nieaktywny'}</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl h-8 text-xs"
-                    onClick={() => {
-                      setActiveTemplate(tpl);
-                      setTemplateForm({
-                        event: tpl.event,
-                        channel: tpl.channel,
-                        subject: tpl.subject || '',
-                        body: tpl.body || '',
-                      });
-                      setTemplateOpen(true);
-                    }}
-                  >
-                    Edytuj
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl h-8 text-xs"
+                      onClick={() => {
+                        setActiveTemplate(tpl);
+                        setTemplateForm({
+                          event: tpl.event,
+                          channel: tpl.channel,
+                          subject: tpl.subject || '',
+                          body: tpl.body || '',
+                        });
+                        setTemplateOpen(true);
+                      }}
+                    >
+                      Edytuj
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      aria-label="Usuń szablon"
+                      onClick={() => setDeleteTarget({
+                        id: tpl.id,
+                        label: `${eventLabel(tpl.event)} • ${tpl.channel}`,
+                      })}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
               {templates.length === 0 && (
@@ -252,136 +301,43 @@ export default function NotificationsPage() {
                 Dodaj szablon
               </Button>
             </div>
-          </motion.div>
-        </div>
-
-        {/* Right: sender settings */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.4 }}
-          className="mt-6 lg:mt-0 space-y-4"
-        >
-          <div className="bg-card rounded-2xl p-5 border border-border">
-            <h2 className="font-semibold mb-4">Nadawca</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Nazwa SMS</label>
-                <Input value={senderName} onChange={e => setSenderName(e.target.value)} className="h-11 rounded-xl" placeholder="Nazwa salonu" />
-                <p className="text-[10px] text-muted-foreground mt-1">Wyświetla się jako nadawca SMS (max 11 znaków)</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Adres email nadawcy</label>
-                <Input value={replyEmail} onChange={e => setReplyEmail(e.target.value)} className="h-11 rounded-xl" placeholder="kontakt@salon.pl" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card rounded-2xl p-5 border border-border">
-            <h2 className="font-semibold mb-3">Podgląd SMS</h2>
-            <div className="bg-muted rounded-xl p-4">
-              <p className="text-[10px] text-muted-foreground font-medium mb-1">{senderName}</p>
-              <p className="text-xs leading-relaxed">
-                Cześć Joanna! 👋 Przypominamy o wizycie jutro (22.02) o 09:00 w {senderName}.
-                Usługa: Strzyżenie damskie. Do zobaczenia!
-                Odwołaj: honly.app/cancel/abc123
-              </p>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-2">~1 SMS (148 znaków)</p>
-          </div>
-
-          <div className="bg-card rounded-2xl p-5 border border-border">
-            <h2 className="font-semibold mb-4">Test SMS</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Numer telefonu</label>
-                <Input value={testPhone} onChange={e => setTestPhone(e.target.value)} className="h-11 rounded-xl" placeholder="+48 500 000 000" />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Treść (opcjonalnie)</label>
-                <Input value={testMessage} onChange={e => setTestMessage(e.target.value)} className="h-11 rounded-xl" />
-              </div>
-              <Button
-                className="rounded-xl h-10"
-                disabled={sendingTest || !testPhone.trim()}
-                onClick={async () => {
-                  try {
-                    setSendingTest(true);
-                    await import('@/lib/api').then(m => m.sendTestSms({
-                      to: testPhone.trim(),
-                      message: testMessage.trim() || undefined,
-                    }));
-                    toast.success('SMS testowy wysłany');
-                  } catch (err: any) {
-                    toast.error(err.message || 'Nie udało się wysłać SMS');
-                  } finally {
-                    setSendingTest(false);
-                  }
-                }}
-              >
-                {sendingTest ? 'Wysyłanie...' : 'Wyślij test SMS'}
-              </Button>
-              <p className="text-[10px] text-muted-foreground">Wymaga aktywnego klucza SMSAPI w backendzie.</p>
-            </div>
-          </div>
-
-          <div className="bg-card rounded-2xl p-5 border border-border">
-            <h2 className="font-semibold mb-4">Test email</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Adres email</label>
-                <Input value={testEmail} onChange={e => setTestEmail(e.target.value)} className="h-11 rounded-xl" placeholder="klient@example.com" />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Temat</label>
-                <Input value={testEmailSubject} onChange={e => setTestEmailSubject(e.target.value)} className="h-11 rounded-xl" />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1.5 block">Treść</label>
-                <Textarea value={testEmailBody} onChange={e => setTestEmailBody(e.target.value)} className="rounded-xl min-h-[100px]" />
-              </div>
-              <Button
-                className="rounded-xl h-10"
-                disabled={sendingTestEmail || !testEmail.trim()}
-                onClick={async () => {
-                  try {
-                    setSendingTestEmail(true);
-                    await import('@/lib/api').then(m => m.sendTestEmail({
-                      to: testEmail.trim(),
-                      subject: testEmailSubject.trim() || undefined,
-                      body: testEmailBody.trim() || undefined,
-                    }));
-                    toast.success('Email testowy wysłany');
-                  } catch (err: any) {
-                    toast.error(err.message || 'Nie udało się wysłać emaila');
-                  } finally {
-                    setSendingTestEmail(false);
-                  }
-                }}
-              >
-                {sendingTestEmail ? 'Wysyłanie...' : 'Wyślij test email'}
-              </Button>
-              <p className="text-[10px] text-muted-foreground">Wymaga aktywnego klucza SendGrid w backendzie.</p>
-            </div>
-          </div>
-
-          <div className="bg-secondary/50 rounded-2xl p-5 border border-border">
-            <div className="flex items-start gap-3">
-              <Bell className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">Integracja SMS</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Aby wysyłać prawdziwe SMS-y, podłącz bramkę SMS (np. SMSAPI, Twilio). Aktualnie podgląd jest w trybie demo.
-                </p>
-                <Button variant="outline" size="sm" className="rounded-xl h-9 mt-3 text-xs gap-1.5">
-                  Konfiguruj bramkę
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
         </motion.div>
       </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć szablon?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? `Szablon „${deleteTarget.label}” zostanie trwale usunięty.` : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Anuluj</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              className="rounded-xl"
+              disabled={deleting}
+              onClick={async () => {
+                if (!deleteTarget) return;
+                try {
+                  setDeleting(true);
+                  await import('@/lib/api').then(m => m.deleteNotificationTemplate(deleteTarget.id));
+                  setTemplates(prev => prev.filter(t => t.id !== deleteTarget.id));
+                  toast.success('Szablon usunięty');
+                  setDeleteTarget(null);
+                } catch (err: any) {
+                  toast.error(err.message || 'Nie udało się usunąć szablonu');
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? 'Usuwanie...' : 'Usuń'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AnimatePresence>
         {templateOpen && (
@@ -430,10 +386,35 @@ export default function NotificationsPage() {
                   )}
                   <div>
                     <label className="text-sm font-medium mb-1.5 block">Treść</label>
-                    <Input value={templateForm.body} onChange={(e) => setTemplateForm(f => ({ ...f, body: e.target.value }))} className="h-10 rounded-xl" />
+                    <Textarea
+                      value={templateForm.body}
+                      onChange={(e) => setTemplateForm(f => ({ ...f, body: e.target.value }))}
+                      className="rounded-xl min-h-[120px] text-sm"
+                      placeholder="Np. Przypomnienie: Twoja wizyta w {salon_name} dnia {date} o {time}."
+                    />
                   </div>
                 </div>
-                <DialogFooter className="pt-2">
+                <DialogFooter className="pt-2 flex-wrap gap-2 sm:justify-between">
+                  <div>
+                    {activeTemplate && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="rounded-xl text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => {
+                          setTemplateOpen(false);
+                          setDeleteTarget({
+                            id: activeTemplate.id,
+                            label: `${eventLabel(activeTemplate.event)} • ${activeTemplate.channel}`,
+                          });
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1.5" />
+                        Usuń szablon
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 ml-auto">
                   <Button variant="outline" className="rounded-xl" onClick={() => setTemplateOpen(false)}>Anuluj</Button>
                   <Button
                     className="rounded-xl"
@@ -475,6 +456,7 @@ export default function NotificationsPage() {
                   >
                     Zapisz
                   </Button>
+                  </div>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
