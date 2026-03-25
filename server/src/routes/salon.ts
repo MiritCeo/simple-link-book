@@ -528,10 +528,11 @@ router.put("/notifications/templates/:id", async (req: AuthRequest, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane szablonu" });
   const salonId = getSalonId(req);
-  const existing = await prisma.notificationTemplate.findFirst({
-    where: { id: req.params.id, salonId },
-  });
-  if (!existing) return res.status(404).json({ error: "Nie znaleziono szablonu" });
+  const row = await prisma.notificationTemplate.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "Nie znaleziono szablonu" });
+  if (row.salonId !== salonId) {
+    return res.status(403).json({ error: "Ten szablon należy do innego salonu — odśwież stronę lub przełącz salon w menu." });
+  }
   const template = await prisma.notificationTemplate.update({
     where: { id: req.params.id },
     data: parsed.data,
@@ -542,10 +543,11 @@ router.put("/notifications/templates/:id", async (req: AuthRequest, res) => {
 router.delete("/notifications/templates/:id", async (req: AuthRequest, res) => {
   if (!requireOwner(req, res)) return;
   const salonId = getSalonId(req);
-  const existing = await prisma.notificationTemplate.findFirst({
-    where: { id: req.params.id, salonId },
-  });
-  if (!existing) return res.status(404).json({ error: "Nie znaleziono szablonu" });
+  const row = await prisma.notificationTemplate.findUnique({ where: { id: req.params.id } });
+  if (!row) return res.status(404).json({ error: "Nie znaleziono szablonu" });
+  if (row.salonId !== salonId) {
+    return res.status(403).json({ error: "Ten szablon należy do innego salonu — odśwież stronę lub przełącz salon w menu." });
+  }
   await prisma.notificationTemplate.delete({ where: { id: req.params.id } });
   return res.json({ ok: true });
 });

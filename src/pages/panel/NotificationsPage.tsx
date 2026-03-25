@@ -93,10 +93,15 @@ export default function NotificationsPage() {
     };
     load();
     const onSalonChanged = () => load();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'auth_token') load();
+    };
     window.addEventListener('salonChanged', onSalonChanged);
+    window.addEventListener('storage', onStorage);
     return () => {
       cancelled = true;
       window.removeEventListener('salonChanged', onSalonChanged);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 
