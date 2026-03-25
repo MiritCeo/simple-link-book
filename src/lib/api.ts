@@ -543,7 +543,7 @@ export async function createNotificationTemplate(payload: { event: string; chann
 }
 
 export async function updateNotificationTemplate(id: string, payload: { subject?: string; body: string; active?: boolean }) {
-  return apiFetch<{ template: any }>(`/api/salon/notifications/templates/${id}`, {
+  return apiFetch<{ template: any }>(`/api/salon/notifications/templates/${encodeURIComponent(id)}`, {
     method: "PUT",
     auth: true,
     body: JSON.stringify(payload),
@@ -551,7 +551,7 @@ export async function updateNotificationTemplate(id: string, payload: { subject?
 }
 
 export async function deleteNotificationTemplate(id: string) {
-  return apiFetch<{ ok: boolean }>(`/api/salon/notifications/templates/${id}`, {
+  return apiFetch<{ ok: boolean }>(`/api/salon/notifications/templates/${encodeURIComponent(id)}`, {
     method: "DELETE",
     auth: true,
   });

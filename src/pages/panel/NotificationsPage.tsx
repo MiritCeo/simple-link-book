@@ -66,30 +66,38 @@ export default function NotificationsPage() {
   const eventTiming = (id: string) => eventMeta.find(e => e.id === id)?.timing;
 
   useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    Promise.all([
-      import('@/lib/api').then(m => m.getNotificationSettings()),
-      import('@/lib/api').then(m => m.getNotificationTemplates()),
-    ]).then(([settingsRes, templatesRes]) => {
-      if (!mounted) return;
-      const anySms = (settingsRes.settings || []).some((s: any) => s.smsEnabled);
-      const anyEmail = (settingsRes.settings || []).some((s: any) => s.emailEnabled);
-      const mapped: NotificationSetting[] = settingsRes.settings.map((s: any) => ({
-        id: s.event,
-        label: eventLabel(s.event),
-        description: eventDesc(s.event),
-        icon: eventIcon(s.event),
-        sms: s.smsEnabled,
-        email: s.emailEnabled,
-        timing: eventTiming(s.event),
-      }));
-      setSettings(mapped);
-      setTemplates(templatesRes.templates || []);
-      setSmsEnabled(anySms);
-      setEmailEnabled(anyEmail);
-    }).finally(() => mounted && setLoading(false));
-    return () => { mounted = false; };
+    let cancelled = false;
+    const load = () => {
+      setLoading(true);
+      Promise.all([
+        import('@/lib/api').then(m => m.getNotificationSettings()),
+        import('@/lib/api').then(m => m.getNotificationTemplates()),
+      ]).then(([settingsRes, templatesRes]) => {
+        if (cancelled) return;
+        const anySms = (settingsRes.settings || []).some((s: any) => s.smsEnabled);
+        const anyEmail = (settingsRes.settings || []).some((s: any) => s.emailEnabled);
+        const mapped: NotificationSetting[] = settingsRes.settings.map((s: any) => ({
+          id: s.event,
+          label: eventLabel(s.event),
+          description: eventDesc(s.event),
+          icon: eventIcon(s.event),
+          sms: s.smsEnabled,
+          email: s.emailEnabled,
+          timing: eventTiming(s.event),
+        }));
+        setSettings(mapped);
+        setTemplates(templatesRes.templates || []);
+        setSmsEnabled(anySms);
+        setEmailEnabled(anyEmail);
+      }).finally(() => { if (!cancelled) setLoading(false); });
+    };
+    load();
+    const onSalonChanged = () => load();
+    window.addEventListener('salonChanged', onSalonChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('salonChanged', onSalonChanged);
+    };
   }, []);
 
   const toggleChannel = (id: string, channel: 'sms' | 'email') => {
