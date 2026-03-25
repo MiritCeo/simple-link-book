@@ -4,6 +4,7 @@ import { z } from "zod";
 import prisma from "../prisma.js";
 import type { AuthRequest } from "../middleware/auth.js";
 import { sendEmail } from "../notifications.js";
+import { sendFcmToTokens } from "../push/fcm.js";
 
 const router = Router();
 
@@ -267,6 +268,55 @@ router.delete("/owners/:id", async (req: AuthRequest, res) => {
   });
 
   return res.json({ ok: true, deleted: { salonId, ownerId: owner.id } });
+});
+
+// --- PUSH (FCM) test endpoint ---
+router.post("/push/test", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+
+  const schema = z.object({
+    clientId: z.string().optional(),
+    email: z.string().email().optional(),
+    title: z.string().min(1).optional(),
+    body: z.string().min(1),
+  }).refine(data => data.clientId || data.email, { message: "clientId lub email wymagane" });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const account =
+    parsed.data.clientId
+      ? await prisma.clientAccount.findUnique({ where: { clientId: parsed.data.clientId }, select: { id: true, clientId: true, email: true } })
+      : await prisma.clientAccount.findUnique({ where: { email: parsed.data.email! }, select: { id: true, clientId: true, email: true } });
+
+  if (!account) return res.status(404).json({ error: "account_not_found" });
+
+  const p = prisma as any;
+  const tokenRows = await p.pushDeviceToken?.findMany?.({
+    where: { clientAccountId: account.id },
+    select: { token: true },
+  });
+  const tokens: string[] = (tokenRows || []).map((r: { token: string }) => r.token);
+
+  if (!tokens.length) {
+    return res.status(404).json({ error: "no_push_tokens" });
+  }
+
+  const result = await sendFcmToTokens(tokens, {
+    title: parsed.data.title || "Powiadomienie testowe",
+    body: parsed.data.body,
+    data: {
+      type: "TEST_PUSH",
+      clientId: account.clientId || "",
+    },
+  });
+
+  if (result.invalidTokens?.length) {
+    // Opcjonalnie: czyścimy tokeny które już nie są ważne
+    await p.pushDeviceToken?.deleteMany?.({ where: { token: { in: result.invalidTokens } } });
+  }
+
+  return res.json({ ...result, tokenCount: tokens.length });
 });
 
 export default router;

@@ -482,11 +482,12 @@ router.post("/salons/:slug/appointments", async (req, res) => {
     return res.status(404).json({ error: "salon_not_found", message: "Nie znaleziono salonu o podanym linku" });
   }
 
-  const ids = parsed.data.serviceIds?.length
+  const rawIds = parsed.data.serviceIds?.length
     ? parsed.data.serviceIds
     : parsed.data.serviceId
       ? [parsed.data.serviceId]
       : [];
+  const ids = [...new Set(rawIds)];
   if (!ids.length) {
     return res.status(400).json({ error: "service_missing", message: "Wybierz przynajmniej jedną usługę" });
   }

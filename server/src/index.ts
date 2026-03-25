@@ -49,7 +49,6 @@ const runReminders = async () => {
   });
 
   for (const setting of settings) {
-    if (!setting.smsEnabled && !setting.emailEnabled) continue;
     const minutes = setting.timingMinutes ?? (setting.event === "REMINDER_24H" ? 1440 : setting.event === "REMINDER_2H" ? 120 : 60);
     const isFollowup = setting.event === "FOLLOWUP";
     const windowStart = addMinutes(now, (isFollowup ? -minutes : minutes) - 5);
@@ -78,12 +77,16 @@ const runReminders = async () => {
       const requestedChannels: NotificationChannel[] = [];
       if (setting.smsEnabled) requestedChannels.push("SMS");
       if (setting.emailEnabled) requestedChannels.push("EMAIL");
-      const existing = await prisma.notificationLog.findMany({
-        where: { appointmentId: apt.id, event: setting.event, channel: { in: requestedChannels } },
-      });
+      let existing: any[] = [];
+      if (requestedChannels.length) {
+        existing = await prisma.notificationLog.findMany({
+          where: { appointmentId: apt.id, event: setting.event, channel: { in: requestedChannels } },
+        });
+      }
       const sent = new Set(existing.map(e => e.channel));
       const toSend = requestedChannels.filter(ch => !sent.has(ch));
-      if (toSend.length === 0) continue;
+
+      // SMS/EMAIL wyśle się tylko dla `toSend`, a PUSH może wyjść niezależnie
       await sendEventNotification(setting.event as any, apt as any, toSend);
       await prisma.notificationLog.createMany({
         data: toSend.map(ch => ({ appointmentId: apt.id, event: setting.event as any, channel: ch })),

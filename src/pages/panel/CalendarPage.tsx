@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, type CSSProperties, type ReactNode } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Clock, User, List, LayoutGrid, Grid2X2, Filter, Ban } from 'lucide-react';
+import { useCallback, useEffect, useState, useMemo, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { Plus, ChevronLeft, ChevronRight, Clock, User, UserCheck, List, LayoutGrid, Grid2X2, Filter, Ban, Trash2, UserX } from 'lucide-react';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
@@ -15,10 +15,12 @@ import { getReadableTextColor } from '@/lib/color';
 import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
-import { createAppointment, createClient, createSalonException, createStaffException, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient } from '@/lib/api';
+import { createAppointment, createClient, createSalonException, createStaffException, deleteAppointment, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient } from '@/lib/api';
 import { toast } from 'sonner';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
+
+type CalendarStatusFilter = 'all' | 'active' | Appointment['status'];
 
 const ColumnDropZone = ({
   id,
@@ -141,6 +143,7 @@ const DraggableAppointment = ({
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      data-timeline-appointment
       className={`absolute rounded-lg border cursor-pointer hover:opacity-90 transition-opacity overflow-hidden ${statusColors[statusKey as keyof typeof statusColors]} border-current/10 ${
         compactTimeline ? 'px-2 py-1' : 'px-3 py-1.5'
       }`}
@@ -188,7 +191,15 @@ export default function CalendarPage() {
   const isDeletedStaff = (sp: any) =>
     sp?.active === false || /\[USUNIĘTY\]$/i.test(String(sp?.role || ''));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [view, setView] = useState<'day-list' | 'day-timeline' | 'day-cards' | 'week' | 'month'>('day-list');
+  const [view, setView] = useState<'day-list' | 'day-timeline' | 'day-cards' | 'week' | 'month'>(() => {
+    try {
+      const raw = localStorage.getItem('calendar_view') as 'day-list' | 'day-timeline' | 'day-cards' | 'week' | 'month' | null;
+      if (raw === 'day-list' || raw === 'day-timeline' || raw === 'day-cards' || raw === 'week' || raw === 'month') return raw;
+    } catch {
+      /* ignore */
+    }
+    return 'day-timeline';
+  });
   const [staffFilterIds, setStaffFilterIds] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem('calendar_staff_filters');
@@ -205,12 +216,14 @@ export default function CalendarPage() {
     }
   });
   const [showStaffFilter, setShowStaffFilter] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | Appointment['status']>(() => {
+  const [statusFilter, setStatusFilter] = useState<CalendarStatusFilter>(() => {
     try {
       const raw = localStorage.getItem('calendar_status_filter');
-      return (raw as 'all' | Appointment['status']) || 'all';
+      if (raw === 'all' || raw === 'active') return raw;
+      if (raw && Object.keys(statusLabels).includes(raw)) return raw as Appointment['status'];
+      return 'active';
     } catch {
-      return 'all';
+      return 'active';
     }
   });
   const [compactTimeline, setCompactTimeline] = useState(() => {
@@ -252,6 +265,7 @@ export default function CalendarPage() {
   const [customDuration, setCustomDuration] = useState<number | ''>('');
   const [allowConflict, setAllowConflict] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [visitActionLoading, setVisitActionLoading] = useState(false);
   const isCalendarView = view === 'day-timeline' || view === 'week' || view === 'month';
   const toggleCalendarView = () => {
     if (isCalendarView) {
@@ -369,6 +383,9 @@ export default function CalendarPage() {
   useEffect(() => {
     localStorage.setItem('calendar_timeline_scale', String(timelineScale));
   }, [timelineScale]);
+  useEffect(() => {
+    localStorage.setItem('calendar_view', view);
+  }, [view]);
   const matchesStaffFilter = (apt: any) => {
     if (staffFilterIds.length === 0) return true;
     if (!apt.staff?.id) return staffFilterIds.includes('any');
@@ -382,7 +399,12 @@ export default function CalendarPage() {
     if (staffFilterIds.length > 0) {
       appts = appts.filter(matchesStaffFilter);
     }
-    if (statusFilter !== 'all') {
+    if (statusFilter === 'active') {
+      appts = appts.filter((a: any) => {
+        const s = mapStatus(a.status);
+        return s !== 'cancelled' && s !== 'no-show';
+      });
+    } else if (statusFilter !== 'all') {
       appts = appts.filter((a: any) => mapStatus(a.status) === statusFilter);
     }
     return appts;
@@ -392,6 +414,10 @@ export default function CalendarPage() {
     const q = clientSearch.toLowerCase();
     return clients.filter((c: any) => c.name.toLowerCase().includes(q) || c.phone.includes(q));
   }, [clientSearch, clients]);
+  const selectedClientForAdd = useMemo(
+    () => (selectedClientId ? clients.find((c: any) => c.id === selectedClientId) : null),
+    [clients, selectedClientId],
+  );
   const specialistServiceIds = useMemo(() => {
     if (selectedSpecialistId === 'any') return null;
     const sp = visibleStaff.find((s: any) => s.id === selectedSpecialistId);
@@ -706,7 +732,7 @@ export default function CalendarPage() {
     if (apt) {
       setEditDate(apt.date);
       setEditTime(apt.time);
-      setEditCustomDuration('');
+      setEditCustomDuration(typeof apt.duration === 'number' ? apt.duration : '');
       setEditAllowConflict(false);
       setDetailTab('visit');
       setClientNoteDraft(apt.client?.notes || '');
@@ -720,6 +746,29 @@ export default function CalendarPage() {
       setEditClientEmail(apt.client?.email || '');
     }
   };
+
+  const openAddAtTimelineSlot = useCallback(
+    (e: MouseEvent<HTMLDivElement>, staffId: string | null | undefined, hour: number) => {
+      if ((e.target as HTMLElement).closest('[data-timeline-appointment]')) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const slotsPerHour = 60 / timelineScale;
+      const slotH = rect.height / slotsPerHour;
+      const slotIndex = Math.min(slotsPerHour - 1, Math.max(0, Math.floor(y / slotH)));
+      const minutes = slotIndex * timelineScale;
+      const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      setAppointmentDate(selectedDate);
+      setAppointmentTime(timeStr);
+      setSelectedSpecialistId(staffId || 'any');
+      setSelectedServiceIds([]);
+      setAppointmentNotes('');
+      setCustomDuration('');
+      setAllowConflict(false);
+      setAddOpen(true);
+    },
+    [selectedDate, timelineScale],
+  );
+
   const editServiceBase = useMemo(() => {
     return services.filter((s: any) => s.active !== false || editServiceIds.includes(s.id));
   }, [services, editServiceIds]);
@@ -834,7 +883,10 @@ export default function CalendarPage() {
       await createAppointment({
         date: appointmentDate,
         time: appointmentTime,
-        durationOverride: customDuration ? Number(customDuration) : undefined,
+        duration:
+          customDuration === '' ? undefined : Number(customDuration),
+        durationOverride:
+          customDuration === '' ? undefined : Number(customDuration),
         notes: appointmentNotes || undefined,
         clientId,
         staffId: selectedSpecialistId !== 'any' ? selectedSpecialistId : undefined,
@@ -1142,7 +1194,10 @@ export default function CalendarPage() {
                       variant={clientMode === 'existing' ? 'secondary' : 'outline'}
                       size="sm"
                       className="rounded-xl h-8 text-xs"
-                      onClick={() => setClientMode('existing')}
+                      onClick={() => {
+                        setClientMode('existing');
+                        setNewClient({ name: '', phone: '', email: '' });
+                      }}
                     >
                       Z bazy klientów
                     </Button>
@@ -1151,40 +1206,94 @@ export default function CalendarPage() {
                       variant={clientMode === 'new' ? 'secondary' : 'outline'}
                       size="sm"
                       className="rounded-xl h-8 text-xs"
-                      onClick={() => setClientMode('new')}
+                      onClick={() => {
+                        setClientMode('new');
+                        setSelectedClientId(null);
+                        setClientSearch('');
+                      }}
                     >
                       Nowy klient
                     </Button>
                   </div>
                   {clientMode === 'existing' && (
                     <div className="space-y-2">
-                      <label className="text-sm font-medium mb-1.5 block">Wybierz klienta</label>
-                      <Input
-                        placeholder="Szukaj klienta po imieniu lub telefonie..."
-                        value={clientSearch}
-                        onChange={e => setClientSearch(e.target.value)}
-                        className="h-10 rounded-xl"
-                      />
-                      <div className="max-h-28 overflow-auto rounded-xl border border-border bg-card">
-                        {filteredClients.map(client => (
-                          <button
-                            key={client.id}
+                      <label className="text-sm font-medium mb-1.5 block">Klient</label>
+                      {selectedClientId && selectedClientForAdd ? (
+                        <div className="rounded-xl border border-primary/35 bg-primary/5 p-3 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                              <UserCheck className="h-5 w-5" aria-hidden />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-primary">Wybrany klient</p>
+                              <p className="text-sm font-semibold leading-tight mt-0.5 truncate">{selectedClientForAdd.name}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{selectedClientForAdd.phone}</p>
+                              {selectedClientForAdd.email ? (
+                                <p className="text-xs text-muted-foreground truncate">{selectedClientForAdd.email}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                          <Button
                             type="button"
-                            onClick={() => setSelectedClientId(client.id)}
-                            className={`w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors ${
-                              selectedClientId === client.id ? 'bg-primary/5 text-primary' : ''
-                            }`}
+                            variant="outline"
+                            size="sm"
+                            className="w-full rounded-xl h-9 text-xs"
+                            onClick={() => {
+                              setSelectedClientId(null);
+                              setClientSearch('');
+                            }}
                           >
-                            <span className="font-medium">{client.name}</span>
-                            <span className="text-xs text-muted-foreground ml-2">{client.phone}</span>
-                          </button>
-                        ))}
-                        {filteredClients.length === 0 && (
-                          <p className="text-xs text-muted-foreground px-3 py-4 text-center">Brak wyników</p>
-                        )}
-                      </div>
-                      {!selectedClientId && (
-                        <p className="text-xs text-destructive">Wymagane: wybierz klienta</p>
+                            Wybierz innego klienta
+                          </Button>
+                        </div>
+                      ) : selectedClientId && !selectedClientForAdd ? (
+                        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                          <p className="text-xs text-destructive">Nie znaleziono tego klienta na liście. Wybierz ponownie.</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full rounded-xl h-9 text-xs"
+                            onClick={() => {
+                              setSelectedClientId(null);
+                              setClientSearch('');
+                            }}
+                          >
+                            Wybierz klienta ponownie
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <Input
+                            placeholder="Szukaj klienta po imieniu lub telefonie..."
+                            value={clientSearch}
+                            onChange={e => setClientSearch(e.target.value)}
+                            className="h-10 rounded-xl"
+                            autoComplete="off"
+                          />
+                          <div className="max-h-28 overflow-auto rounded-xl border border-border bg-card">
+                            {filteredClients.map(client => (
+                              <button
+                                key={client.id}
+                                type="button"
+                                onClick={() => setSelectedClientId(client.id)}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors ${
+                                  selectedClientId === client.id ? 'bg-primary/5 text-primary' : ''
+                                }`}
+                              >
+                                <span className="font-medium">{client.name}</span>
+                                <span className="text-xs text-muted-foreground ml-2">{client.phone}</span>
+                              </button>
+                            ))}
+                            {filteredClients.length === 0 && (
+                              <p className="text-xs text-muted-foreground px-3 py-4 text-center">Brak wyników</p>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">Kliknij wiersz na liście, aby przypisać klienta do wizyty.</p>
+                          {!selectedClientId && (
+                            <p className="text-xs text-destructive">Wymagane: wybierz klienta z listy</p>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
@@ -1595,11 +1704,12 @@ export default function CalendarPage() {
           >
             Wybierz osoby {staffFilterIds.length > 0 ? `(${staffFilterIds.length})` : ''}
           </Button>
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | Appointment['status'])}>
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as CalendarStatusFilter)}>
             <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-48">
-              <SelectValue placeholder="Wszystkie statusy" />
+              <SelectValue placeholder="Status na kalendarzu" />
             </SelectTrigger>
             <SelectContent className="bg-popover z-50">
+              <SelectItem value="active">Aktywne (bez anulowanych)</SelectItem>
               <SelectItem value="all">Wszystkie statusy</SelectItem>
               {Object.keys(statusLabels).map(status => (
                 <SelectItem key={status} value={status}>
@@ -1831,14 +1941,27 @@ export default function CalendarPage() {
                     dragPreview={dragPreview && dragPreview.columnId === `col-${col.id}` ? { top: dragPreview.top, time: dragPreview.time } : null}
                   >
                     {HOURS.map(hour => (
-                      <div key={hour} className="border-b border-border last:border-0 relative" style={{ height: hourHeight }}>
+                      <div
+                        key={hour}
+                        role="button"
+                        tabIndex={0}
+                        className="border-b border-border last:border-0 relative cursor-cell hover:bg-primary/5 transition-colors"
+                        style={{ height: hourHeight }}
+                        onClick={(e) => openAddAtTimelineSlot(e, col.staffId, hour)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            (e.currentTarget as HTMLDivElement).click();
+                          }
+                        }}
+                      >
                         {timelineScale !== 60 && (
                           <>
-                            <div className="absolute left-0 right-0 border-t border-border/30" style={{ top: hourHeight / 2 }} />
+                            <div className="absolute left-0 right-0 border-t border-border/30 pointer-events-none" style={{ top: hourHeight / 2 }} />
                             {timelineScale === 15 && (
                               <>
-                                <div className="absolute left-0 right-0 border-t border-border/20" style={{ top: hourHeight / 4 }} />
-                                <div className="absolute left-0 right-0 border-t border-border/20" style={{ top: (hourHeight / 4) * 3 }} />
+                                <div className="absolute left-0 right-0 border-t border-border/20 pointer-events-none" style={{ top: hourHeight / 4 }} />
+                                <div className="absolute left-0 right-0 border-t border-border/20 pointer-events-none" style={{ top: (hourHeight / 4) * 3 }} />
                               </>
                             )}
                           </>
@@ -2271,6 +2394,102 @@ export default function CalendarPage() {
                   <span className="text-sm text-muted-foreground">Status</span>
                   <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
                 </div>
+                <div className="flex flex-col gap-2 pt-1">
+                  <p className="text-xs text-muted-foreground">Szybkie akcje</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl h-9 text-xs"
+                      disabled={
+                        visitActionLoading ||
+                        mapStatus(activeApt.status) === 'cancelled' ||
+                        mapStatus(activeApt.status) === 'completed'
+                      }
+                      onClick={async () => {
+                        if (!activeAptId) return;
+                        setVisitActionLoading(true);
+                        try {
+                          await updateAppointment(activeAptId, { status: 'CANCELLED' });
+                          const [, , , apptsRes] = await loadData();
+                          setAppointments(apptsRes.appointments || []);
+                          toast.success('Wizyta anulowana');
+                          setDetailsOpen(false);
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Nie udało się anulować wizyty');
+                        } finally {
+                          setVisitActionLoading(false);
+                        }
+                      }}
+                    >
+                      Anuluj wizytę
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl h-9 text-xs"
+                      disabled={
+                        visitActionLoading ||
+                        mapStatus(activeApt.status) === 'no-show' ||
+                        mapStatus(activeApt.status) === 'cancelled' ||
+                        mapStatus(activeApt.status) === 'completed'
+                      }
+                      onClick={async () => {
+                        if (!activeAptId) return;
+                        setVisitActionLoading(true);
+                        try {
+                          await updateAppointment(activeAptId, { status: 'NO_SHOW' });
+                          const [, , , apptsRes] = await loadData();
+                          setAppointments(apptsRes.appointments || []);
+                          toast.success('Oznaczono jako nieobecność');
+                          setDetailsOpen(false);
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Nie udało się zapisać');
+                        } finally {
+                          setVisitActionLoading(false);
+                        }
+                      }}
+                    >
+                      <UserX className="w-3.5 h-3.5 mr-1" />
+                      Nieobecność
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="rounded-xl h-9 text-xs"
+                      disabled={visitActionLoading}
+                      onClick={async () => {
+                        if (!activeAptId) return;
+                        const ok = window.confirm(
+                          'Na pewno usunąć tę wizytę z kalendarza? Tej operacji nie można cofnąć.',
+                        );
+                        if (!ok) return;
+                        setVisitActionLoading(true);
+                        try {
+                          await deleteAppointment(activeAptId);
+                          const [, , , apptsRes] = await loadData();
+                          setAppointments(apptsRes.appointments || []);
+                          toast.success('Wizyta usunięta');
+                          setDetailsOpen(false);
+                          setActiveAptId(null);
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Nie udało się usunąć wizyty');
+                        } finally {
+                          setVisitActionLoading(false);
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                      Usuń wizytę
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Anulowane i nieobecności domyślnie chowają się z osi czasu (filtr „Aktywne”). Zmień filtr nad kalendarzem, aby je zobaczyć.
+                  </p>
+                </div>
                 <div>
                   <span className="text-sm text-muted-foreground block mb-1">Notatki klienta</span>
                   <Textarea
@@ -2376,8 +2595,15 @@ export default function CalendarPage() {
                             status: editStatus.toUpperCase().replace(/-/g, '_'),
                             staffId: editStaffId === 'any' ? null : editStaffId,
                             notes: editNotes || undefined,
-                            serviceIds: editServiceIds,
-                            durationOverride: editCustomDuration ? Number(editCustomDuration) : undefined,
+                            serviceIds: [...new Set(editServiceIds)],
+                            duration:
+                              editCustomDuration === ''
+                                ? undefined
+                                : Number(editCustomDuration),
+                            durationOverride:
+                              editCustomDuration === ''
+                                ? undefined
+                                : Number(editCustomDuration),
                             allowConflict: (editAllowConflict || editConflict) || undefined,
                           });
                           const [, , , apptsRes, hoursRes, exceptionsRes, breaksRes] = await loadData();

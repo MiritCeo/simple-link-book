@@ -260,7 +260,7 @@ export default function AppointmentsPage() {
       setEditTime(apt.time);
       setDetailTab('visit');
       setClientNoteDraft(apt.client?.notes || '');
-      setEditCustomDuration('');
+      setEditCustomDuration(typeof apt.duration === 'number' ? apt.duration : '');
       setEditAllowConflict(false);
       setEditStatus(mapStatus(apt.status) as Appointment['status']);
       setEditStaffId(apt.staff?.id || 'any');
@@ -894,8 +894,15 @@ export default function AppointmentsPage() {
                         status: editStatus.toUpperCase().replace(/-/g, '_'),
                         staffId: editStaffId === 'any' ? null : editStaffId,
                         notes: editNotes || undefined,
-                        serviceIds: editServiceIds,
-                        durationOverride: editCustomDuration ? Number(editCustomDuration) : undefined,
+                        serviceIds: [...new Set(editServiceIds)],
+                        duration:
+                          editCustomDuration === ''
+                            ? undefined
+                            : Number(editCustomDuration),
+                        durationOverride:
+                          editCustomDuration === ''
+                            ? undefined
+                            : Number(editCustomDuration),
                         allowConflict: editAllowConflict || undefined,
                       });
                       const res = await getSalonAppointments();

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import type { NotificationChannel, NotificationEvent } from "@prisma/client";
 import prisma from "./prisma.js";
 import { sendEmail, sendSms } from "./notifications.js";
+import { sendFcmToTokens } from "./push/fcm.js";
 
 type AppointmentWithRelations = {
   id: string;
@@ -9,6 +10,7 @@ type AppointmentWithRelations = {
   time: string;
   duration: number;
   status: string;
+  clientId?: string;
   salonId: string;
   client: { name: string; phone: string; email?: string | null };
   staff?: { name: string | null } | null;
@@ -143,6 +145,81 @@ export async function sendEventNotification(
       body = `${body}\n\nLink: {cancel_link}`;
     }
     await sendEmail(appointment.client.email, subject, renderTemplate(body, ctx));
+  }
+
+  // PUSH (FCM) - deduplikacja per wizyta + typ zdarzenia
+  // Uwaga: mechanizm push jest niezależny od SMS/EMAIL, ale uruchamiany jest z poziomu
+  // istniejącego flow (tj. scheduler wywołuje sendEventNotification tylko gdy wysyła SMS lub EMAIL).
+  try {
+    const pushClientId = appointment.clientId;
+    if (!pushClientId) return;
+
+    const p = prisma as any;
+    const existingPush = await p.pushLog?.findFirst?.({
+      where: { appointmentId: appointment.id, event },
+      select: { id: true },
+    });
+    if (existingPush) return;
+
+    const clientAccount = await prisma.clientAccount.findUnique({
+      where: { clientId: pushClientId },
+      select: { id: true },
+    });
+    if (!clientAccount) return;
+
+    const tokenRows: Array<{ token: string }> = [];
+    if (p.pushDeviceToken?.findMany) {
+      const rows = await p.pushDeviceToken.findMany({
+        where: { clientAccountId: clientAccount.id },
+        select: { token: true },
+      });
+      tokenRows.push(...(rows as Array<{ token: string }>));
+    }
+    const tokens = tokenRows.map(r => r.token);
+
+    if (!tokens?.length) return;
+
+    const pushTitle = appointment.salon?.name ? `Powiadomienia: ${appointment.salon.name}` : "Powiadomienia";
+    const defaultPushBody = () => {
+      switch (event) {
+        case "BOOKING_CONFIRMATION":
+          return "Twoja wizyta w {salon_name} jest potwierdzona {date} o {time}.";
+        case "REMINDER_24H":
+          return "Przypomnienie: wizyta w {salon_name} {date} o {time}.";
+        case "REMINDER_2H":
+          return "Przypomnienie (2h): wizyta w {salon_name} {date} o {time}.";
+        case "CANCELLATION":
+          return "Twoja wizyta w {salon_name} {date} o {time} została anulowana.";
+        case "FOLLOWUP":
+          return "Dziękujemy za wizytę! Jeśli chcesz, umów kolejną.";
+        default:
+          return "Masz nowe powiadomienie.";
+      }
+    };
+
+    const payloadBody = renderTemplate(defaultPushBody(), ctx);
+    const result = await sendFcmToTokens(tokens, {
+      title: pushTitle,
+      body: payloadBody,
+      data: {
+        event,
+        appointmentId: appointment.id,
+        client_name: appointment.client.name || "",
+        salon_name: ctx.salon_name || "",
+        date: appointment.date || "",
+        time: appointment.time || "",
+        cancel_link: ctx.cancel_link || "",
+      },
+    });
+
+    if (result.ok && result.successCount > 0) {
+      await p.pushLog.create({
+        data: { appointmentId: appointment.id, event },
+      });
+    }
+  } catch (err) {
+    // Nie psujemy flow SMS/EMAIL — push ma być "best effort"
+    console.error("[push] sendEventNotification error:", err);
   }
 }
 

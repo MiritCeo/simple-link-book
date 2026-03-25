@@ -228,6 +228,32 @@ router.post("/password-reset/confirm", async (req, res) => {
 
 router.use(clientAuth);
 
+// FCM: rejestracja tokenu urządzenia (jedno konto -> wiele urządzeń)
+router.post("/push-token", async (req: ClientAuthRequest, res) => {
+  const schema = z.object({
+    token: z.string().min(10),
+    // opcjonalne, jeśli mobile będzie chciało wysłać dodatkowe meta
+    platform: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const account = await prisma.clientAccount.findUnique({
+    where: { clientId: req.client!.clientId },
+    select: { id: true },
+  });
+  if (!account) return res.status(404).json({ error: "account_not_found" });
+
+  const p = prisma as any;
+  await p.pushDeviceToken.upsert({
+    where: { token: parsed.data.token },
+    update: { clientAccountId: account.id },
+    create: { token: parsed.data.token, clientAccountId: account.id },
+  });
+
+  return res.json({ ok: true });
+});
+
 router.get("/salons", async (req: ClientAuthRequest, res) => {
   const account = await getAccountForClient(req.client!.clientId);
   if (!account) return res.status(404).json({ error: "account_not_found" });

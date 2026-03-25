@@ -516,3 +516,27 @@ model NotificationLog {
 
   @@unique([appointmentId, event, channel])
 }
+
+/// FCM: tokeny urządzeń przypisane do konta klienta (jedno konto -> wiele urządzeń)
+model PushDeviceToken {
+  id              String   @id @default(cuid())
+  token           String   @unique
+  clientAccountId String
+  clientAccount   ClientAccount @relation(fields: [clientAccountId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@index([clientAccountId])
+}
+
+/// Deduplikacja wysyłek push dla konkretnej wizyty i typu zdarzenia
+model PushLog {
+  id            String   @id @default(cuid())
+  appointmentId String
+  event         String
+  sentAt        DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@unique([appointmentId, event])
+  @@index([appointmentId])
+}

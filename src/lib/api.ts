@@ -653,6 +653,13 @@ export async function updateAppointment(id: string, payload: {
   });
 }
 
+export async function deleteAppointment(id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/salon/appointments/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
 export async function createService(payload: {
   name: string;
   category: string;

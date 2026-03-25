@@ -1709,10 +1709,11 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   if (!client) return res.status(400).json({ error: "Nie znaleziono klienta w tym salonie" });
   if (client.active === false) return res.status(400).json({ error: "Klient jest nieaktywny" });
 
+  const serviceIds = [...new Set(parsed.data.serviceIds)];
   const services = await prisma.service.findMany({
-    where: { salonId: getSalonId(req), id: { in: parsed.data.serviceIds }, active: true },
+    where: { salonId: getSalonId(req), id: { in: serviceIds }, active: true },
   });
-  if (services.length !== parsed.data.serviceIds.length) {
+  if (services.length !== serviceIds.length) {
     return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
   }
   const computedDuration = services.reduce((sum, s) => sum + s.duration, 0);
@@ -1726,9 +1727,9 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     if (!staffRec) return res.status(400).json({ error: "Nie znaleziono pracownika w tym salonie" });
 
     const staffServiceCount = await prisma.staffService.count({
-      where: { staffId: parsed.data.staffId, serviceId: { in: parsed.data.serviceIds } },
+      where: { staffId: parsed.data.staffId, serviceId: { in: serviceIds } },
     });
-    if (staffServiceCount !== parsed.data.serviceIds.length) {
+    if (staffServiceCount !== serviceIds.length) {
       return res.status(400).json({ error: "Pracownik nie wykonuje wybranych usług" });
     }
   }
@@ -1794,16 +1795,20 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     (parsed.data.date && parsed.data.date !== appointment.date) ||
     (parsed.data.time && parsed.data.time !== appointment.time);
 
+  const hasManualDuration =
+    parsed.data.durationOverride != null || parsed.data.duration != null;
+
   let duration = parsed.data.durationOverride ?? parsed.data.duration;
   let effectiveServiceIds: string[] = [];
   if (parsed.data.serviceIds) {
+    const serviceIds = [...new Set(parsed.data.serviceIds)];
     const services = await prisma.service.findMany({
-      where: { salonId: appointment.salonId, id: { in: parsed.data.serviceIds }, active: true },
+      where: { salonId: appointment.salonId, id: { in: serviceIds }, active: true },
     });
-    if (services.length !== parsed.data.serviceIds.length) {
+    if (services.length !== serviceIds.length) {
       return res.status(400).json({ error: "Nie znaleziono usług w tym salonie" });
     }
-    if (!parsed.data.durationOverride) {
+    if (!hasManualDuration) {
       duration = services.reduce((sum, s) => sum + s.duration, 0);
     }
     effectiveServiceIds = services.map(s => s.id);
@@ -1878,6 +1883,27 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     await sendEventNotification("FOLLOWUP", { ...updated, salon });
   }
   return res.json({ appointment: updated });
+});
+
+router.delete("/appointments/:id", async (req: AuthRequest, res) => {
+  const appointment = await prisma.appointment.findFirst({
+    where: { id: req.params.id, salonId: getSalonId(req) },
+  });
+  if (!appointment) {
+    return res.status(404).json({ error: "Nie znaleziono wizyty w tym salonie" });
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.notificationLog.deleteMany({ where: { appointmentId: appointment.id } });
+    await tx.appointmentToken.deleteMany({ where: { appointmentId: appointment.id } });
+    await tx.appointmentService.deleteMany({ where: { appointmentId: appointment.id } });
+    await tx.salonRating.deleteMany({ where: { appointmentId: appointment.id } });
+    const ptx = tx as any;
+    if (ptx.pushLog?.deleteMany) {
+      await ptx.pushLog.deleteMany({ where: { appointmentId: appointment.id } });
+    }
+    await tx.appointment.delete({ where: { id: appointment.id } });
+  });
+  return res.json({ ok: true });
 });
 
 router.get("/schedule/:staffId", async (req: AuthRequest, res) => {
