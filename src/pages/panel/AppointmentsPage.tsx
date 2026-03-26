@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { getSalonAppointments, getSalonBreaks, getSalonExceptions, getSalonHours, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient, sendManualSms } from '@/lib/api';
+import { getSalonAppointments, getSalonBreaks, getSalonExceptions, getSalonHours, getSalonProfile, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient, sendManualSms } from '@/lib/api';
 
 const tabs = [
   { key: 'today', label: 'Dziś' },
@@ -60,6 +60,7 @@ export default function AppointmentsPage() {
   const [salonHours, setSalonHours] = useState<any[]>([]);
   const [salonExceptions, setSalonExceptions] = useState<any[]>([]);
   const [staffSchedules, setStaffSchedules] = useState<Record<string, { availability: any[]; exceptions: any[] }>>({});
+  const [kolhozMode, setKolhozMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
@@ -173,6 +174,7 @@ export default function AppointmentsPage() {
   };
 
   const getEffectiveWindow = (dateStr: string, staffId?: string) => {
+    if (kolhozMode) return { start: '00:00', end: '23:59' };
     return getStaffWindowForDate(dateStr, staffId) || getWindowForDate(dateStr);
   };
   const applyStatusUpdate = async (aptId: string, value: Appointment['status']) => {
@@ -189,8 +191,8 @@ export default function AppointmentsPage() {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    Promise.all([getSalonAppointments(), getSalonStaff(), getSalonServices(), getSalonBreaks(), getSalonHours(), getSalonExceptions()])
-      .then(([apptsRes, staffRes, servicesRes, breaksRes, hoursRes, exceptionsRes]) => {
+    Promise.all([getSalonAppointments(), getSalonStaff(), getSalonServices(), getSalonBreaks(), getSalonHours(), getSalonExceptions(), getSalonProfile()])
+      .then(([apptsRes, staffRes, servicesRes, breaksRes, hoursRes, exceptionsRes, profileRes]) => {
         if (!mounted) return;
         setAppointments(apptsRes.appointments || []);
         setStaff(staffRes.staff || []);
@@ -198,6 +200,7 @@ export default function AppointmentsPage() {
         setSalonBreaks(breaksRes.breaks || []);
         setSalonHours(hoursRes.hours || []);
         setSalonExceptions(exceptionsRes.exceptions || []);
+        setKolhozMode(!!profileRes.salon?.kolhozMode);
       })
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
@@ -319,7 +322,7 @@ export default function AppointmentsPage() {
       options.push(`${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
     }
     const dur = effectiveEditDuration || 30;
-    const breakWindows = breakWindowsForDate(editDate);
+    const breakWindows = kolhozMode ? [] : breakWindowsForDate(editDate);
     const filtered = options.filter((t) => {
       const appointmentStart = toMinutes(t);
       const start = appointmentStart - bufferMinutes.before;
@@ -343,14 +346,14 @@ export default function AppointmentsPage() {
       return [editTime, ...filtered];
     }
     return filtered;
-  }, [editDate, editStaffId, effectiveEditDuration, activeApt, appointments, activeAptId, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules, editTime, editAllowConflict]);
+  }, [editDate, editStaffId, effectiveEditDuration, activeApt, appointments, activeAptId, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules, editTime, editAllowConflict, kolhozMode]);
   const editConflict = useMemo(() => {
     if (!activeAptId || !editDate || !editTime) return false;
     const dur = effectiveEditDuration;
     const appointmentStart = toMinutes(editTime);
     const start = appointmentStart - bufferMinutes.before;
     const end = appointmentStart + dur + bufferMinutes.after;
-    const breakOverlap = breakWindowsForDate(editDate).some(w => start < w.end && end > w.start);
+    const breakOverlap = kolhozMode ? false : breakWindowsForDate(editDate).some(w => start < w.end && end > w.start);
     if (breakOverlap) return true;
     if (editAllowConflict) return false;
     const window = getEffectiveWindow(editDate, editStaffId);
@@ -367,7 +370,7 @@ export default function AppointmentsPage() {
       const e = s + a.duration + bufferMinutes.before + bufferMinutes.after;
       return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
     });
-  }, [activeAptId, editStaffId, editDate, editTime, effectiveEditDuration, activeApt, appointments, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules, editAllowConflict]);
+  }, [activeAptId, editStaffId, editDate, editTime, effectiveEditDuration, activeApt, appointments, salonBreaks, bufferMinutes, salonHours, salonExceptions, staffSchedules, editAllowConflict, kolhozMode]);
 
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6">
