@@ -138,6 +138,7 @@ const DraggableAppointment = ({
     opacity: isDragging ? 0.85 : 1,
   };
   const color = getAppointmentColor(apt);
+  const isOnline = apt.source === 'ONLINE';
   return (
     <div
       ref={setNodeRef}
@@ -154,6 +155,11 @@ const DraggableAppointment = ({
         {color && <span className="inline-block h-2 w-2 rounded-full mr-1.5" style={{ backgroundColor: color }} />}
         {apt.time} — {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}
       </p>
+      {isOnline && (
+        <span className="inline-flex items-center rounded-full bg-sky-500/15 text-sky-700 px-1.5 py-0.5 text-[9px] font-semibold w-fit mt-0.5">
+          Online
+        </span>
+      )}
       {!compactTimeline && (
         <p className="text-[10px] truncate opacity-70">{apt.client?.name}</p>
       )}
@@ -264,6 +270,7 @@ export default function CalendarPage() {
   const [appointmentTime, setAppointmentTime] = useState('');
   const [customDuration, setCustomDuration] = useState<number | ''>('');
   const [allowConflict, setAllowConflict] = useState(false);
+  const [createdByStaffId, setCreatedByStaffId] = useState<string>('none');
   const [saving, setSaving] = useState(false);
   const [visitActionLoading, setVisitActionLoading] = useState(false);
   const isCalendarView = view === 'day-timeline' || view === 'week' || view === 'month';
@@ -351,6 +358,15 @@ export default function CalendarPage() {
     getSalonBreaks(),
     getSalonProfile(),
   ]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('appointment_created_by_staff_id');
+      if (saved) setCreatedByStaffId(saved);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -700,7 +716,7 @@ export default function CalendarPage() {
     clientMode === 'existing'
       ? Boolean(selectedClientId)
       : Boolean(newClient.name.trim() && newClient.phone.trim())
-  ) && addTimeAvailable;
+  ) && addTimeAvailable && (visibleStaff.length <= 1 || createdByStaffId !== 'none');
   const resetAppointmentForm = () => {
     setClientMode('existing');
     setClientSearch('');
@@ -895,13 +911,20 @@ export default function CalendarPage() {
         notes: appointmentNotes || undefined,
         clientId,
         staffId: selectedSpecialistId !== 'any' ? selectedSpecialistId : undefined,
+        createdByStaffId: createdByStaffId !== 'none' ? createdByStaffId : undefined,
         allowConflict: (allowConflict || addConflict) || undefined,
         serviceIds: selectedServiceIds,
       });
+      try {
+        if (createdByStaffId !== 'none') localStorage.setItem('appointment_created_by_staff_id', createdByStaffId);
+        else localStorage.removeItem('appointment_created_by_staff_id');
+      } catch {
+        // ignore
+      }
       toast.success('Wizyta dodana');
       resetAppointmentForm();
       setAddOpen(false);
-      const [servicesRes, staffRes, clientsRes, apptsRes, hoursRes, exceptionsRes, breaksRes] = await loadData();
+      const [servicesRes, staffRes, clientsRes, apptsRes, hoursRes, exceptionsRes, breaksRes, profileRes] = await loadData();
       setServices(servicesRes.services || []);
       setStaff(staffRes.staff || []);
       setClients(clientsRes.clients || []);
@@ -909,6 +932,7 @@ export default function CalendarPage() {
       setSalonHours(hoursRes.hours || []);
       setSalonExceptions(exceptionsRes.exceptions || []);
       setSalonBreaks(breaksRes.breaks || []);
+      setKolhozMode(!!profileRes.salon?.kolhozMode);
     } catch (err: any) {
       toast.error(err.message || 'Nie udało się dodać wizyty');
     } finally {
@@ -1492,6 +1516,26 @@ export default function CalendarPage() {
                     )}
                   </div>
                 )}
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Kto dodaje wizytę</label>
+                  <Select value={createdByStaffId} onValueChange={setCreatedByStaffId}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Wybierz osobę" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-50">
+                      <SelectItem value="none">Nie wskazano</SelectItem>
+                      {visibleStaff.map(sp => (
+                        <SelectItem key={sp.id} value={sp.id}>{sp.name} — {sp.role}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Przydatne, gdy kilka osób pracuje na jednym koncie.
+                  </p>
+                  {visibleStaff.length > 1 && createdByStaffId === 'none' && (
+                    <p className="text-xs text-destructive mt-1">Wybierz osobę dodającą wizytę</p>
+                  )}
+                </div>
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Notatka</label>
                   <Textarea
@@ -2214,7 +2258,7 @@ export default function CalendarPage() {
         <SheetContent side="right" className="w-[420px] sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{activeApt?.client?.name || 'Szczegóły wizyty'}</SheetTitle>
-            <SheetDescription>{activeApt ? `${activeApt.date} • ${activeApt.time}` : 'Szczegóły wizyty'}</SheetDescription>
+            <SheetDescription>{activeApt ? `${activeApt.date} • ${activeApt.time} • ${activeApt.source === 'ONLINE' ? 'Online' : 'Panel'}` : 'Szczegóły wizyty'}</SheetDescription>
           </SheetHeader>
           {activeApt ? (
             <>

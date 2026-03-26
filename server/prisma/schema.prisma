@@ -28,6 +28,11 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum AppointmentSource {
+  PANEL
+  ONLINE
+}
+
 enum BreakType {
   BREAK
   BUFFER
@@ -318,6 +323,9 @@ model Appointment {
   time      String
   duration  Int
   status    AppointmentStatus @default(SCHEDULED)
+  source    AppointmentSource @default(PANEL)
+  createdByUserId      String?
+  createdByDisplayName String?
   notes     String? @db.Text
   createdAt DateTime @default(now())
 

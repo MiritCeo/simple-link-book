@@ -1720,6 +1720,8 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     notes: z.string().optional(),
     clientId: z.string(),
     staffId: z.string().optional(),
+    createdByStaffId: z.string().optional(),
+    createdByDisplayName: z.string().min(2).max(120).optional(),
     allowConflict: z.boolean().optional(),
     serviceIds: z.array(z.string()).default([]),
   });
@@ -1773,6 +1775,18 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   if (!availability.ok) {
     return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
   }
+  let creatorDisplayName = parsed.data.createdByDisplayName?.trim();
+  if (parsed.data.createdByStaffId) {
+    const creatorStaff = await prisma.staff.findFirst({
+      where: { id: parsed.data.createdByStaffId, salonId: getSalonId(req), active: true },
+      select: { name: true },
+    });
+    if (!creatorStaff) {
+      return res.status(400).json({ error: "Nie znaleziono osoby dodającej wizytę" });
+    }
+    creatorDisplayName = creatorStaff.name;
+  }
+
   const appointment = await prisma.appointment.create({
     data: {
       salonId: getSalonId(req),
@@ -1780,6 +1794,9 @@ router.post("/appointments", async (req: AuthRequest, res) => {
       time: parsed.data.time,
       duration,
       status: parsed.data.status ?? "SCHEDULED",
+      source: "PANEL",
+      createdByUserId: req.user?.userId || null,
+      createdByDisplayName: creatorDisplayName || null,
       notes: parsed.data.notes,
       clientId: client.id,
       staffId: parsed.data.staffId,

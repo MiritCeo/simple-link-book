@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE `Appointment`
+ADD COLUMN `source` ENUM('PANEL', 'ONLINE') NOT NULL DEFAULT 'PANEL',
+ADD COLUMN `createdByUserId` VARCHAR(191) NULL,
+ADD COLUMN `createdByDisplayName` VARCHAR(191) NULL;

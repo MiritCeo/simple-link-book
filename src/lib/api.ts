@@ -633,6 +633,8 @@ export async function createAppointment(payload: {
   notes?: string;
   clientId: string;
   staffId?: string;
+  createdByStaffId?: string;
+  createdByDisplayName?: string;
   allowConflict?: boolean;
   serviceIds: string[];
 }) {

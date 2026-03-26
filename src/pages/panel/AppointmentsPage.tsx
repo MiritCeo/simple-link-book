@@ -64,6 +64,7 @@ export default function AppointmentsPage() {
   const [loading, setLoading] = useState(true);
 
   const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
+  const sourceLabel = (source?: string) => source === 'ONLINE' ? 'Online' : 'Panel';
   const toMinutes = (t: string) => {
     const [h, m] = (t || '').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
@@ -524,7 +525,8 @@ export default function AppointmentsPage() {
                 <div className="flex flex-wrap items-center gap-1">
                   {getServiceBadges(apt)}
                 </div>
-                <p className="text-xs text-muted-foreground truncate">{apt.staff?.name || 'Dowolny'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{apt.staff?.name || 'Dowolny'}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{sourceLabel(apt.source)}{apt.createdByDisplayName ? ` • dodał(a): ${apt.createdByDisplayName}` : ''}</p>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3 lg:mb-0">
                 <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{apt.time} ({apt.duration} min)</span>
@@ -605,7 +607,7 @@ export default function AppointmentsPage() {
         <SheetContent side="right" className="w-[420px] sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{activeApt?.client?.name || 'Szczegóły wizyty'}</SheetTitle>
-            <SheetDescription>{activeApt ? `${activeApt.date} • ${activeApt.time}` : 'Szczegóły wizyty'}</SheetDescription>
+            <SheetDescription>{activeApt ? `${activeApt.date} • ${activeApt.time} • ${sourceLabel(activeApt.source)}` : 'Szczegóły wizyty'}</SheetDescription>
           </SheetHeader>
           <div className="mt-4 flex items-center gap-2">
             <Button
