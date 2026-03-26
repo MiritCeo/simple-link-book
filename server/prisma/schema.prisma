@@ -58,6 +58,7 @@ model Salon {
   phone       String
   hours       String
   description String
+  kolhozMode  Boolean  @default(false)
   accentColor String?
   logoUrl     String?  @db.Text
   latitude    Float?
@@ -262,6 +263,7 @@ model ClientAccount {
   salonRatings SalonRating[]
   favoriteSalons ClientFavoriteSalon[]
   favoriteGooglePlaces ClientFavoriteGooglePlace[]
+  pushDeviceTokens PushDeviceToken[]
 }
 
 model ClientAccountSalon {
@@ -332,6 +334,7 @@ model Appointment {
   notificationLogs    NotificationLog[]
   tokens              AppointmentToken[]
   salonRating         SalonRating?
+  pushLogs            PushLog[]
 }
 
 /// Ocena po pojedynczej wizycie (1–5 gwiazdek, max 24h po zakończeniu wizyty)

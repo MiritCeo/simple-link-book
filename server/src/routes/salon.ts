@@ -171,6 +171,7 @@ const validateAppointmentAvailability = async ({
   staffId,
   excludeAppointmentId,
   allowConflict,
+  ignoreWorkingHours,
 }: {
   salonId: string;
   date: string;
@@ -179,6 +180,7 @@ const validateAppointmentAvailability = async ({
   staffId?: string | null;
   excludeAppointmentId?: string;
   allowConflict?: boolean;
+  ignoreWorkingHours?: boolean;
 }) => {
   const [salonHours, salonExceptions, salonBreaks] = await Promise.all([
     prisma.salonHour.findMany({ where: { salonId } }),
@@ -186,59 +188,62 @@ const validateAppointmentAvailability = async ({
     prisma.salonBreak.findMany({ where: { salonId } }),
   ]);
 
-  const exception = salonExceptions.find(ex => ex.date === date);
-  if (exception?.closed) {
-    return { ok: false, error: "Salon jest zamknięty w tym dniu" };
-  }
-
-  const weekday = (new Date(date).getDay() + 6) % 7;
-  const salonDay = salonHours.find(h => h.weekday === weekday);
-  const salonWindow = exception?.start && exception?.end
-    ? { start: exception.start, end: exception.end }
-    : (salonDay && salonDay.active && salonDay.open && salonDay.close
-      ? { start: salonDay.open, end: salonDay.close }
-      : null);
-
-  let staffWindow: { start: string; end: string } | null = null;
-  if (staffId) {
-    const [availability, staffExceptions] = await Promise.all([
-      prisma.staffAvailability.findMany({ where: { staffId } }),
-      prisma.staffException.findMany({ where: { staffId, active: true } }),
-    ]);
-    const staffException = staffExceptions.find(ex => ex.date === date);
-    if (staffException) {
-      if (!staffException.start || !staffException.end) {
-        return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
-      }
-      staffWindow = { start: staffException.start, end: staffException.end };
-    } else if (availability.length > 0) {
-      const day = availability.find(a => a.weekday === weekday);
-      if (!day || !day.active || !day.start || !day.end) {
-        return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
-      }
-      staffWindow = { start: day.start, end: day.end };
-    }
-  }
-
-  const window = staffWindow || salonWindow;
-  if (!window) {
-    return { ok: false, error: "Termin jest niedostępny" };
-  }
-
   const buffers = getBufferMinutes(salonBreaks as any);
   const appointmentStart = toMinutes(time);
   const start = appointmentStart - buffers.before;
   const end = appointmentStart + duration + buffers.after;
-  const windowStart = toMinutes(window.start);
-  const windowEnd = toMinutes(window.end);
-  if (start < windowStart || end > windowEnd) {
-    return { ok: false, error: "Termin jest niedostępny" };
-  }
 
-  const breakWindows = getBreakWindowsForDate(date, salonBreaks as any);
-  const breakOverlap = breakWindows.some(w => hasOverlap(start, end, w.start, w.end));
-  if (breakOverlap) {
-    return { ok: false, error: "Termin wypada w czasie przerwy" };
+  if (!ignoreWorkingHours) {
+    const exception = salonExceptions.find(ex => ex.date === date);
+    if (exception?.closed) {
+      return { ok: false, error: "Salon jest zamknięty w tym dniu" };
+    }
+
+    const weekday = (new Date(date).getDay() + 6) % 7;
+    const salonDay = salonHours.find(h => h.weekday === weekday);
+    const salonWindow = exception?.start && exception?.end
+      ? { start: exception.start, end: exception.end }
+      : (salonDay && salonDay.active && salonDay.open && salonDay.close
+        ? { start: salonDay.open, end: salonDay.close }
+        : null);
+
+    let staffWindow: { start: string; end: string } | null = null;
+    if (staffId) {
+      const [availability, staffExceptions] = await Promise.all([
+        prisma.staffAvailability.findMany({ where: { staffId } }),
+        prisma.staffException.findMany({ where: { staffId, active: true } }),
+      ]);
+      const staffException = staffExceptions.find(ex => ex.date === date);
+      if (staffException) {
+        if (!staffException.start || !staffException.end) {
+          return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
+        }
+        staffWindow = { start: staffException.start, end: staffException.end };
+      } else if (availability.length > 0) {
+        const day = availability.find(a => a.weekday === weekday);
+        if (!day || !day.active || !day.start || !day.end) {
+          return { ok: false, error: "Pracownik jest niedostępny w tym terminie" };
+        }
+        staffWindow = { start: day.start, end: day.end };
+      }
+    }
+
+    const window = staffWindow || salonWindow;
+    if (!window) {
+      return { ok: false, error: "Termin jest niedostępny" };
+    }
+
+    const windowStart = toMinutes(window.start);
+    const windowEnd = toMinutes(window.end);
+    if (start < windowStart || end > windowEnd) {
+      return { ok: false, error: "Termin jest niedostępny" };
+    }
+
+    const breakWindows = getBreakWindowsForDate(date, salonBreaks as any);
+    const breakOverlap = breakWindows.some(w => hasOverlap(start, end, w.start, w.end));
+    if (breakOverlap) {
+      return { ok: false, error: "Termin wypada w czasie przerwy" };
+    }
   }
 
   if (staffId && !allowConflict) {
@@ -279,6 +284,7 @@ router.put("/profile", async (req: AuthRequest, res) => {
     phone: z.string().min(6),
     hours: z.string().optional().default(""),
     description: z.string().optional().default(""),
+    kolhozMode: z.boolean().optional(),
     accentColor: z.string().optional(),
     logoUrl: z.string().optional().nullable(),
   });
@@ -286,7 +292,7 @@ router.put("/profile", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane profilu salonu" });
   const salon = await prisma.salon.update({
     where: { id: getSalonId(req) },
-    data: parsed.data,
+    data: parsed.data as any,
   });
   return res.json({ salon });
 });
@@ -1751,6 +1757,10 @@ router.post("/appointments", async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "Pracownik nie wykonuje wybranych usług" });
     }
   }
+  const salonSettings = await (prisma as any).salon.findUnique({
+    where: { id: getSalonId(req) },
+    select: { kolhozMode: true },
+  });
   const availability = await validateAppointmentAvailability({
     salonId: getSalonId(req),
     date: parsed.data.date,
@@ -1758,6 +1768,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     duration,
     staffId: parsed.data.staffId,
     allowConflict: parsed.data.allowConflict,
+    ignoreWorkingHours: !!salonSettings?.kolhozMode,
   });
   if (!availability.ok) {
     return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
@@ -1865,6 +1876,10 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     }
   }
 
+  const salonSettings = await (prisma as any).salon.findUnique({
+    where: { id: appointment.salonId },
+    select: { kolhozMode: true },
+  });
   const availability = await validateAppointmentAvailability({
     salonId: appointment.salonId,
     date: newDate,
@@ -1873,6 +1888,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     staffId: newStaffId || undefined,
     excludeAppointmentId: appointment.id,
     allowConflict: parsed.data.allowConflict,
+    ignoreWorkingHours: !!salonSettings?.kolhozMode,
   });
   if (!availability.ok) {
     return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });

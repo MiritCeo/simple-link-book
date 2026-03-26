@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Copy, QrCode, Link2, ChevronRight, Clock, Users, Scissors, Palette, ExternalLink, Store } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
 import { getSalonProfile, getSalonServices, getSalonStaff, updateSalonProfile } from '@/lib/api';
@@ -24,6 +25,7 @@ export default function SettingsPage() {
     phone: '',
     hours: '',
     description: '',
+    kolhozMode: false,
     accentColor: '#111827',
     logoUrl: '',
   });
@@ -43,6 +45,7 @@ export default function SettingsPage() {
           phone: profileRes.salon?.phone || '',
           hours: profileRes.salon?.hours || '',
           description: profileRes.salon?.description || '',
+          kolhozMode: !!profileRes.salon?.kolhozMode,
           accentColor: profileRes.salon?.accentColor || '#111827',
           logoUrl: profileRes.salon?.logoUrl || '',
         });
@@ -270,6 +273,28 @@ export default function SettingsPage() {
 
         {/* Right column - settings sections */}
         <div>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18, duration: 0.4 }}
+            className="bg-card rounded-2xl p-5 border border-border mb-4 lg:p-6"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="font-semibold text-sm lg:text-base">Kołchoz mode</h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Umożliwia dodawanie i edytowanie wizyt poza godzinami pracy salonu oraz specjalistów.
+                  Kolizje wizyt pracownika nadal są sprawdzane.
+                </p>
+              </div>
+              <Switch
+                checked={profileForm.kolhozMode}
+                onCheckedChange={(checked) => setProfileForm(f => ({ ...f, kolhozMode: checked }))}
+                disabled={role !== 'OWNER' || saving}
+              />
+            </div>
+          </motion.div>
+
           <h2 className="font-semibold mb-3 hidden lg:block">Zarządzanie</h2>
           {loading ? (
             <div className="bg-card rounded-2xl border border-border p-6 text-sm text-muted-foreground">

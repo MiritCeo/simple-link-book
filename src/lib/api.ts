@@ -363,6 +363,7 @@ export async function updateSalonProfile(payload: {
   phone: string;
   hours?: string;
   description?: string;
+  kolhozMode?: boolean;
   accentColor?: string;
   logoUrl?: string | null;
 }) {
