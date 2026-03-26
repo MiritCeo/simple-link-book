@@ -78,6 +78,22 @@ export default function SettingsPage() {
     }
   };
 
+  const saveProfile = async () => {
+    try {
+      setSaving(true);
+      const res = await updateSalonProfile({
+        ...profileForm,
+        logoUrl: profileForm.logoUrl || null,
+      });
+      setSalon(res.salon);
+      toast.success('Zapisano dane salonu');
+    } catch (err: any) {
+      toast.error(err.message || 'Błąd zapisu');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const sections = [
     { icon: Store, label: 'Salony', desc: 'Zarządzaj salonami i dostępem', route: '/panel/ustawienia/salony' },
     { icon: Scissors, label: 'Usługi', count: servicesCount, desc: 'Zarządzaj usługami i cenami', route: '/panel/ustawienia/uslugi' },
@@ -246,21 +262,7 @@ export default function SettingsPage() {
               <Button
                 className="rounded-xl h-10"
                 disabled={saving || role !== 'OWNER'}
-                onClick={async () => {
-                  try {
-                    setSaving(true);
-                    const res = await updateSalonProfile({
-                      ...profileForm,
-                      logoUrl: profileForm.logoUrl || null,
-                    });
-                    setSalon(res.salon);
-                    toast.success('Zapisano dane salonu');
-                  } catch (err: any) {
-                    toast.error(err.message || 'Błąd zapisu');
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
+                onClick={saveProfile}
               >
                 {saving ? 'Zapisywanie...' : 'Zapisz zmiany'}
               </Button>
@@ -292,6 +294,15 @@ export default function SettingsPage() {
                 onCheckedChange={(checked) => setProfileForm(f => ({ ...f, kolhozMode: checked }))}
                 disabled={role !== 'OWNER' || saving}
               />
+            </div>
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <Button
+                className="rounded-xl h-9"
+                disabled={saving || role !== 'OWNER'}
+                onClick={saveProfile}
+              >
+                {saving ? 'Zapisywanie...' : 'Zapisz'}
+              </Button>
             </div>
           </motion.div>
 
