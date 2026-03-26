@@ -15,7 +15,7 @@ import { getReadableTextColor } from '@/lib/color';
 import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
-import { createAppointment, createClient, createSalonException, createStaffException, deleteAppointment, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient } from '@/lib/api';
+import { createAppointment, createClient, createSalonException, createStaffException, deleteAppointment, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonProfile, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient } from '@/lib/api';
 import { toast } from 'sonner';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
@@ -283,6 +283,7 @@ export default function CalendarPage() {
   const [salonBreaks, setSalonBreaks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [staffSchedules, setStaffSchedules] = useState<Record<string, { availability: any[]; exceptions: any[] }>>({});
+  const [kolhozMode, setKolhozMode] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [blockDate, setBlockDate] = useState('');
   const [blockStart, setBlockStart] = useState('');
@@ -348,13 +349,14 @@ export default function CalendarPage() {
     getSalonHours(),
     getSalonExceptions(),
     getSalonBreaks(),
+    getSalonProfile(),
   ]);
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
     loadData()
-      .then(([servicesRes, staffRes, clientsRes, apptsRes, hoursRes, exceptionsRes, breaksRes]) => {
+      .then(([servicesRes, staffRes, clientsRes, apptsRes, hoursRes, exceptionsRes, breaksRes, profileRes]) => {
         if (!mounted) return;
         setServices(servicesRes.services || []);
         setStaff(staffRes.staff || []);
@@ -363,6 +365,7 @@ export default function CalendarPage() {
         setSalonHours(hoursRes.hours || []);
         setSalonExceptions(exceptionsRes.exceptions || []);
         setSalonBreaks(breaksRes.breaks || []);
+        setKolhozMode(!!profileRes.salon?.kolhozMode);
       })
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
@@ -486,6 +489,7 @@ export default function CalendarPage() {
     return { start: day.start, end: day.end };
   };
   const getEffectiveWindow = (dateStr: string, staffId?: string) => {
+    if (kolhozMode) return { start: '00:00', end: '23:59' };
     return getStaffWindowForDate(dateStr, staffId) || getWindowForDate(dateStr);
   };
   const toMinutes = (t: string) => {
@@ -525,6 +529,7 @@ export default function CalendarPage() {
     return set.size ? set : null;
   };
   const breakWindowsForDate = (dateStr: string) => {
+    if (kolhozMode) return [] as Array<{ start: number; end: number }>;
     if (!dateStr) return [] as Array<{ start: number; end: number }>;
     const d = new Date(dateStr);
     const weekday = (d.getDay() + 6) % 7;
@@ -635,13 +640,13 @@ export default function CalendarPage() {
     }
     if (newTime === apt.time && (newStaffId ?? null) === (apt.staff?.id ?? null)) return;
 
-    const window = getEffectiveWindow(newDate, newStaffId ?? undefined);
-    if (!window) {
+    const slotWindow = getEffectiveWindow(newDate, newStaffId ?? undefined);
+    if (!slotWindow) {
       toast.error('Termin jest niedostępny');
       return;
     }
-    const startWindow = toMinutes(window.start);
-    const endWindow = toMinutes(window.end);
+    const startWindow = toMinutes(slotWindow.start);
+    const endWindow = toMinutes(slotWindow.end);
     const start = toMinutes(newTime) - bufferMinutes.before;
     const end = toMinutes(newTime) + (apt.duration || 0) + bufferMinutes.after;
     if (start < startWindow || end > endWindow) {
@@ -664,7 +669,7 @@ export default function CalendarPage() {
         return start < e && end > s && !['cancelled', 'no-show'].includes(mapStatus(a.status));
       });
       if (conflict) {
-        allowConflictDrag = window.confirm('Wizyta koliduje z inną wizytą. Zapisać mimo konfliktu?');
+        allowConflictDrag = globalThis.window.confirm('Wizyta koliduje z inną wizytą. Zapisać mimo konfliktu?');
         if (!allowConflictDrag) return;
       }
     }
