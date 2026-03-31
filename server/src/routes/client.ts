@@ -12,6 +12,14 @@ import { appointmentEndDate, canRateAppointment } from "../lib/appointmentTime.j
 const router = Router();
 const publicAppUrl = (process.env.PUBLIC_APP_URL?.trim() || "https://honly.app").replace(/\/$/, "");
 const UNASSIGNED_SALON_SLUG = "__honly_unassigned__";
+const publicApiUrl = (process.env.PUBLIC_API_URL?.trim() || "").replace(/\/$/, "");
+
+const toAbsoluteUrl = (raw: string | null | undefined) => {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (publicApiUrl) return `${publicApiUrl}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  return raw;
+};
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -389,7 +397,13 @@ router.get("/appointments", async (req: ClientAuthRequest, res) => {
     appointments.map(async (apt) => {
       const canManage = ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(apt.status);
       const token = canManage ? await ensureCancelToken(apt.id) : null;
-      return { ...apt, cancelToken: token?.token || null };
+      const salonLogoUrl = toAbsoluteUrl(apt.salon?.logoUrl || null);
+      return {
+        ...apt,
+        salon: apt.salon ? { ...apt.salon, logoUrl: salonLogoUrl } : apt.salon,
+        salonLogoUrl,
+        cancelToken: token?.token || null,
+      };
     }),
   );
   return res.json({ appointments: enriched });

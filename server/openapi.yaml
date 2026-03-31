@@ -173,6 +173,59 @@ components:
       required:
         - client
         - salonPanelAvailable
+    ClientAppointmentsResponse:
+      type: object
+      properties:
+        appointments:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              date:
+                type: string
+              time:
+                type: string
+              duration:
+                type: integer
+              status:
+                type: string
+              source:
+                type: string
+                enum:
+                  - PANEL
+                  - ONLINE
+              cancelToken:
+                type: string
+                nullable: true
+              salonLogoUrl:
+                type: string
+                nullable: true
+                description: Bezpośredni URL do logo salonu (ułatwienie dla mobile)
+              salon:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  logoUrl:
+                    type: string
+                    nullable: true
+                    description: URL do logo salonu (może być absolutny lub znormalizowany
+                      względem PUBLIC_API_URL)
+            required:
+              - id
+              - date
+              - time
+              - duration
+              - status
+              - salon
+      required:
+        - appointments
     ClientRegisterSessionStartResponse:
       type: object
       properties:
@@ -849,6 +902,10 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientAppointmentsResponse"
       tags:
         - Client
   /api/client/ratings/pending:

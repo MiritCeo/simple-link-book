@@ -446,11 +446,14 @@ export default function CalendarPage() {
     if (!clientSearch) return clients;
     const q = clientSearch.toLowerCase();
     const qPhone = normalizePhone(clientSearch);
-    return clients.filter((c: any) =>
-      c.name.toLowerCase().includes(q)
-      || c.phone.includes(q)
-      || (!!qPhone && normalizePhone(c.phone).includes(qPhone)),
-    );
+    return clients.filter((c: any) => {
+      const name = (c?.name || '').toLowerCase();
+      const phone = c?.phone || '';
+      const normalizedPhone = normalizePhone(phone);
+      return name.includes(q)
+        || phone.toLowerCase().includes(q)
+        || (!!qPhone && normalizedPhone.includes(qPhone));
+    });
   }, [clientSearch, clients]);
   const selectedClientForAdd = useMemo(
     () => (selectedClientId ? clients.find((c: any) => c.id === selectedClientId) : null),
@@ -535,7 +538,9 @@ export default function CalendarPage() {
     const [h, m] = (t || '').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
   };
-  const normalizePhone = (value?: string) => (value || '').replace(/\D+/g, '');
+  function normalizePhone(value?: string) {
+    return (value || '').replace(/\D+/g, '');
+  }
   const formatTime = (totalMinutes: number) => {
     const minutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
     const h = Math.floor(minutes / 60);
