@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useMemo, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
-import { Plus, ChevronLeft, ChevronRight, Clock, User, UserCheck, List, LayoutGrid, Grid2X2, Filter, Ban, Trash2, UserX } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Clock, User, UserCheck, List, LayoutGrid, Grid2X2, Filter, Ban, Trash2, UserX, CalendarDays } from 'lucide-react';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent, type DragMoveEvent } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import { getReadableTextColor } from '@/lib/color';
 import { normalizeAssetUrl } from '@/lib/url';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
-import { createAppointment, createClient, createSalonException, createStaffException, deleteAppointment, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonProfile, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient } from '@/lib/api';
+import { createAppointment, createClient, createSalonException, createStaffException, deleteAppointment, deleteSalonException, deleteStaffException, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonProfile, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient, updateSalonException, updateStaffException } from '@/lib/api';
 import { toast } from 'sonner';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
@@ -252,6 +252,8 @@ export default function CalendarPage() {
   const [clientNoteDraft, setClientNoteDraft] = useState('');
   const [activeAptId, setActiveAptId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [slotActionOpen, setSlotActionOpen] = useState(false);
+  const [slotAction, setSlotAction] = useState<{ date: string; time: string; staffId?: string | null } | null>(null);
   const [monthCursor, setMonthCursor] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -297,6 +299,7 @@ export default function CalendarPage() {
   const [blockEnd, setBlockEnd] = useState('');
   const [blockStaffId, setBlockStaffId] = useState<'salon' | string>('salon');
   const [blockReason, setBlockReason] = useState('');
+  const [editingBlock, setEditingBlock] = useState<null | { kind: 'salon' | 'staff'; id: string; staffId?: string }>(null);
   const [editMode, setEditMode] = useState(false);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
@@ -324,15 +327,23 @@ export default function CalendarPage() {
     d.setDate(d.getDate() - day);
     return d.toISOString().split('T')[0];
   });
+  const [dayStripCount, setDayStripCount] = useState<7 | 14 | 21>(() => {
+    try {
+      const raw = Number(localStorage.getItem('calendar_day_strip_count'));
+      return raw === 7 || raw === 14 || raw === 21 ? raw : 21;
+    } catch {
+      return 21;
+    }
+  });
 
   const weekDays = useMemo(() => {
     const start = new Date(weekStart);
-    return Array.from({ length: 7 }, (_, i) => {
+    return Array.from({ length: dayStripCount }, (_, i) => {
       const d = new Date(start);
       d.setDate(d.getDate() + i);
       return d.toISOString().split('T')[0];
     });
-  }, [weekStart]);
+  }, [weekStart, dayStripCount]);
   const monthDays = useMemo(() => {
     const start = new Date(monthCursor);
     const first = new Date(start.getFullYear(), start.getMonth(), 1);
@@ -405,6 +416,9 @@ export default function CalendarPage() {
   useEffect(() => {
     localStorage.setItem('calendar_view', view);
   }, [view]);
+  useEffect(() => {
+    localStorage.setItem('calendar_day_strip_count', String(dayStripCount));
+  }, [dayStripCount]);
   const matchesStaffFilter = (apt: any) => {
     if (staffFilterIds.length === 0) return true;
     if (!apt.staff?.id) return staffFilterIds.includes('any');
@@ -431,7 +445,12 @@ export default function CalendarPage() {
   const filteredClients = useMemo(() => {
     if (!clientSearch) return clients;
     const q = clientSearch.toLowerCase();
-    return clients.filter((c: any) => c.name.toLowerCase().includes(q) || c.phone.includes(q));
+    const qPhone = normalizePhone(clientSearch);
+    return clients.filter((c: any) =>
+      c.name.toLowerCase().includes(q)
+      || c.phone.includes(q)
+      || (!!qPhone && normalizePhone(c.phone).includes(qPhone)),
+    );
   }, [clientSearch, clients]);
   const selectedClientForAdd = useMemo(
     () => (selectedClientId ? clients.find((c: any) => c.id === selectedClientId) : null),
@@ -478,9 +497,13 @@ export default function CalendarPage() {
   const estimatedDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
   const effectiveDuration = customDuration || estimatedDuration || 30;
   const estimatedCost = selectedServices.reduce((sum, s) => sum + s.price, 0);
+  const getSalonExceptionForDate = (dateStr: string) => {
+    const rows = salonExceptions.filter((e: any) => e.date === dateStr);
+    return rows.length ? rows[rows.length - 1] : null;
+  };
   const getWindowForDate = (dateStr: string) => {
     if (!dateStr) return null;
-    const exception = salonExceptions.find((e: any) => e.date === dateStr);
+    const exception = getSalonExceptionForDate(dateStr);
     if (exception?.closed) return null;
     if (exception?.start && exception?.end) return { start: exception.start, end: exception.end };
     const d = new Date(dateStr);
@@ -512,6 +535,7 @@ export default function CalendarPage() {
     const [h, m] = (t || '').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
   };
+  const normalizePhone = (value?: string) => (value || '').replace(/\D+/g, '');
   const formatTime = (totalMinutes: number) => {
     const minutes = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
     const h = Math.floor(minutes / 60);
@@ -737,6 +761,16 @@ export default function CalendarPage() {
     setBlockEnd('');
     setBlockStaffId('salon');
     setBlockReason('');
+    setEditingBlock(null);
+  };
+  const openEditBlock = (block: { kind: 'salon' | 'staff'; id: string; date: string; start: string; end: string; label?: string; staffId?: string }) => {
+    setEditingBlock({ kind: block.kind, id: block.id, staffId: block.staffId });
+    setBlockDate(block.date);
+    setBlockStart(block.start);
+    setBlockEnd(block.end);
+    setBlockReason(block.label || '');
+    setBlockStaffId(block.kind === 'salon' ? 'salon' : (block.staffId || 'salon'));
+    setBlockOpen(true);
   };
   const activeApt = appointments.find(a => a.id === activeAptId);
   const clientHistory = useMemo(() => {
@@ -778,14 +812,8 @@ export default function CalendarPage() {
       const slotIndex = Math.min(slotsPerHour - 1, Math.max(0, Math.floor(y / slotH)));
       const minutes = slotIndex * timelineScale;
       const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-      setAppointmentDate(selectedDate);
-      setAppointmentTime(timeStr);
-      setSelectedSpecialistId(staffId || 'any');
-      setSelectedServiceIds([]);
-      setAppointmentNotes('');
-      setCustomDuration('');
-      setAllowConflict(false);
-      setAddOpen(true);
+      setSlotAction({ date: selectedDate, time: timeStr, staffId: staffId || null });
+      setSlotActionOpen(true);
     },
     [selectedDate, timelineScale],
   );
@@ -856,7 +884,7 @@ export default function CalendarPage() {
 
   const shiftWeek = (dir: number) => {
     const d = new Date(weekStart);
-    d.setDate(d.getDate() + dir * 7);
+    d.setDate(d.getDate() + dir * dayStripCount);
     setWeekStart(d.toISOString().split('T')[0]);
   };
   const shiftMonth = (dir: number) => {
@@ -867,9 +895,27 @@ export default function CalendarPage() {
   };
 
   const getMonthLabel = () => {
-    const d = new Date(weekDays[3] || weekStart);
+    const d = new Date(weekDays[Math.floor(weekDays.length / 2)] || weekStart);
     const months = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
     return `${months[d.getMonth()]} ${d.getFullYear()}`;
+  };
+  const goToToday = () => {
+    const todayIso = new Date().toISOString().split('T')[0];
+    setSelectedDate(todayIso);
+    setAppointmentDate(todayIso);
+    setWeekStart(todayIso);
+    const m = new Date(todayIso);
+    m.setDate(1);
+    setMonthCursor(m.toISOString().split('T')[0]);
+  };
+  const getDayButtonStyle = () => {
+    if (dayStripCount === 7) {
+      return { flex: '1 1 0' } as const;
+    }
+    if (dayStripCount === 14) {
+      return { flex: `0 0 calc((100% - 13 * 0.25rem) / 14)` } as const;
+    }
+    return { width: '58px', flex: '0 0 auto' } as const;
   };
   const getMonthCursorLabel = () => {
     const d = new Date(monthCursor);
@@ -1045,6 +1091,73 @@ export default function CalendarPage() {
     const capacity = 8 * 60;
     return Math.min(Math.round((minutes / capacity) * 100), 100);
   };
+  const getColumnBlockItems = (dateStr: string, staffId?: string | null) => {
+    const rows: Array<{ id: string; time: string; duration: number; label: string; source: 'salon' | 'staff'; sourceId: string; date: string; start: string; end: string; staffId?: string }> = [];
+    const timelineStart = HOURS[0] * 60;
+    const timelineEnd = (HOURS[HOURS.length - 1] + 1) * 60;
+
+    const pushRange = (id: string, start: string, end: string, label: string, source: 'salon' | 'staff', sourceId: string, sourceStaffId?: string) => {
+      const s = Math.max(toMinutes(start), timelineStart);
+      const e = Math.min(toMinutes(end), timelineEnd);
+      if (e <= s) return;
+      rows.push({
+        id,
+        time: formatTime(s),
+        duration: e - s,
+        label,
+        source,
+        sourceId,
+        date: dateStr,
+        start,
+        end,
+        staffId: sourceStaffId,
+      });
+    };
+
+    const salonEx = getSalonExceptionForDate(dateStr);
+    if (salonEx?.closed) {
+      rows.push({
+        id: `blk-salon-closed-${dateStr}`,
+        time: formatTime(timelineStart),
+        duration: timelineEnd - timelineStart,
+        label: salonEx.label || 'Salon zamknięty',
+        source: 'salon',
+        sourceId: salonEx.id,
+        date: dateStr,
+        start: formatTime(timelineStart),
+        end: formatTime(timelineEnd),
+      });
+    } else if (salonEx?.start && salonEx?.end) {
+      pushRange(`blk-salon-${salonEx.id}`, salonEx.start, salonEx.end, salonEx.label || 'Blokada salonu', 'salon', salonEx.id);
+    }
+
+    if (staffId) {
+      const schedule = staffSchedules[staffId];
+      const exceptionsForDay = (schedule?.exceptions || []).filter((e: any) => e.date === dateStr);
+      exceptionsForDay.forEach((ex: any, idx: number) => {
+        if (ex?.start && ex?.end) {
+          pushRange(`blk-staff-${ex.id || `${staffId}-${dateStr}-${idx}`}`, ex.start, ex.end, ex.label || 'Blokada specjalisty', 'staff', ex.id || `${staffId}-${dateStr}-${idx}`, staffId);
+        } else if (ex && ex.active === false) {
+          rows.push({
+            id: `blk-staff-off-${ex.id || `${staffId}-${dateStr}-${idx}`}`,
+            time: formatTime(timelineStart),
+            duration: timelineEnd - timelineStart,
+            label: ex.label || 'Specjalista niedostępny',
+            source: 'staff',
+            sourceId: ex.id || `${staffId}-${dateStr}-${idx}`,
+            date: dateStr,
+            start: formatTime(timelineStart),
+            end: formatTime(timelineEnd),
+            staffId,
+          });
+        }
+      });
+    }
+    return rows;
+  };
+  const getColumnBlockSummaries = (dateStr: string, staffId?: string | null) => {
+    return getColumnBlockItems(dateStr, staffId).map((b) => `${b.time}-${formatTime(toMinutes(b.time) + b.duration)} ${b.label}`);
+  };
 
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6">
@@ -1086,7 +1199,7 @@ export default function CalendarPage() {
               <button
                 onClick={() => setView('day-list')}
                 className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                  view === 'day-list' || view === 'day-timeline' || view === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                  String(view) === 'day-list' || String(view) === 'day-timeline' || String(view) === 'day-cards' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
                 }`}
               >
                 Dzień
@@ -1094,7 +1207,7 @@ export default function CalendarPage() {
               <button
                 onClick={() => setView('week')}
                 className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                  view === 'week' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                  String(view) === 'week' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
                 }`}
               >
                 Tydzień
@@ -1102,24 +1215,30 @@ export default function CalendarPage() {
               <button
                 onClick={() => setView('month')}
                 className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                  view === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                  String(view) === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
                 }`}
               >
                 Miesiąc
               </button>
             </div>
           )}
-          <Dialog open={blockOpen} onOpenChange={(open) => { setBlockOpen(open); if (open) resetBlockForm(); }}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="rounded-xl gap-1.5 h-10 hidden sm:inline-flex">
-                <Ban className="w-4 h-4" />
-                Zablokuj czas
-              </Button>
-            </DialogTrigger>
+          <Dialog open={blockOpen} onOpenChange={(open) => { setBlockOpen(open); if (!open) setEditingBlock(null); }}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl gap-1.5 h-10 hidden sm:inline-flex"
+              onClick={() => {
+                resetBlockForm();
+                setBlockOpen(true);
+              }}
+            >
+              <Ban className="w-4 h-4" />
+              Zarezerwuj czas
+            </Button>
             <DialogContent className="rounded-2xl">
               <DialogHeader>
-                <DialogTitle>Zablokuj czas</DialogTitle>
-                <DialogDescription>Zablokuj termin w kalendarzu salonu</DialogDescription>
+                <DialogTitle>{editingBlock ? 'Edytuj blokadę czasu' : 'Zablokuj czas'}</DialogTitle>
+                <DialogDescription>{editingBlock ? 'Zmień zakres lub usuń blokadę' : 'Zablokuj termin w kalendarzu salonu'}</DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
@@ -1158,7 +1277,32 @@ export default function CalendarPage() {
                 </div>
               </div>
               <DialogFooter className="pt-2">
-                <Button variant="outline" className="rounded-xl" onClick={() => setBlockOpen(false)}>Anuluj</Button>
+                {editingBlock && (
+                  <Button
+                    variant="destructive"
+                    className="rounded-xl mr-auto"
+                    onClick={async () => {
+                      try {
+                        if (editingBlock.kind === 'salon') {
+                          await deleteSalonException(editingBlock.id);
+                          setSalonExceptions(prev => prev.filter((ex: any) => ex.id !== editingBlock.id));
+                        } else if (editingBlock.staffId) {
+                          await deleteStaffException(editingBlock.staffId, editingBlock.id);
+                          const schedule = await getStaffSchedule(editingBlock.staffId);
+                          setStaffSchedules(prev => ({ ...prev, [editingBlock.staffId!]: { availability: schedule.availability || [], exceptions: schedule.exceptions || [] } }));
+                        }
+                        toast.success('Blokada usunięta');
+                        setBlockOpen(false);
+                        setEditingBlock(null);
+                      } catch (err: any) {
+                        toast.error(err.message || 'Nie udało się usunąć blokady');
+                      }
+                    }}
+                  >
+                    Usuń blokadę
+                  </Button>
+                )}
+                <Button variant="outline" className="rounded-xl" onClick={() => { setBlockOpen(false); setEditingBlock(null); }}>Anuluj</Button>
                 <Button
                   className="rounded-xl"
                   onClick={async () => {
@@ -1171,7 +1315,25 @@ export default function CalendarPage() {
                       return;
                     }
                     try {
-                      if (blockStaffId === 'salon') {
+                      if (editingBlock?.kind === 'salon') {
+                        const res = await updateSalonException(editingBlock.id, {
+                          date: blockDate,
+                          label: blockReason || 'Blokada',
+                          start: blockStart,
+                          end: blockEnd,
+                          closed: false,
+                        });
+                        setSalonExceptions(prev => prev.map((ex: any) => ex.id === editingBlock.id ? res.exception : ex));
+                      } else if (editingBlock?.kind === 'staff' && editingBlock.staffId) {
+                        await updateStaffException(editingBlock.staffId, editingBlock.id, {
+                          date: blockDate,
+                          start: blockStart,
+                          end: blockEnd,
+                          label: blockReason || 'Blokada',
+                        });
+                        const schedule = await getStaffSchedule(editingBlock.staffId);
+                        setStaffSchedules(prev => ({ ...prev, [editingBlock.staffId!]: { availability: schedule.availability || [], exceptions: schedule.exceptions || [] } }));
+                      } else if (blockStaffId === 'salon') {
                         const res = await createSalonException({
                           date: blockDate,
                           label: blockReason || 'Blokada',
@@ -1179,7 +1341,7 @@ export default function CalendarPage() {
                           end: blockEnd,
                           closed: false,
                         });
-                        setSalonExceptions(prev => [...prev, res.exception]);
+                        setSalonExceptions(prev => [...prev.filter((ex: any) => ex.date !== blockDate), res.exception]);
                       } else {
                         await createStaffException(blockStaffId, {
                           date: blockDate,
@@ -1190,14 +1352,15 @@ export default function CalendarPage() {
                         const schedule = await getStaffSchedule(blockStaffId);
                         setStaffSchedules(prev => ({ ...prev, [blockStaffId]: { availability: schedule.availability || [], exceptions: schedule.exceptions || [] } }));
                       }
-                      toast.success('Czas zablokowany');
+                      toast.success(editingBlock ? 'Blokada zaktualizowana' : 'Czas zablokowany');
                       setBlockOpen(false);
+                      setEditingBlock(null);
                     } catch (err: any) {
-                      toast.error(err.message || 'Nie udało się zablokować czasu');
+                      toast.error(err.message || (editingBlock ? 'Nie udało się zaktualizować blokady' : 'Nie udało się zablokować czasu'));
                     }
                   }}
                 >
-                  Zablokuj
+                  {editingBlock ? 'Zapisz zmiany' : 'Zablokuj'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -1696,13 +1859,38 @@ export default function CalendarPage() {
       {/* Week/Month selector */}
       {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards' || view === 'week') && (
         <div className={`flex items-center justify-between mb-2 ${view === 'day-timeline' ? 'hidden sm:flex' : ''}`}>
-          <motion.button whileHover={{ x: -2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(-1)} className="touch-target flex items-center justify-center">
-            <ChevronLeft className="w-5 h-5" />
-          </motion.button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-muted rounded-xl p-1">
+              {[7, 14, 21].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setDayStripCount(n as 7 | 14 | 21)}
+                  className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-colors ${
+                    dayStripCount === n ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'
+                  }`}
+                >
+                  {n} dni
+                </button>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              className="rounded-xl h-8 px-3 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-500/40 animate-pulse"
+              onClick={goToToday}
+            >
+              <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+              Dzisiaj Mordeczko
+            </Button>
+          </div>
           <span className="text-sm font-medium">{getMonthLabel()}</span>
-          <motion.button whileHover={{ x: 2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(1)} className="touch-target flex items-center justify-center">
-            <ChevronRight className="w-5 h-5" />
-          </motion.button>
+          <div className="flex items-center gap-2">
+            <motion.button whileHover={{ x: -2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(-1)} className="touch-target flex items-center justify-center">
+              <ChevronLeft className="w-5 h-5" />
+            </motion.button>
+            <motion.button whileHover={{ x: 2 }} whileTap={{ scale: 0.9 }} onClick={() => shiftWeek(1)} className="touch-target flex items-center justify-center">
+              <ChevronRight className="w-5 h-5" />
+            </motion.button>
+          </div>
         </div>
       )}
       {view === 'month' && (
@@ -1719,7 +1907,7 @@ export default function CalendarPage() {
 
       {/* Week days */}
       {(view === 'day-list' || view === 'day-timeline' || view === 'day-cards' || view === 'week') && (
-        <div className={`grid grid-cols-7 gap-1 mb-6 ${view === 'day-timeline' ? 'hidden sm:grid' : ''}`}>
+        <div className={`flex gap-1 mb-6 pb-1 ${dayStripCount === 21 ? 'overflow-x-auto' : 'overflow-hidden'} ${view === 'day-timeline' ? 'hidden sm:flex' : ''}`}>
           {weekDays.map(date => {
             const d = new Date(date);
             const isSelected = selectedDate === date;
@@ -1729,13 +1917,14 @@ export default function CalendarPage() {
                 key={date}
                 onClick={() => { setSelectedDate(date); if (view === 'week') openAddForDate(date); }}
                 whileTap={{ scale: 0.93 }}
-                className={`flex flex-col items-center py-2 rounded-xl transition-all ${
+                className={`flex flex-col items-center py-1.5 rounded-xl transition-all ${
                   isSelected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                 }`}
+                style={getDayButtonStyle()}
                 layout
               >
-                <span className="text-[10px] uppercase lg:text-xs">{dayNames[d.getDay()]}</span>
-                <span className="text-lg font-semibold lg:text-xl">{d.getDate()}</span>
+                <span className="text-[9px] uppercase">{dayNames[d.getDay()]}</span>
+                <span className="text-sm font-semibold">{d.getDate()}</span>
                 {dayAppts.length > 0 && (
                   <motion.div
                     initial={{ scale: 0 }}
@@ -1948,6 +2137,7 @@ export default function CalendarPage() {
               )}
               {timelineColumns.map(col => {
                 const columnStaff = col.staffId ? staff.find((s: any) => s.id === col.staffId) : null;
+                const blockRows = getColumnBlockSummaries(selectedDate, col.staffId);
                 return (
                   <div key={col.id} className="py-2 px-3 text-xs font-medium border-l border-border">
                     <div className="flex items-start justify-between gap-2">
@@ -1968,6 +2158,16 @@ export default function CalendarPage() {
                     <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary" style={{ width: `${getColumnLoadPct(col.staffId)}%` }} />
                     </div>
+                    {blockRows.length > 0 && (
+                      <div className="mt-1.5 space-y-1">
+                        {blockRows.slice(0, 2).map((row, i) => (
+                          <div key={`${col.id}-blk-row-${i}`} className="inline-flex max-w-full items-center gap-1 rounded-md bg-amber-100 text-amber-800 px-1.5 py-0.5 text-[10px]">
+                            <Ban className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{row}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1987,7 +2187,12 @@ export default function CalendarPage() {
                 const columnAppts = dayAppointments.filter((a: any) =>
                   col.staffId ? a.staff?.id === col.staffId : !a.staff?.id,
                 );
+                const blockItems = getColumnBlockItems(selectedDate, col.staffId);
                 const layout = buildLaneLayout(columnAppts);
+                const mergedLayout = buildLaneLayout([
+                  ...columnAppts,
+                  ...blockItems,
+                ] as any[]);
                 return (
                   <ColumnDropZone
                     key={col.id}
@@ -2028,7 +2233,7 @@ export default function CalendarPage() {
                     {columnAppts.map((apt: any, i: number) => {
                       const pos = getAppointmentPosition(apt as Appointment);
                       const statusKey = mapStatus(apt.status);
-                      const laneInfo = layout.get(apt.id) || { lane: 0, laneCount: 1 };
+                      const laneInfo = mergedLayout.get(apt.id) || layout.get(apt.id) || { lane: 0, laneCount: 1 };
                       const width = `calc(${100 / laneInfo.laneCount}% - 6px)`;
                       const left = `calc(${(100 / laneInfo.laneCount) * laneInfo.lane}% + 3px)`;
                       return (
@@ -2043,6 +2248,35 @@ export default function CalendarPage() {
                           compactTimeline={compactTimeline}
                           onClick={() => openDetails(apt.id)}
                         />
+                      );
+                    })}
+                    {blockItems.map((blk) => {
+                      const pos = getAppointmentPosition(blk as any);
+                      const laneInfo = mergedLayout.get(blk.id) || { lane: 0, laneCount: 1 };
+                      const width = `calc(${100 / laneInfo.laneCount}% - 6px)`;
+                      const left = `calc(${(100 / laneInfo.laneCount) * laneInfo.lane}% + 3px)`;
+                      return (
+                        <div
+                          key={blk.id}
+                          data-timeline-appointment
+                          className="absolute rounded-lg border border-amber-400/80 bg-amber-100/95 px-2 py-1 overflow-hidden z-[1] cursor-pointer hover:bg-amber-100"
+                          style={{ top: pos.top, height: pos.height, width, left }}
+                          onClick={() => openEditBlock({
+                            kind: blk.source,
+                            id: blk.sourceId,
+                            date: blk.date,
+                            start: blk.start,
+                            end: blk.end,
+                            label: blk.label,
+                            staffId: blk.staffId,
+                          })}
+                        >
+                          <p className="text-[10px] font-semibold truncate flex items-center gap-1 text-amber-900">
+                            <Ban className="w-3 h-3 shrink-0" />
+                            Blokada
+                          </p>
+                          <p className="text-[10px] truncate text-amber-800">{blk.label}</p>
+                        </div>
                       );
                     })}
                   </ColumnDropZone>
@@ -2592,6 +2826,9 @@ export default function CalendarPage() {
                       onClick={async () => {
                         if (!activeApt.client?.id) return;
                         await updateClient(activeApt.client.id, {
+                          name: activeApt.client.name || '',
+                          phone: activeApt.client.phone || '',
+                          email: activeApt.client.email || undefined,
                           notes: clientNoteDraft || undefined,
                         });
                         toast.success('Notatka klienta zapisana');
@@ -2692,6 +2929,53 @@ export default function CalendarPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <Dialog open={slotActionOpen} onOpenChange={setSlotActionOpen}>
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Co chcesz zrobić?</DialogTitle>
+            <DialogDescription>
+              {slotAction ? `${slotAction.date} • ${slotAction.time}` : 'Wybierz akcję dla klikniętego slotu'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2">
+            <Button
+              className="rounded-xl h-10"
+              onClick={() => {
+                if (!slotAction) return;
+                setAppointmentDate(slotAction.date);
+                setAppointmentTime(slotAction.time);
+                setSelectedSpecialistId(slotAction.staffId || 'any');
+                setSelectedServiceIds([]);
+                setAppointmentNotes('');
+                setCustomDuration('');
+                setAllowConflict(false);
+                setSlotActionOpen(false);
+                setAddOpen(true);
+              }}
+            >
+              Dodaj wizytę
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-xl h-10"
+              onClick={() => {
+                if (!slotAction) return;
+                const start = toMinutes(slotAction.time);
+                setBlockDate(slotAction.date);
+                setBlockStart(slotAction.time);
+                setBlockEnd(formatTime(start + 60));
+                setBlockStaffId(slotAction.staffId || 'salon');
+                setBlockReason('');
+                setSlotActionOpen(false);
+                setBlockOpen(true);
+              }}
+            >
+              Zablokuj czas
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageTransition>
   );
 }

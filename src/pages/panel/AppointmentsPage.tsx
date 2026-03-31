@@ -65,6 +65,7 @@ export default function AppointmentsPage() {
 
   const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
   const sourceLabel = (source?: string) => source === 'ONLINE' ? 'Online' : 'Panel';
+  const normalizePhone = (value?: string) => (value || '').replace(/\D+/g, '');
   const toMinutes = (t: string) => {
     const [h, m] = (t || '').split(':').map(Number);
     return (h || 0) * 60 + (m || 0);
@@ -238,9 +239,11 @@ export default function AppointmentsPage() {
     }
     if (search) {
       const q = search.toLowerCase();
+      const qPhone = normalizePhone(search);
       appts = appts.filter((a: any) =>
         a.client?.name?.toLowerCase().includes(q)
         || a.client?.phone?.toLowerCase().includes(q)
+        || (!!qPhone && normalizePhone(a.client?.phone).includes(qPhone))
         || a.appointmentServices?.some((s: any) => s.service.name.toLowerCase().includes(q))
         || a.staff?.name?.toLowerCase().includes(q)
       );

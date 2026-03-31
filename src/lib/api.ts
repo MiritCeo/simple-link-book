@@ -462,6 +462,14 @@ export async function createSalonException(payload: { date: string; label?: stri
   });
 }
 
+export async function updateSalonException(id: string, payload: { date: string; label?: string; start?: string; end?: string; closed?: boolean }) {
+  return apiFetch<{ exception: any }>(`/api/salon/hours/exceptions/${id}`, {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function deleteSalonException(id: string) {
   return apiFetch<{ ok: boolean }>(`/api/salon/hours/exceptions/${id}`, {
     method: "DELETE",
@@ -970,6 +978,21 @@ export async function createStaffException(staffId: string, payload: { date: str
     method: "POST",
     auth: true,
     body: JSON.stringify(payload),
+  });
+}
+
+export async function updateStaffException(staffId: string, id: string, payload: { date: string; start?: string; end?: string; label?: string }) {
+  return apiFetch<{ exception: any }>(`/api/salon/schedule/${staffId}/exceptions/${id}`, {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteStaffException(staffId: string, id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/salon/schedule/${staffId}/exceptions/${id}`, {
+    method: "DELETE",
+    auth: true,
   });
 }
 

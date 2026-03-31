@@ -1603,9 +1603,19 @@ router.post("/hours/exceptions", async (req: AuthRequest, res) => {
       return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
     }
   }
-  const exception = await prisma.salonException.create({
-    data: { ...parsed.data, salonId: getSalonId(req) },
+  const salonId = getSalonId(req);
+  const existing = await prisma.salonException.findFirst({
+    where: { salonId, date: parsed.data.date },
+    orderBy: { id: "desc" },
   });
+  const exception = existing
+    ? await prisma.salonException.update({
+        where: { id: existing.id },
+        data: parsed.data,
+      })
+    : await prisma.salonException.create({
+        data: { ...parsed.data, salonId },
+      });
   return res.json({ exception });
 });
 
@@ -1617,6 +1627,44 @@ router.delete("/hours/exceptions/:id", async (req: AuthRequest, res) => {
   }
   await prisma.salonException.delete({ where: { id: req.params.id } });
   return res.json({ ok: true });
+});
+
+router.put("/hours/exceptions/:id", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const schema = z.object({
+    date: z.string(),
+    label: z.string().optional(),
+    start: z.string().optional(),
+    end: z.string().optional(),
+    closed: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wyjątku" });
+  const existing = await prisma.salonException.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.salonId !== getSalonId(req)) {
+    return res.status(404).json({ error: "Nie znaleziono wyjątku" });
+  }
+  if (parsed.data.date < todayISO()) {
+    return res.status(400).json({ error: "Nie można edytować wyjątku w przeszłości" });
+  }
+  const hasStart = !!parsed.data.start;
+  const hasEnd = !!parsed.data.end;
+  if (parsed.data.closed && (hasStart || hasEnd)) {
+    return res.status(400).json({ error: "Wyjątek zamknięty nie może mieć godzin" });
+  }
+  if (hasStart || hasEnd) {
+    if (!hasStart || !hasEnd || !isTimeValue(parsed.data.start) || !isTimeValue(parsed.data.end)) {
+      return res.status(400).json({ error: "Nieprawidłowe godziny wyjątku" });
+    }
+    if (toMinutes(parsed.data.start!) >= toMinutes(parsed.data.end!)) {
+      return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
+    }
+  }
+  const exception = await prisma.salonException.update({
+    where: { id: req.params.id },
+    data: parsed.data,
+  });
+  return res.json({ exception });
 });
 
 router.get("/breaks", async (req: AuthRequest, res) => {
@@ -1752,11 +1800,14 @@ router.post("/appointments", async (req: AuthRequest, res) => {
     });
     if (!staffRec) return res.status(400).json({ error: "Nie znaleziono pracownika w tym salonie" });
 
-    const staffServiceCount = await prisma.staffService.count({
+    const staffServices = await prisma.staffService.findMany({
       where: { staffId: parsed.data.staffId, serviceId: { in: serviceIds } },
+      select: { serviceId: true },
     });
-    if (staffServiceCount !== serviceIds.length) {
-      return res.status(400).json({ error: "Pracownik nie wykonuje wybranych usług" });
+    const assigned = new Set(staffServices.map(s => s.serviceId));
+    const missing = services.filter(s => !assigned.has(s.id)).map(s => s.name);
+    if (missing.length > 0) {
+      return res.status(400).json({ error: `Pracownik nie wykonuje wybranych usług: ${missing.join(", ")}` });
     }
   }
   const salonSettings = await (prisma as any).salon.findUnique({
@@ -1846,6 +1897,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
 
   let duration = parsed.data.durationOverride ?? parsed.data.duration;
   let effectiveServiceIds: string[] = [];
+  let updatedServices: Array<{ id: string }> | null = null;
   if (parsed.data.serviceIds) {
     const serviceIds = [...new Set(parsed.data.serviceIds)];
     const services = await prisma.service.findMany({
@@ -1858,10 +1910,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
       duration = services.reduce((sum, s) => sum + s.duration, 0);
     }
     effectiveServiceIds = services.map(s => s.id);
-    await prisma.appointmentService.deleteMany({ where: { appointmentId: appointment.id } });
-    await prisma.appointmentService.createMany({
-      data: services.map(s => ({ appointmentId: appointment.id, serviceId: s.id })),
-    });
+    updatedServices = services.map(s => ({ id: s.id }));
   } else {
     const currentServices = await prisma.appointmentService.findMany({
       where: { appointmentId: appointment.id },
@@ -1885,11 +1934,18 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     });
     if (!staffRec) return res.status(400).json({ error: "Nie znaleziono pracownika w tym salonie" });
 
-    const staffServiceCount = await prisma.staffService.count({
+    const staffServices = await prisma.staffService.findMany({
       where: { staffId: newStaffId, serviceId: { in: effectiveServiceIds } },
+      select: { serviceId: true },
     });
-    if (staffServiceCount !== effectiveServiceIds.length) {
-      return res.status(400).json({ error: "Pracownik nie wykonuje wybranych usług" });
+    const assigned = new Set(staffServices.map(s => s.serviceId));
+    const allServices = await prisma.service.findMany({
+      where: { salonId: appointment.salonId, id: { in: effectiveServiceIds } },
+      select: { id: true, name: true },
+    });
+    const missing = allServices.filter(s => !assigned.has(s.id)).map(s => s.name);
+    if (missing.length > 0) {
+      return res.status(400).json({ error: `Pracownik nie wykonuje wybranych usług: ${missing.join(", ")}` });
     }
   }
 
@@ -1911,18 +1967,40 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
     return res.status(409).json({ error: availability.error || "Termin jest niedostępny" });
   }
 
-  const updated = await prisma.appointment.update({
-    where: { id: req.params.id },
-    data: {
-      date: parsed.data.date,
-      time: parsed.data.time,
-      duration: newDuration,
-      status: parsed.data.status,
-      notes: parsed.data.notes,
-      staffId: parsed.data.staffId ?? undefined,
-    },
-    include: { client: true, staff: true, appointmentServices: { include: { service: true } } },
-  });
+  let updated;
+  if (updatedServices) {
+    updated = await prisma.$transaction(async (tx) => {
+      await tx.appointmentService.deleteMany({ where: { appointmentId: appointment.id } });
+      await tx.appointmentService.createMany({
+        data: updatedServices!.map(s => ({ appointmentId: appointment.id, serviceId: s.id })),
+      });
+      return tx.appointment.update({
+        where: { id: req.params.id },
+        data: {
+          date: parsed.data.date,
+          time: parsed.data.time,
+          duration: newDuration,
+          status: parsed.data.status,
+          notes: parsed.data.notes,
+          staffId: parsed.data.staffId ?? undefined,
+        },
+        include: { client: true, staff: true, appointmentServices: { include: { service: true } } },
+      });
+    });
+  } else {
+    updated = await prisma.appointment.update({
+      where: { id: req.params.id },
+      data: {
+        date: parsed.data.date,
+        time: parsed.data.time,
+        duration: newDuration,
+        status: parsed.data.status,
+        notes: parsed.data.notes,
+        staffId: parsed.data.staffId ?? undefined,
+      },
+      include: { client: true, staff: true, appointmentServices: { include: { service: true } } },
+    });
+  }
   if (isCancelledNow) {
     const salon = await prisma.salon.findUnique({ where: { id: updated.salonId } });
     await sendEventNotification("CANCELLATION", { ...updated, salon });
@@ -2079,6 +2157,63 @@ router.post("/schedule/:staffId/exceptions", async (req: AuthRequest, res) => {
     },
   });
   return res.json({ exception });
+});
+
+router.put("/schedule/:staffId/exceptions/:id", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const schema = z.object({
+    date: z.string(),
+    start: z.string().optional(),
+    end: z.string().optional(),
+    label: z.string().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wyjątku pracownika" });
+  if (parsed.data.date < todayISO()) {
+    return res.status(400).json({ error: "Nie można edytować wyjątku w przeszłości" });
+  }
+  const hasStart = !!parsed.data.start;
+  const hasEnd = !!parsed.data.end;
+  if (hasStart || hasEnd) {
+    if (!hasStart || !hasEnd || !isTimeValue(parsed.data.start) || !isTimeValue(parsed.data.end)) {
+      return res.status(400).json({ error: "Nieprawidłowe godziny wyjątku" });
+    }
+    if (toMinutes(parsed.data.start!) >= toMinutes(parsed.data.end!)) {
+      return res.status(400).json({ error: "Godzina rozpoczęcia musi być wcześniejsza niż zakończenia" });
+    }
+  }
+  const staff = await prisma.staff.findUnique({ where: { id: req.params.staffId } });
+  if (!staff || staff.salonId !== getSalonId(req)) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
+  const existing = await prisma.staffException.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.staffId !== req.params.staffId) {
+    return res.status(404).json({ error: "Nie znaleziono wyjątku pracownika" });
+  }
+  const exception = await prisma.staffException.update({
+    where: { id: req.params.id },
+    data: {
+      date: parsed.data.date,
+      start: parsed.data.start,
+      end: parsed.data.end,
+      label: parsed.data.label,
+      active: true,
+    },
+  });
+  return res.json({ exception });
+});
+
+router.delete("/schedule/:staffId/exceptions/:id", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const staff = await prisma.staff.findUnique({ where: { id: req.params.staffId } });
+  if (!staff || staff.salonId !== getSalonId(req)) return res.status(404).json({ error: "Nie znaleziono pracownika w tym salonie" });
+  const existing = await prisma.staffException.findUnique({ where: { id: req.params.id } });
+  if (!existing || existing.staffId !== req.params.staffId) {
+    return res.status(404).json({ error: "Nie znaleziono wyjątku pracownika" });
+  }
+  if (existing.date < todayISO()) {
+    return res.status(400).json({ error: "Nie można usuwać minionych wyjątków" });
+  }
+  await prisma.staffException.delete({ where: { id: req.params.id } });
+  return res.json({ ok: true });
 });
 
 export default router;

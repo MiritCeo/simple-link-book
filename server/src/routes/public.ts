@@ -553,11 +553,17 @@ router.post("/salons/:slug/appointments", async (req, res) => {
       return res.status(400).json({ error: "staff_not_found", message: "Nie znaleziono pracownika w tym salonie" });
     }
 
-    const staffServiceCount = await prisma.staffService.count({
+    const staffServices = await prisma.staffService.findMany({
       where: { staffId: parsed.data.staffId, serviceId: { in: ids } },
+      select: { serviceId: true },
     });
-    if (staffServiceCount !== ids.length) {
-      return res.status(400).json({ error: "staff_service_mismatch", message: "Pracownik nie wykonuje wybranych usług" });
+    const assigned = new Set(staffServices.map(s => s.serviceId));
+    const missing = services.filter(s => !assigned.has(s.id)).map(s => s.name);
+    if (missing.length > 0) {
+      return res.status(400).json({
+        error: "staff_service_mismatch",
+        message: `Pracownik nie wykonuje wybranych usług: ${missing.join(", ")}`,
+      });
     }
   }
 
