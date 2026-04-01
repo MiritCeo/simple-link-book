@@ -17,6 +17,18 @@ const SALON_IDS_TO_DELETE = [
 const DRY_RUN = process.argv.includes("--dry-run");
 
 const normPhone = (value) => (value || "").replace(/\D+/g, "");
+const isMissingTableError = (err) => err?.code === "P2021" || err?.code === "P2022";
+const safe = async (label, fn) => {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isMissingTableError(err)) {
+      console.log(`SKIP ${label}: ${err?.meta?.table || err?.meta?.column || "missing in this DB"}`);
+      return null;
+    }
+    throw err;
+  }
+};
 
 async function collectClientTargets(tx) {
   const clientsByPhone = await tx.client.findMany({
@@ -137,14 +149,14 @@ async function deleteSalonDeep(tx, salonId) {
     tx.staff.findMany({ where: { salonId }, select: { id: true } }),
     tx.service.findMany({ where: { salonId }, select: { id: true } }),
     tx.client.findMany({ where: { salonId }, select: { id: true } }),
-    tx.inventoryItem.findMany({ where: { salonId }, select: { id: true } }),
+    safe("inventoryItem.findMany", () => tx.inventoryItem.findMany({ where: { salonId }, select: { id: true } })),
   ]);
 
   const appointmentIds = appointments.map((a) => a.id);
   const staffIds = staff.map((s) => s.id);
   const serviceIds = services.map((s) => s.id);
   const clientIds = clients.map((c) => c.id);
-  const inventoryItemIds = inventoryItems.map((i) => i.id);
+  const inventoryItemIds = (inventoryItems || []).map((i) => i.id);
 
   const clientAccounts = clientIds.length
     ? await tx.clientAccount.findMany({ where: { clientId: { in: clientIds } }, select: { id: true } })
@@ -174,37 +186,37 @@ async function deleteSalonDeep(tx, salonId) {
     await tx.inventoryMovement.deleteMany({ where: { itemId: { in: inventoryItemIds } } });
   }
   if (clientAccountIds.length) {
-    await tx.clientPasswordReset.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
-    await tx.clientFavoriteGooglePlace.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
-    await tx.clientFavoriteSalon.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
-    await tx.salonRating.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
+    await safe("clientPasswordReset.deleteMany", () => tx.clientPasswordReset.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } }));
+    await safe("clientFavoriteGooglePlace.deleteMany", () => tx.clientFavoriteGooglePlace.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } }));
+    await safe("clientFavoriteSalon.deleteMany(account)", () => tx.clientFavoriteSalon.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } }));
+    await safe("salonRating.deleteMany(account)", () => tx.salonRating.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } }));
     const ptx = tx;
     if (ptx.pushDeviceToken?.deleteMany) {
-      await ptx.pushDeviceToken.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } });
+      await safe("pushDeviceToken.deleteMany", () => ptx.pushDeviceToken.deleteMany({ where: { clientAccountId: { in: clientAccountIds } } }));
     }
   }
 
-  await tx.notificationTemplate.deleteMany({ where: { salonId } });
-  await tx.notificationSetting.deleteMany({ where: { salonId } });
-  await tx.salonBreak.deleteMany({ where: { salonId } });
-  await tx.salonException.deleteMany({ where: { salonId } });
-  await tx.salonHour.deleteMany({ where: { salonId } });
+  await safe("notificationTemplate.deleteMany", () => tx.notificationTemplate.deleteMany({ where: { salonId } }));
+  await safe("notificationSetting.deleteMany", () => tx.notificationSetting.deleteMany({ where: { salonId } }));
+  await safe("salonBreak.deleteMany", () => tx.salonBreak.deleteMany({ where: { salonId } }));
+  await safe("salonException.deleteMany", () => tx.salonException.deleteMany({ where: { salonId } }));
+  await safe("salonHour.deleteMany", () => tx.salonHour.deleteMany({ where: { salonId } }));
 
-  await tx.clientFavoriteSalon.deleteMany({ where: { salonId } });
-  await tx.salonRating.deleteMany({ where: { salonId } });
-  await tx.clientAccountSalon.deleteMany({ where: { salonId } });
-  await tx.userSalon.deleteMany({ where: { salonId } });
+  await safe("clientFavoriteSalon.deleteMany(salon)", () => tx.clientFavoriteSalon.deleteMany({ where: { salonId } }));
+  await safe("salonRating.deleteMany(salon)", () => tx.salonRating.deleteMany({ where: { salonId } }));
+  await safe("clientAccountSalon.deleteMany(salon)", () => tx.clientAccountSalon.deleteMany({ where: { salonId } }));
+  await safe("userSalon.deleteMany", () => tx.userSalon.deleteMany({ where: { salonId } }));
 
   await tx.appointment.deleteMany({ where: { salonId } });
   await tx.staff.deleteMany({ where: { salonId } });
   await tx.service.deleteMany({ where: { salonId } });
   await tx.client.deleteMany({ where: { salonId } });
 
-  await tx.inventoryMovement.deleteMany({ where: { createdBy: { salonId } } });
-  await tx.inventoryItem.deleteMany({ where: { salonId } });
-  await tx.inventoryCategory.deleteMany({ where: { salonId } });
-  await tx.inventoryUnit.deleteMany({ where: { salonId } });
-  await tx.inventorySetting.deleteMany({ where: { salonId } });
+  await safe("inventoryMovement.deleteMany(createdBy.salonId)", () => tx.inventoryMovement.deleteMany({ where: { createdBy: { salonId } } }));
+  await safe("inventoryItem.deleteMany", () => tx.inventoryItem.deleteMany({ where: { salonId } }));
+  await safe("inventoryCategory.deleteMany", () => tx.inventoryCategory.deleteMany({ where: { salonId } }));
+  await safe("inventoryUnit.deleteMany", () => tx.inventoryUnit.deleteMany({ where: { salonId } }));
+  await safe("inventorySetting.deleteMany", () => tx.inventorySetting.deleteMany({ where: { salonId } }));
 
   if (clientAccountIds.length) {
     await tx.clientAccount.deleteMany({ where: { id: { in: clientAccountIds } } });
