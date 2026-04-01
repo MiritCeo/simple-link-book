@@ -559,8 +559,17 @@ router.delete("/notifications/templates/:id", async (req: AuthRequest, res) => {
 });
 
 router.get("/services", async (req: AuthRequest, res) => {
-  const services = await prisma.service.findMany({ where: { salonId: getSalonId(req) } });
-  return res.json({ services });
+  try {
+    const services = await prisma.service.findMany({ where: { salonId: getSalonId(req) } });
+    return res.json({ services });
+  } catch (err: any) {
+    if (err?.code === "P2022" && String(err?.meta?.column || "").includes("Service.bookingVisible")) {
+      return res.status(500).json({
+        error: "Brak migracji bazy danych (Service.bookingVisible). Uruchom: npx prisma migrate deploy",
+      });
+    }
+    throw err;
+  }
 });
 
 const staffPhotoDir = path.join(process.cwd(), "uploads", "staff");
@@ -612,10 +621,19 @@ router.post("/services", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usługi" });
-  const service = await prisma.service.create({
-    data: { ...parsed.data, salonId: getSalonId(req) },
-  });
-  return res.json({ service });
+  try {
+    const service = await prisma.service.create({
+      data: { ...parsed.data, salonId: getSalonId(req) },
+    });
+    return res.json({ service });
+  } catch (err: any) {
+    if (err?.code === "P2022" && String(err?.meta?.column || "").includes("Service.bookingVisible")) {
+      return res.status(500).json({
+        error: "Brak migracji bazy danych (Service.bookingVisible). Uruchom: npx prisma migrate deploy",
+      });
+    }
+    throw err;
+  }
 });
 
 router.put("/services/:id", async (req: AuthRequest, res) => {
@@ -632,15 +650,34 @@ router.put("/services/:id", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane usługi" });
-  const existing = await prisma.service.findUnique({ where: { id: req.params.id } });
+  let existing;
+  try {
+    existing = await prisma.service.findUnique({ where: { id: req.params.id } });
+  } catch (err: any) {
+    if (err?.code === "P2022" && String(err?.meta?.column || "").includes("Service.bookingVisible")) {
+      return res.status(500).json({
+        error: "Brak migracji bazy danych (Service.bookingVisible). Uruchom: npx prisma migrate deploy",
+      });
+    }
+    throw err;
+  }
   if (!existing || existing.salonId !== getSalonId(req)) {
     return res.status(404).json({ error: "Nie znaleziono usługi w tym salonie" });
   }
-  const service = await prisma.service.update({
-    where: { id: req.params.id },
-    data: parsed.data,
-  });
-  return res.json({ service });
+  try {
+    const service = await prisma.service.update({
+      where: { id: req.params.id },
+      data: parsed.data,
+    });
+    return res.json({ service });
+  } catch (err: any) {
+    if (err?.code === "P2022" && String(err?.meta?.column || "").includes("Service.bookingVisible")) {
+      return res.status(500).json({
+        error: "Brak migracji bazy danych (Service.bookingVisible). Uruchom: npx prisma migrate deploy",
+      });
+    }
+    throw err;
+  }
 });
 
 router.delete("/services/:id", async (req: AuthRequest, res) => {

@@ -152,6 +152,9 @@ components:
           type: string
         clientId:
           type: string
+        logoUrl:
+          type: string
+          nullable: true
         address:
           type: string
         phone:
@@ -500,6 +503,7 @@ paths:
                         name: Studio Bella
                         slug: studio-bella
                         clientId: c_123
+                        logoUrl: https://purebook.pl/uploads/salon/logo-studio-bella.png
                         address: ul. Kwiatowa 1, Warszawa
                         phone: +48 123 456 789
                         hours: Pn-Pt 9:00-18:00

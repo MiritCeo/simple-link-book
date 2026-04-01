@@ -62,6 +62,7 @@ export const buildClientSalons = async (account: { id: string; clientId: string 
     name: string;
     slug: string;
     clientId: string;
+    logoUrl?: string | null;
     address?: string;
     phone?: string;
     hours?: string;
@@ -75,6 +76,7 @@ export const buildClientSalons = async (account: { id: string; clientId: string 
       name: primaryClient.salon.name,
       slug: primaryClient.salon.slug,
       clientId: primaryClient.id,
+      logoUrl: toAbsoluteUrl(primaryClient.salon.logoUrl),
       address: primaryClient.salon.address,
       phone: primaryClient.salon.phone,
       hours: primaryClient.salon.hours,
@@ -93,6 +95,7 @@ export const buildClientSalons = async (account: { id: string; clientId: string 
       name: link.salon.name,
       slug: link.salon.slug,
       clientId: link.clientId,
+      logoUrl: toAbsoluteUrl(link.salon.logoUrl),
       address: link.salon.address,
       phone: link.salon.phone,
       hours: link.salon.hours,
