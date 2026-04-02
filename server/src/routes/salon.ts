@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import sharp from "sharp";
 import crypto from "crypto";
-import type { NotificationEvent } from "@prisma/client";
+import { Prisma, type NotificationEvent } from "@prisma/client";
 import prisma from "../prisma.js";
 import { sendEventNotification } from "../notificationService.js";
 import { sendEmail, sendSms } from "../notifications.js";
@@ -1112,6 +1112,20 @@ router.get("/clients", async (req: AuthRequest, res) => {
     }
   }
 
+  const digitOnly = searchRaw.replace(/\D/g, "");
+  let phoneDigitMatchIds: string[] = [];
+  if (searchRaw && digitOnly.length >= 3) {
+    const rows = await prisma.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`
+        SELECT \`id\` FROM \`Client\`
+        WHERE \`salonId\` = ${salonId}
+          AND \`active\` = true
+          AND REGEXP_REPLACE(COALESCE(\`phone\`, ''), '[^0-9]', '') LIKE ${`%${digitOnly}%`}
+      `,
+    );
+    phoneDigitMatchIds = rows.map((r) => r.id);
+  }
+
   const where = {
     ...baseWhere,
     ...(searchRaw
@@ -1120,6 +1134,7 @@ router.get("/clients", async (req: AuthRequest, res) => {
             { name: { contains: searchRaw } },
             { phone: { contains: searchRaw } },
             { email: { contains: searchRaw } },
+            ...(phoneDigitMatchIds.length > 0 ? [{ id: { in: phoneDigitMatchIds } }] : []),
           ],
         }
       : {}),
