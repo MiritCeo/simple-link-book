@@ -257,6 +257,8 @@ model ClientAccount {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  socialProvider ClientSocialProvider?
+  socialUserId String?
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
@@ -269,6 +271,8 @@ model ClientAccount {
   favoriteSalons ClientFavoriteSalon[]
   favoriteGooglePlaces ClientFavoriteGooglePlace[]
   pushDeviceTokens PushDeviceToken[]
+
+  @@unique([socialProvider, socialUserId])
 }
 
 model ClientAccountSalon {
@@ -315,6 +319,21 @@ model ClientRegistrationSession {
   updatedAt       DateTime  @updatedAt
 
   @@index([email])
+}
+
+model ClientSocialVerificationCode {
+  id            String   @id @default(cuid())
+  phoneDigits   String   @unique
+  codeHash      String
+  codeExpiresAt DateTime
+  attempts      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+enum ClientSocialProvider {
+  GOOGLE
+  APPLE
 }
 
 model Appointment {

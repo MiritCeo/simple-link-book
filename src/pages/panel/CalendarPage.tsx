@@ -82,6 +82,7 @@ const DayDropZone = ({
   );
 };
 
+/** Pierwszy zdefiniowany kolor usługi na wizycie — kropka na timeline. */
 const getAppointmentColor = (apt: any) =>
   apt.appointmentServices?.find((s: any) => s.service?.color)?.service?.color || '';
 
@@ -103,6 +104,24 @@ const getServiceBadges = (apt: any) => {
       </span>
     );
   });
+};
+
+/**
+ * Lewa krawędź = status wizyty (intuicyjne skojarzenia):
+ * niebieski — zaplanowana (w kalendarzu, bez potwierdzenia)
+ * zielony — potwierdzona (klient potwierdził)
+ * bursztyn — w trakcie (wizyta teraz)
+ * szmaragd — zakończona (odbyła się)
+ * czerwony — anulowana
+ * pomarańcz — nieobecność (nie stawił się; inny problem niż anulowanie)
+ */
+const statusLeftAccent: Record<string, string> = {
+  scheduled: 'border-l-sky-500 dark:border-l-sky-400',
+  confirmed: 'border-l-green-600 dark:border-l-green-500',
+  'in-progress': 'border-l-amber-500 dark:border-l-amber-400',
+  completed: 'border-l-emerald-700 dark:border-l-emerald-600',
+  cancelled: 'border-l-red-600 dark:border-l-red-500',
+  'no-show': 'border-l-orange-600 dark:border-l-orange-500',
 };
 
 const DraggableAppointment = ({
@@ -137,32 +156,64 @@ const DraggableAppointment = ({
     zIndex: isDragging ? 20 : 1,
     opacity: isDragging ? 0.85 : 1,
   };
-  const color = getAppointmentColor(apt);
+  const serviceColor = getAppointmentColor(apt);
   const isOnline = apt.source === 'ONLINE';
+  const servicesLabel = apt.appointmentServices?.map((s: any) => s.service.name).join(', ') || '';
+  const clientName = (apt.client?.name && String(apt.client.name).trim()) || 'Klient';
+  const statusLabel =
+    statusKey in statusLabels ? statusLabels[statusKey as keyof typeof statusLabels] : statusKey;
+  const detailTitle = [clientName, statusLabel, apt.time, servicesLabel].filter(Boolean).join(' · ');
+  const accent = statusLeftAccent[statusKey] ?? 'border-l-slate-400 dark:border-l-slate-500';
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
       data-timeline-appointment
-      className={`absolute rounded-lg border cursor-pointer hover:opacity-90 transition-opacity overflow-hidden ${statusColors[statusKey as keyof typeof statusColors]} border-current/10 ${
-        compactTimeline ? 'px-2 py-1' : 'px-3 py-1.5'
-      }`}
+      title={detailTitle}
+      className={`absolute rounded-lg cursor-pointer overflow-hidden border border-border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md border-l-[3px] ${accent} flex flex-col min-h-0`}
       style={style}
       onClick={onClick}
     >
-      <p className={`font-semibold truncate ${compactTimeline ? 'text-[10px]' : 'text-xs'}`}>
-        {color && <span className="inline-block h-2 w-2 rounded-full mr-1.5" style={{ backgroundColor: color }} />}
-        {apt.time} — {apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}
+      <div
+        className={`flex flex-col min-h-0 flex-1 ${
+          compactTimeline ? 'px-2 py-1 gap-0.5' : 'px-2.5 py-1.5 gap-0.5'
+        }`}
+      >
+      <div className="flex items-center gap-2 min-w-0">
+        {serviceColor && (
+          <span
+            className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-border/70 shadow-sm"
+            style={{ backgroundColor: serviceColor }}
+            title={servicesLabel ? `Kolor usługi · ${servicesLabel}` : 'Kolor usługi'}
+          />
+        )}
+        <span
+          className={`truncate font-medium text-foreground ${compactTimeline ? 'text-[10px] leading-tight' : 'text-xs leading-snug'}`}
+        >
+          {clientName}
+        </span>
+      </div>
+      {!compactTimeline && (
+        <p className="text-[9px] leading-tight text-muted-foreground truncate">{statusLabel}</p>
+      )}
+      <p
+        className={`min-w-0 leading-snug text-muted-foreground ${compactTimeline ? 'text-[10px] line-clamp-2' : 'text-[11px] line-clamp-3'}`}
+      >
+        <span className="font-medium tabular-nums text-foreground/85">{apt.time}</span>
+        {servicesLabel ? (
+          <>
+            <span className="mx-1 opacity-40">·</span>
+            <span className="text-foreground/75">{servicesLabel}</span>
+          </>
+        ) : null}
       </p>
       {isOnline && (
-        <span className="inline-flex items-center rounded-full bg-sky-500/15 text-sky-700 px-1.5 py-0.5 text-[9px] font-semibold w-fit mt-0.5">
+        <span className="inline-flex items-center rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-300 px-1.5 py-0.5 text-[10px] font-medium w-fit shrink-0">
           Online
         </span>
       )}
-      {!compactTimeline && (
-        <p className="text-[10px] truncate opacity-70">{apt.client?.name}</p>
-      )}
+      </div>
     </div>
   );
 };
@@ -184,10 +235,15 @@ const DraggableAppointmentChip = ({
     transform: CSS.Translate.toString(transform),
     opacity: isDragging ? 0.85 : 1,
   };
-  const color = getAppointmentColor(apt);
+  const c = getAppointmentColor(apt);
   return (
     <div ref={setNodeRef} {...attributes} {...listeners} className={className} style={style}>
-      {color && <span className="inline-block h-2 w-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: color }} />}
+      {c && (
+        <span
+          className="inline-block h-2.5 w-2.5 rounded-full mr-1.5 align-middle ring-2 ring-border/60 shadow-sm shrink-0"
+          style={{ backgroundColor: c }}
+        />
+      )}
       {children}
     </div>
   );
@@ -250,6 +306,7 @@ export default function CalendarPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<'visit' | 'client' | 'history'>('visit');
   const [clientNoteDraft, setClientNoteDraft] = useState('');
+  const [clientNoteEditing, setClientNoteEditing] = useState(false);
   const [activeAptId, setActiveAptId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [slotActionOpen, setSlotActionOpen] = useState(false);
@@ -316,6 +373,10 @@ export default function CalendarPage() {
   const [draggingApt, setDraggingApt] = useState<any | null>(null);
   const [draggingMode, setDraggingMode] = useState<'timeline' | 'chip' | null>(null);
   const [dragPreview, setDragPreview] = useState<{ columnId: string; top: number; time: string } | null>(null);
+  const draggingServiceColor = useMemo(
+    () => (draggingApt ? getAppointmentColor(draggingApt) : ''),
+    [draggingApt],
+  );
   const visibleStaff = useMemo(() => staff.filter((sp: any) => !isDeletedStaff(sp)), [staff]);
 
   const dayNames = ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'];
@@ -795,6 +856,7 @@ export default function CalendarPage() {
       setEditCustomDuration(typeof apt.duration === 'number' ? apt.duration : '');
       setEditAllowConflict(false);
       setDetailTab('visit');
+      setClientNoteEditing(false);
       setClientNoteDraft(apt.client?.notes || '');
       setEditStatus(mapStatus(apt.status) as Appointment['status']);
       setEditStaffId(apt.staff?.id || 'any');
@@ -2309,7 +2371,6 @@ export default function CalendarPage() {
             )}
             {dayAppointments.map((apt: any) => {
               const statusKey = mapStatus(apt.status);
-              const color = getAppointmentColor(apt);
               return (
               <MotionItem key={apt.id}>
                 <HoverCard className="bg-card rounded-2xl p-4 border border-border lg:flex lg:items-center lg:gap-6 lg:px-6">
@@ -2411,9 +2472,16 @@ export default function CalendarPage() {
                   </p>
                   <div className="space-y-1">
                     {dayAppts.slice(0, 3).map(apt => (
-                      <DraggableAppointmentChip key={apt.id} apt={apt} className="text-[11px] leading-tight">
-                        <span className="font-medium">{apt.time}</span>{' '}
-                        <span className="text-muted-foreground">{apt.appointmentServices?.map((s: any) => s.service.name).join(', ')}</span>
+                      <DraggableAppointmentChip key={apt.id} apt={apt} className="text-[11px] leading-tight block rounded-md border border-border bg-muted/30 px-1.5 py-1">
+                        <span className="font-semibold text-foreground truncate block">
+                          {(apt.client?.name && String(apt.client.name).trim()) || 'Klient'}
+                        </span>
+                        <span className="text-muted-foreground text-[10px] mt-0.5 block">
+                          <span className="font-medium tabular-nums text-foreground/85">{apt.time}</span>
+                          {apt.appointmentServices?.length ? (
+                            <> · {apt.appointmentServices.map((s: any) => s.service.name).join(', ')}</>
+                          ) : null}
+                        </span>
                       </DraggableAppointmentChip>
                     ))}
                     {dayAppts.length > 3 && (
@@ -2459,8 +2527,11 @@ export default function CalendarPage() {
                       )}
                     </div>
                     {dayAppts.slice(0, 2).map(apt => (
-                      <div key={apt.id} className="text-[9px] text-muted-foreground truncate mt-1">
-                        {apt.time} {apt.client?.name}
+                      <div key={apt.id} className="text-[9px] truncate mt-1 leading-tight">
+                        <span className="font-semibold text-foreground">
+                          {(apt.client?.name && String(apt.client.name).trim()) || '—'}
+                        </span>
+                        <span className="text-muted-foreground"> {apt.time}</span>
                       </div>
                     ))}
                   </button>
@@ -2472,28 +2543,82 @@ export default function CalendarPage() {
       )}
         <DragOverlay>
           {draggingApt && draggingMode === 'timeline' && (
-            <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 shadow-lg">
-              <p className="text-xs font-semibold truncate">
-                {draggingApt.time} — {draggingApt.appointmentServices?.map((s: any) => s.service.name).join(', ')}
-              </p>
-              <p className="text-[10px] truncate opacity-70">{draggingApt.client?.name}</p>
-              {dragPreview?.time && (
-                <span className="inline-flex mt-1 text-[10px] bg-primary text-white px-1.5 py-0.5 rounded">
-                  {dragPreview.time}
-                </span>
-              )}
+            <div
+              className={`rounded-lg border border-border bg-card text-card-foreground shadow-xl max-w-[260px] border-l-[3px] ${
+                statusLeftAccent[mapStatus(draggingApt.status)] ?? 'border-l-slate-400 dark:border-l-slate-500'
+              }`}
+            >
+              <div className="px-2.5 py-2">
+                <p className="text-xs font-medium truncate leading-tight flex items-center gap-2 min-w-0">
+                  {draggingServiceColor && (
+                    <span
+                      className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-border/70 shadow-sm"
+                      style={{ backgroundColor: draggingServiceColor }}
+                    />
+                  )}
+                  <span className="truncate">
+                    {(draggingApt.client?.name && String(draggingApt.client.name).trim()) || 'Klient'}
+                  </span>
+                </p>
+                <p className="text-[9px] text-muted-foreground truncate mt-0.5">
+                  {statusLabels[mapStatus(draggingApt.status) as keyof typeof statusLabels] ?? mapStatus(draggingApt.status)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                  <span className="font-medium tabular-nums text-foreground/90">{draggingApt.time}</span>
+                  {draggingApt.appointmentServices?.length ? (
+                    <>
+                      <span className="mx-1 opacity-40">·</span>
+                      <span className="text-foreground/85">
+                        {draggingApt.appointmentServices.map((s: any) => s.service.name).join(', ')}
+                      </span>
+                    </>
+                  ) : null}
+                </p>
+                {dragPreview?.time && (
+                  <span className="inline-flex mt-1.5 text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded font-medium">
+                    → {dragPreview.time}
+                  </span>
+                )}
+              </div>
             </div>
           )}
           {draggingApt && draggingMode === 'chip' && (
-            <div className="rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] shadow-lg">
-              <span className="font-medium">{draggingApt.time}</span>{' '}
-              <span className="text-muted-foreground">{draggingApt.client?.name}</span>
+            <div
+              className={`rounded-lg border border-border bg-card shadow-lg max-w-[220px] text-xs border-l-[3px] ${
+                statusLeftAccent[mapStatus(draggingApt.status)] ?? 'border-l-slate-400 dark:border-l-slate-500'
+              }`}
+            >
+              <div className="px-2 py-1.5">
+                <span className="font-medium truncate flex items-center gap-1.5 text-foreground leading-tight text-[11px] min-w-0">
+                  {draggingServiceColor && (
+                    <span
+                      className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-border/60 shadow-sm"
+                      style={{ backgroundColor: draggingServiceColor }}
+                    />
+                  )}
+                  <span className="truncate">
+                    {(draggingApt.client?.name && String(draggingApt.client.name).trim()) || 'Klient'}
+                  </span>
+                </span>
+                <span className="text-[9px] text-muted-foreground block truncate">
+                  {statusLabels[mapStatus(draggingApt.status) as keyof typeof statusLabels] ?? mapStatus(draggingApt.status)}
+                </span>
+                <p className="text-muted-foreground mt-0.5 leading-snug">
+                  <span className="font-medium tabular-nums text-foreground/85">{draggingApt.time}</span>
+                  {draggingApt.appointmentServices?.length ? (
+                    <>
+                      <span className="mx-1 opacity-40">·</span>
+                      <span>{draggingApt.appointmentServices.map((s: any) => s.service.name).join(', ')}</span>
+                    </>
+                  ) : null}
+                </p>
+              </div>
             </div>
           )}
         </DragOverlay>
       </DndContext>
 
-      <Sheet open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) setEditMode(false); }}>
+      <Sheet open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) { setEditMode(false); setClientNoteEditing(false); } }}>
         <SheetContent side="right" className="w-[420px] sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{activeApt?.client?.name || 'Szczegóły wizyty'}</SheetTitle>
@@ -2820,27 +2945,72 @@ export default function CalendarPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-1.5 block">Notatki klienta</label>
-                    <Textarea
-                      value={clientNoteDraft}
-                      onChange={(e) => setClientNoteDraft(e.target.value)}
-                      className="rounded-xl min-h-[180px]"
-                    />
-                    <Button
-                      size="sm"
-                      className="rounded-xl mt-2"
-                      onClick={async () => {
-                        if (!activeApt.client?.id) return;
-                        await updateClient(activeApt.client.id, {
-                          name: activeApt.client.name || '',
-                          phone: activeApt.client.phone || '',
-                          email: activeApt.client.email || undefined,
-                          notes: clientNoteDraft || undefined,
-                        });
-                        toast.success('Notatka klienta zapisana');
-                      }}
-                    >
-                      Zapisz notatkę
-                    </Button>
+                    {clientNoteEditing ? (
+                      <>
+                        <Textarea
+                          value={clientNoteDraft}
+                          onChange={(e) => setClientNoteDraft(e.target.value)}
+                          className="rounded-xl min-h-[180px]"
+                          placeholder="Preferencje, ważne informacje o kliencie…"
+                        />
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            className="rounded-xl"
+                            onClick={async () => {
+                              if (!activeApt.client?.id) return;
+                              try {
+                                await updateClient(activeApt.client.id, {
+                                  name: activeApt.client.name || '',
+                                  phone: activeApt.client.phone || '',
+                                  email: activeApt.client.email || undefined,
+                                  notes: clientNoteDraft || undefined,
+                                });
+                                const [, , , apptsRes] = await loadData();
+                                setAppointments(apptsRes.appointments || []);
+                                setClientNoteEditing(false);
+                                const fresh = apptsRes.appointments?.find((a: any) => a.id === activeAptId);
+                                if (fresh?.client?.notes !== undefined) {
+                                  setClientNoteDraft(fresh.client.notes || '');
+                                }
+                                toast.success('Notatka klienta zapisana');
+                              } catch (err: any) {
+                                toast.error(err?.message || 'Nie udało się zapisać notatki');
+                              }
+                            }}
+                          >
+                            Zapisz notatkę
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-xl"
+                            onClick={() => {
+                              setClientNoteEditing(false);
+                              setClientNoteDraft(activeApt.client?.notes || '');
+                            }}
+                          >
+                            Anuluj
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 min-h-[120px] text-sm whitespace-pre-wrap">
+                          {(activeApt.client?.notes || '').trim() ? activeApt.client.notes : (
+                            <span className="text-muted-foreground">Brak notatki — kliknij edycję, aby dodać treść.</span>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="rounded-xl mt-2"
+                          onClick={() => setClientNoteEditing(true)}
+                        >
+                          Edytuj notatkę
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : (

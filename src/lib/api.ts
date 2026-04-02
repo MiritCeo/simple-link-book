@@ -1,5 +1,13 @@
-export const API_URL = (import.meta as any).env?.VITE_API_URL
-  || (typeof window !== "undefined" ? window.location.origin : "http://localhost:4000");
+/** Pusty / brak = w dev żądania do tego samego hosta co Vite (:8080), proxy kieruje /api → :4000. */
+const viteApiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
+export const API_URL =
+  viteApiUrl && viteApiUrl.length > 0
+    ? viteApiUrl
+    : import.meta.env.DEV
+      ? ""
+      : typeof window !== "undefined"
+        ? window.location.origin
+        : "http://localhost:4000";
 
 const getToken = () => localStorage.getItem("auth_token");
 const setToken = (token: string) => localStorage.setItem("auth_token", token);
@@ -19,10 +27,18 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
       headers.Authorization = `Bearer ${token}`;
     }
   }
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    const hint = import.meta.env.DEV
+      ? " Uruchom backend: npm run dev:full (albo npm run dev --prefix server) — API na porcie 4000."
+      : "";
+    throw new Error(`Brak połączenia z API.${hint}`);
+  }
   if (!res.ok) {
     const payload = await res.json().catch(() => ({}));
     throw new Error(payload.error || `Request failed: ${res.status}`);
@@ -39,10 +55,15 @@ async function clientApiFetch<T>(path: string, options: FetchOptions = {}): Prom
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new Error("Brak połączenia z API.");
+  }
   if (res.status === 401) {
     localStorage.removeItem("client_token");
     localStorage.removeItem("client_id");
@@ -434,6 +455,10 @@ export async function getSalonClients(params?: {
   );
 }
 
+export async function getSalonClient(id: string) {
+  return apiFetch<{ client: any }>(`/api/salon/clients/${encodeURIComponent(id)}`, { auth: true });
+}
+
 export async function getSalonAppointments() {
   return apiFetch<{ appointments: any[] }>("/api/salon/appointments", { auth: true });
 }
@@ -575,7 +600,7 @@ export async function createClient(payload: { name: string; phone: string; email
 }
 
 export async function updateClient(id: string, payload: { name: string; phone: string; email?: string; notes?: string; allergies?: string }) {
-  return apiFetch<{ client: any }>(`/api/salon/clients/${id}`, {
+  return apiFetch<{ client: any }>(`/api/salon/clients/${encodeURIComponent(id)}`, {
     method: "PUT",
     auth: true,
     body: JSON.stringify(payload),
@@ -623,14 +648,14 @@ export async function dedupeSalonStaff() {
 }
 
 export async function deleteClient(id: string) {
-  return apiFetch<{ ok: boolean }>(`/api/salon/clients/${id}`, {
+  return apiFetch<{ ok: boolean }>(`/api/salon/clients/${encodeURIComponent(id)}`, {
     method: "DELETE",
     auth: true,
   });
 }
 
 export async function getSalonClientAppointments(clientId: string) {
-  return apiFetch<{ appointments: any[] }>(`/api/salon/clients/${clientId}/appointments`, { auth: true });
+  return apiFetch<{ appointments: any[] }>(`/api/salon/clients/${encodeURIComponent(clientId)}/appointments`, { auth: true });
 }
 
 export async function createAppointment(payload: {
@@ -958,7 +983,7 @@ export async function updateStaffAccount(staffId: string, payload: { active?: bo
 }
 
 export async function getStaffSchedule(staffId: string) {
-  return apiFetch<{ availability: any[]; exceptions: any[] }>(`/api/salon/schedule/${staffId}`, { auth: true });
+  return apiFetch<{ availability: any[]; exceptions: any[] }>(`/api/salon/schedule/${encodeURIComponent(staffId)}`, { auth: true });
 }
 
 export async function saveStaffSchedule(payload: {
@@ -966,7 +991,7 @@ export async function saveStaffSchedule(payload: {
   availability: { weekday: number; start: string; end: string; active: boolean }[];
   exceptions: { date: string; start?: string; end?: string; label?: string; active?: boolean }[];
 }) {
-  return apiFetch<{ ok: boolean }>(`/api/salon/schedule/${payload.staffId}`, {
+  return apiFetch<{ ok: boolean }>(`/api/salon/schedule/${encodeURIComponent(payload.staffId)}`, {
     method: "POST",
     auth: true,
     body: JSON.stringify(payload),
@@ -974,7 +999,7 @@ export async function saveStaffSchedule(payload: {
 }
 
 export async function createStaffException(staffId: string, payload: { date: string; start?: string; end?: string; label?: string }) {
-  return apiFetch<{ exception: any }>(`/api/salon/schedule/${staffId}/exceptions`, {
+  return apiFetch<{ exception: any }>(`/api/salon/schedule/${encodeURIComponent(staffId)}/exceptions`, {
     method: "POST",
     auth: true,
     body: JSON.stringify(payload),
@@ -982,7 +1007,7 @@ export async function createStaffException(staffId: string, payload: { date: str
 }
 
 export async function updateStaffException(staffId: string, id: string, payload: { date: string; start?: string; end?: string; label?: string }) {
-  return apiFetch<{ exception: any }>(`/api/salon/schedule/${staffId}/exceptions/${id}`, {
+  return apiFetch<{ exception: any }>(`/api/salon/schedule/${encodeURIComponent(staffId)}/exceptions/${encodeURIComponent(id)}`, {
     method: "PUT",
     auth: true,
     body: JSON.stringify(payload),
@@ -990,7 +1015,7 @@ export async function updateStaffException(staffId: string, id: string, payload:
 }
 
 export async function deleteStaffException(staffId: string, id: string) {
-  return apiFetch<{ ok: boolean }>(`/api/salon/schedule/${staffId}/exceptions/${id}`, {
+  return apiFetch<{ ok: boolean }>(`/api/salon/schedule/${encodeURIComponent(staffId)}/exceptions/${encodeURIComponent(id)}`, {
     method: "DELETE",
     auth: true,
   });

@@ -545,7 +545,7 @@ export default function ClientsPage() {
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Szukaj klienta..."
+              placeholder="Szukaj po nazwie, mailu lub numerze (wystarczą cyfry)…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-10 h-12 rounded-xl"

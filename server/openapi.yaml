@@ -41,6 +41,14 @@ components:
             - profile_not_found
             - account_not_found
             - invalid_current_password
+            - no_social_account_found
+            - phone_taken
+            - social_account_taken
+            - invalid_phone
+            - verification_code_not_found
+            - verification_code_expired
+            - invalid_verification_code
+            - too_many_attempts
       required:
         - error
     AuthResponse:
@@ -618,6 +626,138 @@ paths:
                 account_not_found:
                   value:
                     error: account_not_found
+      tags:
+        - Client
+  /api/client/social/login:
+    post:
+      summary: Logowanie klienta przez konto social (Google/Apple)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                provider:
+                  type: string
+                  enum:
+                    - GOOGLE
+                    - APPLE
+              required:
+                - userId
+                - provider
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientAuthResponse"
+        "404":
+          description: Brak konta social
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                no_social_account_found:
+                  value:
+                    error: no_social_account_found
+      tags:
+        - Client
+  /api/client/social/phone-verification/request:
+    post:
+      summary: Wyślij kod weryfikacji telefonu dla rejestracji social
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+              required:
+                - phone
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        "409":
+          description: Telefon zajęty
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                phone_taken:
+                  value:
+                    error: phone_taken
+      tags:
+        - Client
+  /api/client/social/register:
+    post:
+      summary: Rejestracja konta klienta przez Google/Apple
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                provider:
+                  type: string
+                  enum:
+                    - GOOGLE
+                    - APPLE
+                name:
+                  type: string
+                lastname:
+                  type: string
+                email:
+                  type: string
+                phone:
+                  type: string
+                phone_verification_code:
+                  type: string
+              required:
+                - userId
+                - provider
+                - name
+                - lastname
+                - email
+                - phone
+                - phone_verification_code
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientAuthResponse"
+        "409":
+          description: Konflikt email/social/telefon
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                email_taken:
+                  value:
+                    error: email_taken
+                social_account_taken:
+                  value:
+                    error: social_account_taken
       tags:
         - Client
   /api/client/switch-salon:
@@ -1896,6 +2036,24 @@ paths:
       tags:
         - Salon
   /api/salon/clients/{id}:
+    get:
+      summary: Pojedynczy klient w salonie
+      description: Identyfikator może być prawidłowym CUID lub historycznym zapisem z importu — serwer dopasowuje rekord w obrębie salonu z tokena.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Klient nie istnieje w tym salonie
+      tags:
+        - Salon
     put:
       summary: Aktualizacja klienta
       security:

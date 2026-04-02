@@ -4,9 +4,7 @@ import { CalendarDays, CalendarX2, Users, TrendingUp, Clock, ArrowUpRight, Arrow
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { statusLabels, statusColors } from '@/data/mockData';
 import { getReadableTextColor } from '@/lib/color';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
@@ -77,9 +75,6 @@ export default function DashboardPage() {
   const completedToday = todayAppts.filter(a => ['completed', 'in-progress'].includes(mapStatus(a.status)));
   const scheduledToday = todayAppts.filter(a => ['scheduled', 'confirmed'].includes(mapStatus(a.status)));
   const cancelledToday = todayAppts.filter(a => mapStatus(a.status) === 'cancelled');
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [activeAptId, setActiveAptId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<'visit' | 'client' | 'history'>('visit');
   const [pinsOpen, setPinsOpen] = useState(false);
   const [pinnedStaffIds, setPinnedStaffIds] = useState<string[]>([]);
   const upcomingAppointments = useMemo(() => {
@@ -87,11 +82,8 @@ export default function DashboardPage() {
       .filter(a => a.date >= today && ['scheduled', 'confirmed'].includes(mapStatus(a.status)))
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   }, [appointments, today]);
-  const activeApt = upcomingAppointments.find(a => a.id === activeAptId);
-  const openDetails = (id: string) => {
-    setActiveAptId(id);
-    setDetailTab('visit');
-    setDetailsOpen(true);
+  const openVisitDetails = (id: string) => {
+    navigate(`/panel/wizyty?detailsId=${encodeURIComponent(id)}`);
   };
   const activeStaff = useMemo(() => staff.filter((s: any) => !isDeletedStaff(s)), [staff]);
 
@@ -183,13 +175,6 @@ export default function DashboardPage() {
     const totalMin = appts.reduce((s, a) => s + a.duration, 0);
     return { ...sp, appointments: appts.length, totalMinutes: totalMin };
   });
-  const clientHistory = useMemo(() => {
-    if (!activeApt?.client?.id) return [];
-    return appointments
-      .filter((a: any) => a.client?.id === activeApt.client.id)
-      .sort((a: any, b: any) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`));
-  }, [appointments, activeApt]);
-
   return (
     <PageTransition className="px-4 pt-4 lg:px-8 lg:pt-6 pb-8">
       <div className="flex items-center justify-between mb-6">
@@ -280,16 +265,18 @@ export default function DashboardPage() {
                               const end = start + (apt.duration || 30);
                               const left = ((start - timelineStart) / timelineRange) * 100;
                               const width = Math.max(5, ((end - start) / timelineRange) * 100);
+                              const cn = (apt.client?.name && String(apt.client.name).trim()) || 'Klient';
                               return (
                                 <button
                                   key={apt.id}
                                   type="button"
-                                  className="absolute top-1 bottom-1 rounded-lg bg-primary/85 text-primary-foreground px-2 text-[10px] text-left overflow-hidden hover:bg-primary"
+                                  className="absolute top-1 bottom-1 rounded-md text-left overflow-hidden flex flex-col justify-center gap-0.5 px-1.5 py-0.5 min-w-0 bg-primary text-primary-foreground shadow-sm border border-primary/90 hover:opacity-95 transition-opacity"
                                   style={{ left: `${left}%`, width: `${width}%` }}
-                                  onClick={() => openDetails(apt.id)}
-                                  title={`${apt.time} • ${apt.client?.name || 'Klient'}`}
+                                  onClick={() => openVisitDetails(apt.id)}
+                                  title={`${cn} · ${apt.time}`}
                                 >
-                                  <span className="truncate block">{apt.time} • {apt.client?.name || 'Klient'}</span>
+                                  <span className="truncate font-semibold text-[10px] leading-tight">{cn}</span>
+                                  <span className="truncate text-[10px] tabular-nums opacity-90">{apt.time}</span>
                                 </button>
                               );
                             })}
@@ -364,7 +351,7 @@ export default function DashboardPage() {
                   <MotionItem key={apt.id}>
                     <HoverCard
                       className="bg-card rounded-xl p-3.5 border border-border flex items-center gap-3 cursor-pointer"
-                      onClick={() => openDetails(apt.id)}
+                      onClick={() => openVisitDetails(apt.id)}
                     >
                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                         <Clock className="w-4 h-4 text-primary" />
@@ -438,114 +425,6 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <SheetContent side="right" className="w-[420px] sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Szczegóły wizyty</SheetTitle>
-            <SheetDescription>Informacje o wizycie i kliencie</SheetDescription>
-          </SheetHeader>
-          {activeApt ? (
-            <>
-              <div className="mt-4 flex items-center gap-2">
-                <Button size="sm" variant={detailTab === 'visit' ? 'secondary' : 'outline'} className="rounded-xl h-8 text-xs" onClick={() => setDetailTab('visit')}>
-                  Wizyta
-                </Button>
-                <Button size="sm" variant={detailTab === 'client' ? 'secondary' : 'outline'} className="rounded-xl h-8 text-xs" onClick={() => setDetailTab('client')}>
-                  Klient
-                </Button>
-                <Button size="sm" variant={detailTab === 'history' ? 'secondary' : 'outline'} className="rounded-xl h-8 text-xs" onClick={() => setDetailTab('history')}>
-                  Historia
-                </Button>
-              </div>
-
-              {detailTab === 'visit' ? (
-                <div className="mt-4 space-y-4">
-                  <div className="rounded-xl border border-border p-3 space-y-2">
-                    <div className="flex justify-between"><span className="text-sm text-muted-foreground">Klient</span><span className="text-sm font-medium">{activeApt.client?.name}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-muted-foreground">Telefon</span><span className="text-sm font-medium">{activeApt.client?.phone || '—'}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-muted-foreground">Email</span><span className="text-sm font-medium">{activeApt.client?.email || '—'}</span></div>
-                  </div>
-                  <div className="rounded-xl border border-border p-3 space-y-2">
-                    <div>
-                      <span className="text-sm text-muted-foreground">Usługi</span>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">{getServiceBadges(activeApt)}</div>
-                    </div>
-                    <div className="flex justify-between"><span className="text-sm text-muted-foreground">Specjalista</span><span className="text-sm font-medium">{activeApt.staff?.name || 'Dowolny'}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-muted-foreground">Data</span><span className="text-sm font-medium">{activeApt.date}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-muted-foreground">Godzina</span><span className="text-sm font-medium">{activeApt.time}</span></div>
-                    <div className="flex justify-between"><span className="text-sm text-muted-foreground">Status</span><span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span></div>
-                  </div>
-                  <div>
-                    <span className="text-sm text-muted-foreground block mb-1">Notatki klienta</span>
-                    <Textarea readOnly value={activeApt.client?.notes || '—'} className="rounded-xl min-h-[120px] bg-muted/30" />
-                  </div>
-                </div>
-              ) : detailTab === 'client' ? (
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-xl border border-border p-3 bg-card">
-                    <p className="text-sm font-semibold">{activeApt.client?.name}</p>
-                    <p className="text-xs text-muted-foreground">{activeApt.client?.phone || '—'}</p>
-                    {activeApt.client?.email && <p className="text-xs text-muted-foreground">{activeApt.client.email}</p>}
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Wizyt: {clientHistory.length}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1.5 block">Notatki klienta</label>
-                    <Textarea readOnly value={activeApt.client?.notes || '—'} className="rounded-xl min-h-[180px] bg-muted/30" />
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-2">
-                  {clientHistory.map((apt: any) => (
-                    <div key={apt.id} className="rounded-xl border border-border p-3">
-                      <p className="text-xs text-muted-foreground">{apt.date} • {apt.time}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">{getServiceBadges(apt)}</div>
-                      <p className="text-xs text-muted-foreground">{apt.staff?.name || 'Dowolny'}</p>
-                    </div>
-                  ))}
-                  {clientHistory.length === 0 && (
-                    <p className="text-sm text-muted-foreground">Brak historii wizyt</p>
-                  )}
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl h-9"
-                  disabled={!activeApt.client?.phone}
-                  onClick={() => activeApt.client?.phone && window.open(`tel:${activeApt.client.phone}`, '_self')}
-                >
-                  Zadzwoń
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl h-9"
-                  disabled={!activeApt.client?.phone}
-                  onClick={() => activeApt.client?.phone && window.open(`sms:${activeApt.client.phone}`, '_self')}
-                >
-                  SMS
-                </Button>
-                <Button
-                  className="rounded-xl h-9"
-                  onClick={() => {
-                    if (!activeApt?.id) return;
-                    setDetailsOpen(false);
-                    navigate(`/panel/wizyty?edit=${activeApt.id}`);
-                  }}
-                >
-                  Edytuj
-                </Button>
-              </div>
-            </>
-          ) : (
-            <p className="mt-4 text-sm text-muted-foreground">Brak danych wizyty</p>
-          )}
-        </SheetContent>
-      </Sheet>
     </PageTransition>
   );
 }

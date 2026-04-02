@@ -5,14 +5,18 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../prisma.js";
 import clientAuth, { ClientAuthRequest } from "../middleware/clientAuth.js";
-import { sendEmail } from "../notifications.js";
+import { sendEmail, sendSms } from "../notifications.js";
 import { ensureCancelToken } from "../notificationService.js";
 import { appointmentEndDate, canRateAppointment } from "../lib/appointmentTime.js";
+import { phonesMatchDigits, toPhoneDigits } from "../lib/phoneDigits.js";
 
 const router = Router();
 const publicAppUrl = (process.env.PUBLIC_APP_URL?.trim() || "https://honly.app").replace(/\/$/, "");
 const UNASSIGNED_SALON_SLUG = "__honly_unassigned__";
 const publicApiUrl = (process.env.PUBLIC_API_URL?.trim() || "").replace(/\/$/, "");
+const SOCIAL_CODE_TTL_MS = 15 * 60 * 1000;
+const SOCIAL_MAX_ATTEMPTS = 8;
+const SOCIAL_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 const toAbsoluteUrl = (raw: string | null | undefined) => {
   if (!raw) return null;
@@ -20,6 +24,21 @@ const toAbsoluteUrl = (raw: string | null | undefined) => {
   if (publicApiUrl) return `${publicApiUrl}${raw.startsWith("/") ? "" : "/"}${raw}`;
   return raw;
 };
+
+const socialProviderSchema = z.enum(["GOOGLE", "APPLE"]);
+
+function generateVerificationCode() {
+  let code = "";
+  for (let i = 0; i < 6; i += 1) {
+    code += SOCIAL_CODE_CHARS[crypto.randomInt(SOCIAL_CODE_CHARS.length)]!;
+  }
+  return code;
+}
+
+function smsRecipientFromDigits(digits: string) {
+  const d = digits.startsWith("48") ? digits : `48${digits}`;
+  return `+${d}`;
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -142,6 +161,53 @@ const getAccountContext = async (req: ClientAuthRequest) => {
   return { account, clientIds };
 };
 
+const issueClientSessionResponse = async (account: { id: string; clientId: string }, salonIdOverride?: string) => {
+  await ensureAccountSalonLink(account.id, account.clientId);
+  const primaryClient = await prisma.client.findUnique({ where: { id: account.clientId } });
+  if (!primaryClient) {
+    return { error: "client_profile_missing" as const };
+  }
+
+  const token = jwt.sign(
+    { clientId: account.clientId, salonId: salonIdOverride || primaryClient.salonId, role: "CLIENT" },
+    process.env.JWT_SECRET || "dev",
+    { expiresIn: "14d" },
+  );
+
+  const salons = await buildClientSalons(account);
+  return {
+    token,
+    clientId: account.clientId,
+    salonId: salonIdOverride || primaryClient.salonId,
+    salons,
+  };
+};
+
+const findClientsByPhoneDigits = async (phoneDigits: string) => {
+  const all = await prisma.client.findMany({
+    where: { active: true },
+    select: { id: true, phone: true, email: true, salonId: true, createdAt: true },
+  });
+  return all
+    .filter((c) => phonesMatchDigits(c.phone, phoneDigits))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+};
+
+const isPhoneTakenByAccount = async (phoneDigits: string) => {
+  const matchedClients = await findClientsByPhoneDigits(phoneDigits);
+  if (!matchedClients.length) return false;
+  for (const c of matchedClients) {
+    const direct = await prisma.clientAccount.findUnique({ where: { clientId: c.id }, select: { id: true } });
+    if (direct) return true;
+    const linked = await prisma.clientAccountSalon.findFirst({
+      where: { clientId: c.id },
+      select: { id: true },
+    });
+    if (linked) return true;
+  }
+  return false;
+};
+
 router.post("/login", async (req, res) => {
   try {
     const parsed = loginSchema.safeParse(req.body);
@@ -168,28 +234,162 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "invalid_credentials" });
     }
 
-    await ensureAccountSalonLink(account.id, account.clientId);
-    const primaryClient = await prisma.client.findUnique({ where: { id: account.clientId } });
-    if (!primaryClient) {
+    const session = await issueClientSessionResponse({ id: account.id, clientId: account.clientId });
+    if ("error" in session) {
       return res.status(403).json({ error: "client_profile_missing" });
     }
-
-    const token = jwt.sign(
-      { clientId: account.clientId, salonId: primaryClient.salonId, role: "CLIENT" },
-      process.env.JWT_SECRET || "dev",
-      { expiresIn: "14d" },
-    );
-
-    const salons = await buildClientSalons(account);
-    return res.json({
-      token,
-      clientId: account.clientId,
-      salonId: primaryClient.salonId,
-      salons,
-    });
+    return res.json(session);
   } catch (err) {
     return res.status(500).json({ error: "internal_error" });
   }
+});
+
+router.post("/social/login", async (req, res) => {
+  const schema = z.object({
+    userId: z.string().min(3),
+    provider: socialProviderSchema,
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const account = await prisma.clientAccount.findFirst({
+    where: {
+      socialProvider: parsed.data.provider,
+      socialUserId: parsed.data.userId,
+    },
+    include: { client: true },
+  });
+
+  if (!account) return res.status(404).json({ error: "no_social_account_found" });
+  if (!account.client) return res.status(403).json({ error: "client_profile_missing" });
+  if (!account.active || !account.client.active) return res.status(403).json({ error: "account_inactive" });
+
+  const session = await issueClientSessionResponse({ id: account.id, clientId: account.clientId });
+  if ("error" in session) return res.status(403).json({ error: "client_profile_missing" });
+  return res.json(session);
+});
+
+router.post("/social/phone-verification/request", async (req, res) => {
+  const schema = z.object({ phone: z.string().min(6) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const phoneDigits = toPhoneDigits(parsed.data.phone);
+  if (phoneDigits.length < 9) return res.status(400).json({ error: "invalid_phone" });
+
+  const taken = await isPhoneTakenByAccount(phoneDigits);
+  if (taken) return res.status(409).json({ error: "phone_taken" });
+
+  const code = generateVerificationCode();
+  const codeHash = await bcrypt.hash(code.toUpperCase(), 10);
+  const codeExpiresAt = new Date(Date.now() + SOCIAL_CODE_TTL_MS);
+
+  await prisma.clientSocialVerificationCode.upsert({
+    where: { phoneDigits },
+    update: { codeHash, codeExpiresAt, attempts: 0 },
+    create: { phoneDigits, codeHash, codeExpiresAt, attempts: 0 },
+  });
+
+  await sendSms(smsRecipientFromDigits(phoneDigits), `Twój kod weryfikacyjny honly: ${code}`);
+
+  const matchedClients = await findClientsByPhoneDigits(phoneDigits);
+  const emails = Array.from(new Set(matchedClients.map((c) => (c.email || "").trim().toLowerCase()).filter(Boolean)));
+  await Promise.all(
+    emails.map((email) =>
+      sendEmail(
+        email,
+        "Kod weryfikacyjny honly",
+        `<p>Twój kod potwierdzający numer telefonu: <strong>${code}</strong></p><p>Ten sam kod został wysłany SMS-em.</p>`,
+      ),
+    ),
+  );
+
+  return res.json({ ok: true });
+});
+
+router.post("/social/register", async (req, res) => {
+  const schema = z.object({
+    userId: z.string().min(3),
+    provider: socialProviderSchema,
+    name: z.string().min(1),
+    lastname: z.string().min(1),
+    email: z.string().email().transform((s) => s.trim().toLowerCase()),
+    phone: z.string().min(6),
+    phone_verification_code: z.string().min(4).max(8),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const phoneDigits = toPhoneDigits(parsed.data.phone);
+  if (phoneDigits.length < 9) return res.status(400).json({ error: "invalid_phone" });
+
+  const existingEmail = await prisma.clientAccount.findUnique({ where: { email: parsed.data.email } });
+  if (existingEmail) return res.status(409).json({ error: "email_taken" });
+
+  const existingSocial = await prisma.clientAccount.findFirst({
+    where: { socialProvider: parsed.data.provider, socialUserId: parsed.data.userId },
+    select: { id: true },
+  });
+  if (existingSocial) return res.status(409).json({ error: "social_account_taken" });
+
+  const codeRow = await prisma.clientSocialVerificationCode.findUnique({ where: { phoneDigits } });
+  if (!codeRow) return res.status(400).json({ error: "verification_code_not_found" });
+  if (codeRow.codeExpiresAt.getTime() < Date.now()) return res.status(400).json({ error: "verification_code_expired" });
+  if (codeRow.attempts >= SOCIAL_MAX_ATTEMPTS) return res.status(429).json({ error: "too_many_attempts" });
+
+  const codeOk = await bcrypt.compare(parsed.data.phone_verification_code.trim().toUpperCase(), codeRow.codeHash);
+  if (!codeOk) {
+    await prisma.clientSocialVerificationCode.update({
+      where: { id: codeRow.id },
+      data: { attempts: { increment: 1 } },
+    });
+    return res.status(400).json({ error: "invalid_verification_code" });
+  }
+
+  const fullName = `${parsed.data.name} ${parsed.data.lastname}`.trim().slice(0, 120);
+  const unassignedSalon = await prisma.salon.findUnique({ where: { slug: UNASSIGNED_SALON_SLUG } })
+    ?? await prisma.salon.create({
+      data: {
+        slug: UNASSIGNED_SALON_SLUG,
+        name: "Konto klienta (bez salonu)",
+        address: "",
+        phone: "",
+        hours: "",
+        description: "Techniczny salon systemowy dla kont bez przypisań.",
+      },
+    });
+
+  const created = await prisma.$transaction(async (tx) => {
+    const client = await tx.client.create({
+      data: {
+        salonId: unassignedSalon.id,
+        name: fullName || "Klient",
+        phone: smsRecipientFromDigits(phoneDigits),
+        email: parsed.data.email,
+      },
+    });
+
+    const randomPassword = crypto.randomBytes(24).toString("hex");
+    const passwordHash = await bcrypt.hash(randomPassword, 10);
+
+    const account = await tx.clientAccount.create({
+      data: {
+        clientId: client.id,
+        email: parsed.data.email,
+        passwordHash,
+        socialProvider: parsed.data.provider,
+        socialUserId: parsed.data.userId,
+        active: true,
+      },
+    });
+
+    await tx.clientSocialVerificationCode.delete({ where: { id: codeRow.id } });
+    return { accountId: account.id, clientId: client.id, salonId: client.salonId };
+  });
+
+  const session = await issueClientSessionResponse({ id: created.accountId, clientId: created.clientId }, created.salonId);
+  if ("error" in session) return res.status(403).json({ error: "client_profile_missing" });
+  return res.json(session);
 });
 
 router.post("/password-reset", async (req, res) => {

@@ -11,8 +11,13 @@ import prisma from "../prisma.js";
 import { sendEventNotification } from "../notificationService.js";
 import { sendEmail, sendSms } from "../notifications.js";
 import type { AuthRequest } from "../middleware/auth.js";
+import { clientMatchesSearchQuery } from "../lib/clientSearch.js";
+import { resolveClientForSalon } from "../lib/clientId.js";
 
 const router = Router();
+
+/** Próg: przy mniejszej liczbie klientów robimy inteligentny filtr (diakrytyki, cyfry telefonu) w pamięci. */
+const CLIENT_SEARCH_IN_MEMORY_MAX = 8000;
 
 router.use(async (req: AuthRequest, res, next) => {
   if (req.user?.salonId) return next();
@@ -1078,9 +1083,37 @@ router.get("/clients", async (req: AuthRequest, res) => {
   const pageSize = Math.min(200, Math.max(1, Number.isNaN(pageSizeRaw) ? 50 : pageSizeRaw));
   const all = req.query.all === "true";
 
+  const baseWhere = { salonId, active: true as const };
+
+  if (searchRaw) {
+    const salonClientCount = await prisma.client.count({ where: baseWhere });
+    if (salonClientCount <= CLIENT_SEARCH_IN_MEMORY_MAX) {
+      const allClients = await prisma.client.findMany({
+        where: baseWhere,
+        orderBy: { name: "asc" },
+      });
+      const filtered = allClients.filter((c) =>
+        clientMatchesSearchQuery(
+          { name: c.name, phone: c.phone, email: c.email },
+          searchRaw,
+        ),
+      );
+      if (all) {
+        return res.json({
+          clients: filtered,
+          total: filtered.length,
+          page: 1,
+          pageSize: filtered.length,
+        });
+      }
+      const total = filtered.length;
+      const clients = filtered.slice((page - 1) * pageSize, page * pageSize);
+      return res.json({ clients, total, page, pageSize });
+    }
+  }
+
   const where = {
-    salonId,
-    active: true,
+    ...baseWhere,
     ...(searchRaw
       ? {
           OR: [
@@ -1505,6 +1538,15 @@ router.post("/staff/dedupe", async (req: AuthRequest, res) => {
   });
 });
 
+router.get("/clients/:id", async (req: AuthRequest, res) => {
+  const salonId = getSalonId(req);
+  const client = await resolveClientForSalon(prisma, salonId, req.params.id);
+  if (!client) {
+    return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
+  }
+  return res.json({ client });
+});
+
 router.put("/clients/:id", async (req: AuthRequest, res) => {
   const schema = z.object({
     name: z.string().min(2),
@@ -1515,13 +1557,14 @@ router.put("/clients/:id", async (req: AuthRequest, res) => {
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
-  const existing = await prisma.client.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== getSalonId(req)) {
+  const salonId = getSalonId(req);
+  const existing = await resolveClientForSalon(prisma, salonId, req.params.id);
+  if (!existing) {
     return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
   }
   const normalizedEmail = parsed.data.email?.trim().toLowerCase();
   const client = await prisma.client.update({
-    where: { id: req.params.id },
+    where: { id: existing.id },
     data: { ...parsed.data, email: normalizedEmail },
   });
   await linkClientAccountToSalonByEmail(client);
@@ -1529,8 +1572,13 @@ router.put("/clients/:id", async (req: AuthRequest, res) => {
 });
 
 router.get("/clients/:id/appointments", async (req: AuthRequest, res) => {
+  const salonId = getSalonId(req);
+  const client = await resolveClientForSalon(prisma, salonId, req.params.id);
+  if (!client) {
+    return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
+  }
   const appointments = await prisma.appointment.findMany({
-    where: { salonId: getSalonId(req), clientId: req.params.id },
+    where: { salonId, clientId: client.id },
     include: { staff: true, appointmentServices: { include: { service: true } } },
     orderBy: [{ date: "desc" }, { time: "desc" }],
   });
@@ -1538,17 +1586,18 @@ router.get("/clients/:id/appointments", async (req: AuthRequest, res) => {
 });
 
 router.delete("/clients/:id", async (req: AuthRequest, res) => {
-  const existing = await prisma.client.findUnique({ where: { id: req.params.id } });
-  if (!existing || existing.salonId !== getSalonId(req)) {
+  const salonId = getSalonId(req);
+  const existing = await resolveClientForSalon(prisma, salonId, req.params.id);
+  if (!existing) {
     return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
   }
   const apptCount = await prisma.appointment.count({
-    where: { clientId: req.params.id },
+    where: { salonId, clientId: existing.id },
   });
   if (apptCount > 0) {
     return res.status(409).json({ error: "Klient ma powiązane wizyty" });
   }
-  const client = await prisma.client.update({ where: { id: req.params.id }, data: { active: false } });
+  const client = await prisma.client.update({ where: { id: existing.id }, data: { active: false } });
   return res.json({ ok: true, client });
 });
 
@@ -1814,9 +1863,8 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane wizyty" });
   if (!parsed.data.serviceIds.length) return res.status(400).json({ error: "Wybierz przynajmniej jedną usługę" });
 
-  const client = await prisma.client.findFirst({
-    where: { id: parsed.data.clientId, salonId: getSalonId(req) },
-  });
+  const salonId = getSalonId(req);
+  const client = await resolveClientForSalon(prisma, salonId, parsed.data.clientId);
   if (!client) return res.status(400).json({ error: "Nie znaleziono klienta w tym salonie" });
   if (client.active === false) return res.status(400).json({ error: "Klient jest nieaktywny" });
 

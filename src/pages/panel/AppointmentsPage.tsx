@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Phone, MessageSquare, Clock, User, Filter, Info, Search, Calendar } from 'lucide-react';
+import { Phone, MessageSquare, Clock, User, Filter, Info, Search, Calendar, Trash2, UserX } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { getSalonAppointments, getSalonBreaks, getSalonExceptions, getSalonHours, getSalonProfile, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient, sendManualSms } from '@/lib/api';
+import { getSalonAppointments, getSalonBreaks, getSalonExceptions, getSalonHours, getSalonProfile, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient, sendManualSms, deleteAppointment } from '@/lib/api';
 
 const tabs = [
   { key: 'today', label: 'Dziś' },
@@ -35,6 +35,7 @@ export default function AppointmentsPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<'visit' | 'client' | 'history'>('visit');
   const [clientNoteDraft, setClientNoteDraft] = useState('');
+  const [clientNoteEditing, setClientNoteEditing] = useState(false);
   const [activeAptId, setActiveAptId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editDate, setEditDate] = useState('');
@@ -62,6 +63,7 @@ export default function AppointmentsPage() {
   const [staffSchedules, setStaffSchedules] = useState<Record<string, { availability: any[]; exceptions: any[] }>>({});
   const [kolhozMode, setKolhozMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [visitActionLoading, setVisitActionLoading] = useState(false);
 
   const mapStatus = (status?: string) => (status || 'SCHEDULED').toLowerCase().replace(/_/g, '-');
   const sourceLabel = (source?: string) => source === 'ONLINE' ? 'Online' : 'Panel';
@@ -208,14 +210,26 @@ export default function AppointmentsPage() {
     return () => { mounted = false; };
   }, []);
 
+  const staffScheduleLoadedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const loadSchedule = async (staffId: string) => {
-      if (!staffId || staffId === 'any' || staffSchedules[staffId]) return;
-      const res = await getStaffSchedule(staffId);
-      setStaffSchedules(prev => ({ ...prev, [staffId]: { availability: res.availability || [], exceptions: res.exceptions || [] } }));
-    };
-    loadSchedule(editStaffId);
-  }, [editStaffId, staffSchedules]);
+    if (!editStaffId || editStaffId === 'any') return;
+    if (staffScheduleLoadedRef.current.has(editStaffId)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getStaffSchedule(editStaffId);
+        if (cancelled) return;
+        staffScheduleLoadedRef.current.add(editStaffId);
+        setStaffSchedules(prev => ({
+          ...prev,
+          [editStaffId]: { availability: res.availability || [], exceptions: res.exceptions || [] },
+        }));
+      } catch {
+        /* API wyłączone lub sieć — panel nadal działa; sloty czasu mogą być niepełne */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editStaffId]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -250,15 +264,18 @@ export default function AppointmentsPage() {
     }
     return appts;
   }, [activeTab, selectedSpecialist, selectedStatus, search, dateFrom, dateTo, appointments, today]);
-  const activeApt = filtered.find(a => a.id === activeAptId);
+  const activeApt = useMemo(
+    () => (activeAptId ? appointments.find((a: any) => a.id === activeAptId) : undefined),
+    [appointments, activeAptId],
+  );
   const clientHistory = useMemo(() => {
     if (!activeApt?.client?.id) return [];
     return appointments
       .filter((a: any) => a.client?.id === activeApt.client.id)
       .sort((a: any, b: any) => (a.date + a.time).localeCompare(b.date + b.time));
   }, [appointments, activeApt]);
-  const openDetails = (id: string) => {
-    const apt = filtered.find(a => a.id === id);
+  const openDetails = useCallback((id: string) => {
+    const apt = appointments.find((a: any) => a.id === id);
     setActiveAptId(id);
     setDetailsOpen(true);
     setEditMode(false);
@@ -266,6 +283,7 @@ export default function AppointmentsPage() {
       setEditDate(apt.date);
       setEditTime(apt.time);
       setDetailTab('visit');
+      setClientNoteEditing(false);
       setClientNoteDraft(apt.client?.notes || '');
       setEditCustomDuration(typeof apt.duration === 'number' ? apt.duration : '');
       setEditAllowConflict(false);
@@ -278,7 +296,7 @@ export default function AppointmentsPage() {
       setEditClientPhone(apt.client?.phone || '');
       setEditClientEmail(apt.client?.email || '');
     }
-  };
+  }, [appointments]);
 
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -294,6 +312,27 @@ export default function AppointmentsPage() {
       return next;
     }, { replace: true });
   }, [appointments, openDetails, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const detailsId = searchParams.get('detailsId');
+    if (!detailsId) return;
+    if (loading) return;
+    const apt = appointments.find((a: any) => a.id === detailsId);
+    if (!apt) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('detailsId');
+        return next;
+      }, { replace: true });
+      return;
+    }
+    openDetails(detailsId);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('detailsId');
+      return next;
+    }, { replace: true });
+  }, [appointments, openDetails, searchParams, setSearchParams, loading]);
 
   const editServiceBase = useMemo(() => {
     return services.filter((s: any) => s.active !== false || editServiceIds.includes(s.id));
@@ -519,7 +558,10 @@ export default function AppointmentsPage() {
           const currentStatus = statusOverrides[apt.id] ?? statusKey;
           return (
           <MotionItem key={apt.id}>
-            <HoverCard className="bg-card rounded-2xl p-4 border border-border lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_120px_160px_120px] lg:items-center lg:gap-3 lg:px-5 lg:py-3 lg:rounded-xl">
+            <HoverCard
+              className="bg-card rounded-2xl p-4 border border-border lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_120px_160px_120px] lg:items-center lg:gap-3 lg:px-5 lg:py-3 lg:rounded-xl cursor-pointer"
+              onClick={() => openDetails(apt.id)}
+            >
               <div className="mb-2 lg:mb-0 min-w-0">
                 <p className="font-medium text-sm truncate">{apt.client?.name}</p>
                 <div className="lg:hidden mt-1">{getServiceBadges(apt)}</div>
@@ -535,7 +577,7 @@ export default function AppointmentsPage() {
                 <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{apt.time} ({apt.duration} min)</span>
                 <span className="flex items-center gap-1 lg:hidden"><User className="w-3.5 h-3.5" />{apt.staff?.name || 'Dowolny'}</span>
               </div>
-              <div className="hidden lg:block min-w-0">
+              <div className="hidden lg:block min-w-0" onClick={(e) => e.stopPropagation()}>
                 <Select
                   value={currentStatus}
                   onValueChange={(value) => applyStatusUpdate(apt.id, value as Appointment['status'])}
@@ -550,7 +592,7 @@ export default function AppointmentsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex gap-1 lg:justify-end lg:flex-nowrap min-w-0">
+              <div className="flex gap-1 lg:justify-end lg:flex-nowrap min-w-0" onClick={(e) => e.stopPropagation()}>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Button
                     variant="outline"
@@ -581,7 +623,7 @@ export default function AppointmentsPage() {
                   </Button>
                 </motion.div>
               </div>
-              <div className="lg:hidden mt-3">
+              <div className="lg:hidden mt-3" onClick={(e) => e.stopPropagation()}>
                 <Select
                   value={currentStatus}
                   onValueChange={(value) => applyStatusUpdate(apt.id, value as Appointment['status'])}
@@ -606,11 +648,15 @@ export default function AppointmentsPage() {
         </MotionList>
       )}
 
-      <Sheet open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) setEditMode(false); }}>
+      <Sheet open={detailsOpen} onOpenChange={(open) => { setDetailsOpen(open); if (!open) { setEditMode(false); setActiveAptId(null); setClientNoteEditing(false); } }}>
         <SheetContent side="right" className="w-[420px] sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{activeApt?.client?.name || 'Szczegóły wizyty'}</SheetTitle>
-            <SheetDescription>{activeApt ? `${activeApt.date} • ${activeApt.time} • ${sourceLabel(activeApt.source)}` : 'Szczegóły wizyty'}</SheetDescription>
+            <SheetDescription>
+              {activeApt
+                ? `${activeApt.date} • ${activeApt.time} • ${sourceLabel(activeApt.source)}${activeApt.createdByDisplayName ? ` • dodał(a): ${activeApt.createdByDisplayName}` : ''}`
+                : 'Szczegóły wizyty'}
+            </SheetDescription>
           </SheetHeader>
           <div className="mt-4 flex items-center gap-2">
             <Button
@@ -776,7 +822,7 @@ export default function AppointmentsPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 mt-4">
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Klient</span>
                       <span className="text-sm font-medium">{activeApt.client?.name}</span>
@@ -802,6 +848,113 @@ export default function AppointmentsPage() {
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Status</span>
                       <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
+                    </div>
+                    {activeApt.notes && (
+                      <div>
+                        <span className="text-sm text-muted-foreground block mb-1">Notatka do wizyty</span>
+                        <p className="text-sm whitespace-pre-wrap">{activeApt.notes}</p>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2 pt-1">
+                      <p className="text-xs text-muted-foreground">Szybkie akcje</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="rounded-xl h-9 text-xs"
+                          disabled={
+                            visitActionLoading ||
+                            mapStatus(activeApt.status) === 'cancelled' ||
+                            mapStatus(activeApt.status) === 'completed'
+                          }
+                          onClick={async () => {
+                            if (!activeAptId) return;
+                            setVisitActionLoading(true);
+                            try {
+                              await updateAppointment(activeAptId, { status: 'CANCELLED' });
+                              const res = await getSalonAppointments();
+                              setAppointments(res.appointments || []);
+                              toast.success('Wizyta anulowana');
+                              setDetailsOpen(false);
+                            } catch (err: any) {
+                              toast.error(err?.message || 'Nie udało się anulować wizyty');
+                            } finally {
+                              setVisitActionLoading(false);
+                            }
+                          }}
+                        >
+                          Anuluj wizytę
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="rounded-xl h-9 text-xs"
+                          disabled={
+                            visitActionLoading ||
+                            mapStatus(activeApt.status) === 'no-show' ||
+                            mapStatus(activeApt.status) === 'cancelled' ||
+                            mapStatus(activeApt.status) === 'completed'
+                          }
+                          onClick={async () => {
+                            if (!activeAptId) return;
+                            setVisitActionLoading(true);
+                            try {
+                              await updateAppointment(activeAptId, { status: 'NO_SHOW' });
+                              const res = await getSalonAppointments();
+                              setAppointments(res.appointments || []);
+                              toast.success('Oznaczono jako nieobecność');
+                              setDetailsOpen(false);
+                            } catch (err: any) {
+                              toast.error(err?.message || 'Nie udało się zapisać');
+                            } finally {
+                              setVisitActionLoading(false);
+                            }
+                          }}
+                        >
+                          <UserX className="w-3.5 h-3.5 mr-1" />
+                          Nieobecność
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="rounded-xl h-9 text-xs"
+                          disabled={visitActionLoading}
+                          onClick={async () => {
+                            if (!activeAptId) return;
+                            const ok = window.confirm(
+                              'Na pewno usunąć tę wizytę? Tej operacji nie można cofnąć.',
+                            );
+                            if (!ok) return;
+                            setVisitActionLoading(true);
+                            try {
+                              await deleteAppointment(activeAptId);
+                              const res = await getSalonAppointments();
+                              setAppointments(res.appointments || []);
+                              toast.success('Wizyta usunięta');
+                              setDetailsOpen(false);
+                              setActiveAptId(null);
+                            } catch (err: any) {
+                              toast.error(err?.message || 'Nie udało się usunąć wizyty');
+                            } finally {
+                              setVisitActionLoading(false);
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" />
+                          Usuń wizytę
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-sm text-muted-foreground block mb-1">Notatki klienta</span>
+                      <Textarea
+                        readOnly
+                        value={activeApt.client?.notes || '—'}
+                        className="rounded-xl min-h-[120px] bg-muted/30"
+                      />
                     </div>
                   </div>
                 )
@@ -829,24 +982,73 @@ export default function AppointmentsPage() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Notatki klienta</label>
-                <Textarea
-                  value={clientNoteDraft}
-                  onChange={(e) => setClientNoteDraft(e.target.value)}
-                  className="rounded-xl min-h-[120px]"
-                />
-                <Button
-                  size="sm"
-                  className="rounded-xl mt-2"
-                  onClick={async () => {
-                    if (!activeApt.client?.id) return;
-                    await updateClient(activeApt.client.id, {
-                      notes: clientNoteDraft || undefined,
-                    });
-                    toast.success('Notatka klienta zapisana');
-                  }}
-                >
-                  Zapisz notatkę
-                </Button>
+                {clientNoteEditing ? (
+                  <>
+                    <Textarea
+                      value={clientNoteDraft}
+                      onChange={(e) => setClientNoteDraft(e.target.value)}
+                      className="rounded-xl min-h-[120px]"
+                      placeholder="Preferencje, ważne informacje o kliencie…"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          if (!activeApt.client?.id) return;
+                          try {
+                            await updateClient(activeApt.client.id, {
+                              name: activeApt.client.name || '',
+                              phone: activeApt.client.phone || '',
+                              email: activeApt.client.email || undefined,
+                              notes: clientNoteDraft || undefined,
+                              allergies: activeApt.client.allergies || undefined,
+                            });
+                            const res = await getSalonAppointments();
+                            setAppointments(res.appointments || []);
+                            setClientNoteEditing(false);
+                            const updated = res.appointments?.find((a: any) => a.id === activeAptId);
+                            if (updated?.client?.notes !== undefined) {
+                              setClientNoteDraft(updated.client.notes || '');
+                            }
+                            toast.success('Notatka klienta zapisana');
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Nie udało się zapisać notatki');
+                          }
+                        }}
+                      >
+                        Zapisz notatkę
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl"
+                        onClick={() => {
+                          setClientNoteEditing(false);
+                          setClientNoteDraft(activeApt.client?.notes || '');
+                        }}
+                      >
+                        Anuluj
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 min-h-[100px] text-sm whitespace-pre-wrap">
+                      {(activeApt.client?.notes || '').trim() ? activeApt.client.notes : (
+                        <span className="text-muted-foreground">Brak notatki — kliknij edycję, aby dodać treść.</span>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl mt-2"
+                      onClick={() => setClientNoteEditing(true)}
+                    >
+                      Edytuj notatkę
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           ) : detailTab === 'history' ? (
