@@ -728,7 +728,7 @@ paths:
                   type: string
                 phone:
                   type: string
-                phone_verification_code:
+                phoneVerificationCode:
                   type: string
               required:
                 - userId
@@ -737,7 +737,7 @@ paths:
                 - lastname
                 - email
                 - phone
-                - phone_verification_code
+                - phoneVerificationCode
       responses:
         "200":
           description: OK

@@ -315,7 +315,7 @@ router.post("/social/register", async (req, res) => {
     lastname: z.string().min(1),
     email: z.string().email().transform((s) => s.trim().toLowerCase()),
     phone: z.string().min(6),
-    phone_verification_code: z.string().min(4).max(8),
+    phoneVerificationCode: z.string().min(4).max(8),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
@@ -337,7 +337,7 @@ router.post("/social/register", async (req, res) => {
   if (codeRow.codeExpiresAt.getTime() < Date.now()) return res.status(400).json({ error: "verification_code_expired" });
   if (codeRow.attempts >= SOCIAL_MAX_ATTEMPTS) return res.status(429).json({ error: "too_many_attempts" });
 
-  const codeOk = await bcrypt.compare(parsed.data.phone_verification_code.trim().toUpperCase(), codeRow.codeHash);
+  const codeOk = await bcrypt.compare(parsed.data.phoneVerificationCode.trim().toUpperCase(), codeRow.codeHash);
   if (!codeOk) {
     await prisma.clientSocialVerificationCode.update({
       where: { id: codeRow.id },

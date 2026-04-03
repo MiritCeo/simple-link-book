@@ -1,12 +1,36 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { z } from "zod";
 import prisma from "../prisma.js";
 import type { AuthRequest } from "../middleware/auth.js";
 import { sendEmail } from "../notifications.js";
 import { sendFcmToTokens } from "../push/fcm.js";
+import { hardDeleteClientInTransaction } from "../lib/hardDeleteClient.js";
+import { toPhoneDigits } from "../lib/phoneDigits.js";
 
 const router = Router();
+
+const publicAppUrl = (process.env.PUBLIC_APP_URL?.trim() || "https://honly.app").replace(/\/$/, "");
+
+function normalizeEmail(s: string) {
+  return s.trim().toLowerCase();
+}
+
+function validateClientDeleteConfirmation(
+  client: { email: string | null; phone: string; account: { email: string } | null },
+  body: { confirmEmail?: string; confirmPhoneDigits?: string },
+): boolean {
+  const acc = client.account?.email?.trim();
+  const ce = client.email?.trim();
+  if (acc || ce) {
+    const expected = normalizeEmail(acc || ce || "");
+    return normalizeEmail(body.confirmEmail || "") === expected;
+  }
+  const want = toPhoneDigits(client.phone);
+  const got = (body.confirmPhoneDigits || "").replace(/\D/g, "");
+  return want.length >= 6 && got === want;
+}
 
 const requireSuperAdmin = (req: AuthRequest, res: any) => {
   if (req.user?.role !== "SUPER_ADMIN") {
@@ -185,6 +209,17 @@ router.delete("/owners/:id", async (req: AuthRequest, res) => {
   const owner = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!owner || owner.role !== "OWNER") return res.status(404).json({ error: "Nie znaleziono właściciela" });
 
+  const confirmSchema = z.object({ confirmOwnerEmail: z.string().email() });
+  const confirmParsed = confirmSchema.safeParse(req.body);
+  if (!confirmParsed.success) {
+    return res.status(400).json({
+      error: "Wymagane potwierdzenie: wyślij JSON { \"confirmOwnerEmail\": \"adres@email-ownera\" }",
+    });
+  }
+  if (normalizeEmail(confirmParsed.data.confirmOwnerEmail) !== normalizeEmail(owner.email)) {
+    return res.status(400).json({ error: "Adres e-mail nie zgadza się z kontem właściciela — wpisz dokładnie ten sam, który widzisz na liście." });
+  }
+
   if (!owner.salonId) {
     await prisma.userSalon.deleteMany({ where: { userId: owner.id } });
     await prisma.user.delete({ where: { id: owner.id } });
@@ -215,6 +250,7 @@ router.delete("/owners/:id", async (req: AuthRequest, res) => {
     if (appointmentIds.length) {
       await tx.notificationLog.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
       await tx.appointmentToken.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
+      await tx.pushLog.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
       await tx.appointmentService.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
       await tx.salonRating.deleteMany({ where: { appointmentId: { in: appointmentIds } } });
     }
@@ -268,6 +304,193 @@ router.delete("/owners/:id", async (req: AuthRequest, res) => {
   });
 
   return res.json({ ok: true, deleted: { salonId, ownerId: owner.id } });
+});
+
+router.get("/salons", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const salons = await prisma.salon.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      phone: true,
+      createdAt: true,
+      users: {
+        where: { role: "OWNER" },
+        take: 1,
+        select: { id: true, email: true, active: true },
+      },
+    },
+  });
+  return res.json({
+    salons: salons.map((s) => ({
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      phone: s.phone,
+      createdAt: s.createdAt,
+      owner: s.users[0] || null,
+    })),
+  });
+});
+
+router.get("/clients", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const q = (req.query.q || req.query.search || "").toString().trim();
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));
+
+  const where = q
+    ? {
+        OR: [
+          { name: { contains: q } },
+          { phone: { contains: q } },
+          { email: { contains: q } },
+        ],
+      }
+    : {};
+
+  const [total, rows] = await Promise.all([
+    prisma.client.count({ where }),
+    prisma.client.findMany({
+      where,
+      include: {
+        salon: { select: { id: true, name: true, slug: true } },
+        account: { select: { id: true, email: true, active: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+  ]);
+
+  return res.json({
+    clients: rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      email: c.email,
+      salon: c.salon,
+      account: c.account,
+      createdAt: c.createdAt,
+    })),
+    total,
+    page,
+    pageSize,
+  });
+});
+
+router.delete("/clients/:id", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const client = await prisma.client.findUnique({
+    where: { id: req.params.id },
+    include: { account: true },
+  });
+  if (!client) return res.status(404).json({ error: "Nie znaleziono klienta" });
+
+  const body = req.body as { confirmEmail?: string; confirmPhoneDigits?: string };
+  if (!validateClientDeleteConfirmation(client, body)) {
+    return res.status(400).json({
+      error:
+        client.email?.trim() || client.account?.email?.trim()
+          ? "Potwierdź wpisując w JSON pole confirmEmail — dokładnie ten sam e-mail co u klienta lub konta aplikacji."
+          : "Brak e-maila u klienta: wyślij JSON z polem confirmPhoneDigits (same cyfry, jak zapis telefonu).",
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await hardDeleteClientInTransaction(tx, client.id);
+  });
+
+  return res.json({ ok: true, deletedClientId: client.id });
+});
+
+router.post("/owners/:id/resend-activation", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user || user.role !== "OWNER") return res.status(404).json({ error: "Nie znaleziono właściciela" });
+  const salon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
+  const html = `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#212121">
+        <h2 style="margin:0 0 12px">Konto salonu — wiadomość z panelu administratora</h2>
+        <p>Cześć!</p>
+        <p>Twoje konto${salon?.name ? ` dla salonu <strong>${salon.name}</strong>` : ""} jest <strong>${user.active ? "aktywne" : "nieaktywne — po aktywacji możesz się zalogować"}</strong>.</p>
+        <p style="margin:16px 0">
+          <a href="${publicAppUrl}/login" style="display:inline-block;background:#b8566f;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px">
+            Przejdź do logowania
+          </a>
+        </p>
+        <p>Pozdrawiamy,<br/>Zespół honly</p>
+      </div>
+    `;
+  const emailResult = await sendEmail(user.email, "Konto salonu w honly — informacja", html);
+  return res.json({
+    ok: true,
+    email: {
+      attempted: true,
+      sent: !!emailResult?.ok,
+      sandbox: emailResult?.ok ? !!emailResult.sandbox : undefined,
+      messageId: emailResult?.ok ? emailResult.messageId : undefined,
+      reason: emailResult && !emailResult.ok ? emailResult.reason : undefined,
+    },
+  });
+});
+
+router.post("/client-accounts/:id/resend-password-reset", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const account = await prisma.clientAccount.findUnique({ where: { id: req.params.id } });
+  if (!account) return res.status(404).json({ error: "Nie znaleziono konta klienta" });
+
+  const token = crypto.randomBytes(24).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  await prisma.clientPasswordReset.create({
+    data: { clientAccountId: account.id, token, expiresAt },
+  });
+
+  const resetLink = `${publicAppUrl}/konto/reset-hasla?token=${token}`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#212121">
+      <p>Administrator wysłał Ci link do ustawienia nowego hasła do konta w aplikacji honly.</p>
+      <p style="margin:16px 0">
+        <a href="${resetLink}" style="display:inline-block;background:#b8566f;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px">
+          Ustaw nowe hasło
+        </a>
+      </p>
+      <p style="font-size:12px;color:#666">Jeśli to nie Ty, zignoruj tę wiadomość.</p>
+    </div>
+  `;
+  const emailResult = await sendEmail(account.email, "Reset hasła do konta — honly", html);
+  return res.json({
+    ok: true,
+    email: {
+      attempted: true,
+      sent: !!emailResult?.ok,
+      sandbox: emailResult?.ok ? !!emailResult.sandbox : undefined,
+      messageId: emailResult?.ok ? emailResult.messageId : undefined,
+      reason: emailResult && !emailResult.ok ? emailResult.reason : undefined,
+    },
+    ...(process.env.NODE_ENV === "production" ? {} : { token }),
+  });
+});
+
+router.post("/send-email", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const schema = z.object({
+    to: z.string().email(),
+    subject: z.string().min(1).max(200),
+    html: z.string().min(1).max(100_000),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane (to, subject, html)" });
+
+  const emailResult = await sendEmail(parsed.data.to, parsed.data.subject, parsed.data.html);
+  return res.json({
+    ok: !!emailResult?.ok,
+    sandbox: emailResult?.ok ? !!emailResult.sandbox : undefined,
+    messageId: emailResult?.ok ? emailResult.messageId : undefined,
+    reason: emailResult && !emailResult.ok ? emailResult.reason : undefined,
+  });
 });
 
 // --- PUSH (FCM) test endpoint ---

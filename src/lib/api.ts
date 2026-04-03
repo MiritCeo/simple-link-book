@@ -1045,9 +1045,58 @@ export async function updateAdminOwner(id: string, payload: { active?: boolean; 
   });
 }
 
-export async function deleteAdminOwner(id: string) {
+export async function deleteAdminOwner(id: string, confirmOwnerEmail: string) {
   return apiFetch<{ ok: boolean; deleted: { salonId: string | null; ownerId: string } }>(`/api/admin/owners/${id}`, {
     method: "DELETE",
     auth: true,
+    body: JSON.stringify({ confirmOwnerEmail }),
+  });
+}
+
+export async function getAdminSalons() {
+  return apiFetch<{ salons: any[] }>("/api/admin/salons", { auth: true });
+}
+
+export async function getAdminClients(params?: { q?: string; page?: number; pageSize?: number }) {
+  const query = new URLSearchParams();
+  if (params?.q) query.set("q", params.q);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch<{ clients: any[]; total: number; page: number; pageSize: number }>(`/api/admin/clients${suffix}`, {
+    auth: true,
+  });
+}
+
+export async function deleteAdminClient(
+  id: string,
+  body: { confirmEmail?: string; confirmPhoneDigits?: string },
+) {
+  return apiFetch<{ ok: boolean; deletedClientId: string }>(`/api/admin/clients/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    auth: true,
+    body: JSON.stringify(body),
+  });
+}
+
+export async function resendAdminOwnerActivation(id: string) {
+  return apiFetch<{ ok: boolean; email: any }>(`/api/admin/owners/${encodeURIComponent(id)}/resend-activation`, {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export async function resendAdminClientPasswordReset(accountId: string) {
+  return apiFetch<{ ok: boolean; email: any; token?: string }>(
+    `/api/admin/client-accounts/${encodeURIComponent(accountId)}/resend-password-reset`,
+    { method: "POST", auth: true },
+  );
+}
+
+export async function sendAdminEmail(payload: { to: string; subject: string; html: string }) {
+  return apiFetch<{ ok: boolean; sandbox?: boolean; messageId?: string; reason?: string }>("/api/admin/send-email", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
   });
 }

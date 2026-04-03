@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut, Trash2, KeyRound } from 'lucide-react';
+import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut, Trash2, KeyRound, Mail, Building2, Users, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { toast } from 'sonner';
-import { createAdminOwner, deleteAdminOwner, getAdminOwners, updateAdminOwner } from '@/lib/api';
+import {
+  createAdminOwner,
+  deleteAdminOwner,
+  deleteAdminClient,
+  getAdminClients,
+  getAdminOwners,
+  getAdminSalons,
+  resendAdminClientPasswordReset,
+  resendAdminOwnerActivation,
+  sendAdminEmail,
+  updateAdminOwner,
+} from '@/lib/api';
 import { clearAuth, getRole } from '@/lib/auth';
 
 export default function SuperAdminPage() {
@@ -18,6 +31,20 @@ export default function SuperAdminPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [passwordDialogOwner, setPasswordDialogOwner] = useState<any | null>(null);
   const [deleteDialogOwner, setDeleteDialogOwner] = useState<any | null>(null);
+  const [confirmOwnerDeleteEmail, setConfirmOwnerDeleteEmail] = useState('');
+  const [deleteDialogClient, setDeleteDialogClient] = useState<any | null>(null);
+  const [confirmClientDeleteEmail, setConfirmClientDeleteEmail] = useState('');
+  const [confirmClientDeletePhone, setConfirmClientDeletePhone] = useState('');
+  const [mailDialogOpen, setMailDialogOpen] = useState(false);
+  const [mailForm, setMailForm] = useState({ to: '', subject: '', html: '' });
+  const [salons, setSalons] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [clientsTotal, setClientsTotal] = useState(0);
+  const [clientPage, setClientPage] = useState(1);
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientSearchDebounced, setClientSearchDebounced] = useState('');
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [adminTab, setAdminTab] = useState('owners');
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -49,6 +76,38 @@ export default function SuperAdminPage() {
     loadOwners();
   }, [navigate]);
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setClientSearchDebounced(clientSearch.trim()), 350);
+    return () => window.clearTimeout(t);
+  }, [clientSearch]);
+
+  const loadSalons = async () => {
+    try {
+      const res = await getAdminSalons();
+      setSalons(res.salons || []);
+    } catch (err: any) {
+      toast.error(err.message || 'Nie udało się pobrać salonów');
+    }
+  };
+
+  const loadClients = async () => {
+    setClientsLoading(true);
+    try {
+      const res = await getAdminClients({ q: clientSearchDebounced || undefined, page: clientPage, pageSize: 25 });
+      setClients(res.clients || []);
+      setClientsTotal(res.total ?? 0);
+    } catch (err: any) {
+      toast.error(err.message || 'Nie udało się pobrać klientów');
+    } finally {
+      setClientsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (adminTab !== 'clients') return;
+    loadClients();
+  }, [clientSearchDebounced, clientPage, adminTab]);
+
   const stats = useMemo(() => {
     const active = owners.filter(o => o.active).length;
     const inactive = owners.filter(o => !o.active).length;
@@ -74,10 +133,19 @@ export default function SuperAdminPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold lg:text-2xl">Super Admin</h1>
-            <p className="text-sm text-muted-foreground">Zarządzanie właścicielami salonów</p>
+            <p className="text-sm text-muted-foreground">Salony, właściciele, klienci — dane i wiadomości</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl h-9 gap-1.5"
+            onClick={() => setMailDialogOpen(true)}
+          >
+            <Mail className="w-4 h-4" />
+            Wyślij e-mail
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -103,7 +171,32 @@ export default function SuperAdminPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
+      <Tabs
+        value={adminTab}
+        onValueChange={(v) => {
+          setAdminTab(v);
+          if (v === 'salons') loadSalons();
+          if (v === 'clients') loadClients();
+        }}
+        className="space-y-4"
+      >
+        <TabsList className="rounded-xl flex flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="owners" className="rounded-lg gap-1.5">
+            <Shield className="w-3.5 h-3.5" />
+            Właściciele
+          </TabsTrigger>
+          <TabsTrigger value="salons" className="rounded-lg gap-1.5">
+            <Building2 className="w-3.5 h-3.5" />
+            Salony
+          </TabsTrigger>
+          <TabsTrigger value="clients" className="rounded-lg gap-1.5">
+            <Users className="w-3.5 h-3.5" />
+            Klienci
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="owners" className="mt-4 space-y-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Łącznie: {stats.total}</span>
         <span>•</span>
         <span>Aktywni: {stats.active}</span>
@@ -136,7 +229,28 @@ export default function SuperAdminPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 max-w-[min(100%,380px)]">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl h-9 text-xs gap-1.5"
+                    onClick={async () => {
+                      try {
+                        const res = await resendAdminOwnerActivation(owner.id);
+                        const info = res.email;
+                        if (info?.sent) {
+                          toast.success('Wiadomość wysłana (lub przyjęta przez SendGrid).');
+                        } else {
+                          toast.warning('Nie udało się wysłać e-maila.');
+                        }
+                      } catch (err: any) {
+                        toast.error(err.message || 'Błąd wysyłki');
+                      }
+                    }}
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    E-mail / link
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -195,7 +309,10 @@ export default function SuperAdminPage() {
                     variant="outline"
                     size="sm"
                     className="rounded-xl h-9 text-xs gap-1.5 text-destructive"
-                    onClick={() => setDeleteDialogOwner(owner)}
+                    onClick={() => {
+                      setDeleteDialogOwner(owner);
+                      setConfirmOwnerDeleteEmail('');
+                    }}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Usuń salon
@@ -206,6 +323,143 @@ export default function SuperAdminPage() {
           ))}
         </MotionList>
       )}
+        </TabsContent>
+
+        <TabsContent value="salons" className="mt-4">
+          <div className="bg-card rounded-2xl border border-border overflow-hidden">
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <p className="text-sm font-medium">Lista salonów</p>
+              <Button variant="outline" size="sm" className="rounded-xl h-8 text-xs" onClick={loadSalons}>
+                <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                Odśwież
+              </Button>
+            </div>
+            <div className="divide-y divide-border max-h-[60vh] overflow-y-auto">
+              {salons.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">Wybierz zakładkę lub odśwież — brak danych.</p>
+              ) : (
+                salons.map((s) => (
+                  <div key={s.id} className="p-3 flex flex-wrap items-start justify-between gap-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium">{s.name}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{s.slug}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{s.phone}</p>
+                    </div>
+                    <div className="text-right text-xs">
+                      {s.owner ? (
+                        <>
+                          <p className="text-foreground">{s.owner.email}</p>
+                          <Badge variant="secondary" className="text-[10px] mt-1">
+                            {s.owner.active ? 'aktywny' : 'nieaktywny'}
+                          </Badge>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">brak ownera</span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="clients" className="mt-4 space-y-3">
+          <Input
+            placeholder="Szukaj po imieniu, telefonie, e-mailu…"
+            value={clientSearch}
+            onChange={(e) => {
+              setClientSearch(e.target.value);
+              setClientPage(1);
+            }}
+            className="h-10 rounded-xl max-w-md"
+          />
+          <p className="text-xs text-muted-foreground">
+            Znaleziono: {clientsTotal}. Usunięcie klienta jest nieodwracalne — wymaga wpisania e-maila (lub numeru, jeśli brak e-maila).
+          </p>
+          {clientsLoading ? (
+            <div className="text-sm text-muted-foreground p-4">Ładowanie…</div>
+          ) : (
+            <MotionList className="space-y-2">
+              {clients.map((c) => (
+                <MotionItem key={c.id}>
+                  <HoverCard className="bg-card rounded-2xl p-4 border border-border flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.phone}</p>
+                      {c.email && <p className="text-xs text-muted-foreground">{c.email}</p>}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <Badge variant="secondary" className="text-[10px]">{c.salon?.name || '—'}</Badge>
+                        {c.account ? (
+                          <Badge variant="outline" className="text-[10px]">Konto app: {c.account.email}</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">Bez konta aplikacji</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      {c.account && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl h-8 text-xs"
+                          onClick={async () => {
+                            try {
+                              const res = await resendAdminClientPasswordReset(c.account.id);
+                              if (res.email?.sent) toast.success('Link resetu hasła wysłany.');
+                              else toast.warning('SendGrid nie dostarczył — sprawdź logi.');
+                            } catch (err: any) {
+                              toast.error(err.message || 'Błąd');
+                            }
+                          }}
+                        >
+                          Reset hasła
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl h-8 text-xs text-destructive"
+                        onClick={() => {
+                          setDeleteDialogClient(c);
+                          setConfirmClientDeleteEmail('');
+                          setConfirmClientDeletePhone('');
+                        }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Usuń
+                      </Button>
+                    </div>
+                  </HoverCard>
+                </MotionItem>
+              ))}
+            </MotionList>
+          )}
+          {clientsTotal > 25 && (
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                disabled={clientPage <= 1}
+                onClick={() => setClientPage((p) => Math.max(1, p - 1))}
+              >
+                Poprzednia
+              </Button>
+              <span className="text-xs text-muted-foreground">Strona {clientPage}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                disabled={clientPage * 25 >= clientsTotal}
+                onClick={() => setClientPage((p) => p + 1)}
+              >
+                Następna
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="rounded-2xl">
@@ -347,18 +601,37 @@ export default function SuperAdminPage() {
       <Dialog
         open={!!deleteDialogOwner}
         onOpenChange={(open) => {
-          if (!open) setDeleteDialogOwner(null);
+          if (!open) {
+            setDeleteDialogOwner(null);
+            setConfirmOwnerDeleteEmail('');
+          }
         }}
       >
-        <DialogContent className="rounded-2xl">
+        <DialogContent className="rounded-2xl max-w-md">
           <DialogHeader>
             <DialogTitle>Usunąć salon całkowicie?</DialogTitle>
-            <DialogDescription>
-              {deleteDialogOwner?.salon?.name
-                ? `Ta operacja usunie salon "${deleteDialogOwner.salon.name}" wraz z danymi powiązanymi i ownerem.`
-                : 'Ta operacja usunie ownera i dane salonu bez możliwości cofnięcia.'}
+            <DialogDescription className="space-y-2">
+              <span className="block">
+                {deleteDialogOwner?.salon?.name
+                  ? `Zostanie trwale usunięty salon „${deleteDialogOwner.salon.name}” wraz z wizytami, klientami CRM, usługami i kontem właściciela. Tej operacji nie można cofnąć.`
+                  : 'Zostanie trwale usunięty właściciel i powiązane dane.'}
+              </span>
+              <span className="block font-medium text-foreground">
+                Aby potwierdzić, wpisz poniżej dokładnie adres e-mail ownera:{' '}
+                <span className="font-mono text-xs">{deleteDialogOwner?.email}</span>
+              </span>
             </DialogDescription>
           </DialogHeader>
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">Potwierdzenie e-mailem</label>
+            <Input
+              className="h-11 rounded-xl"
+              placeholder={deleteDialogOwner?.email || 'email@…'}
+              value={confirmOwnerDeleteEmail}
+              onChange={(e) => setConfirmOwnerDeleteEmail(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setDeleteDialogOwner(null)}>
               Anuluj
@@ -366,19 +639,167 @@ export default function SuperAdminPage() {
             <Button
               variant="destructive"
               className="rounded-xl"
+              disabled={
+                !deleteDialogOwner ||
+                confirmOwnerDeleteEmail.trim().toLowerCase() !== deleteDialogOwner.email.trim().toLowerCase()
+              }
               onClick={async () => {
                 if (!deleteDialogOwner) return;
                 try {
-                  await deleteAdminOwner(deleteDialogOwner.id);
+                  await deleteAdminOwner(deleteDialogOwner.id, confirmOwnerDeleteEmail.trim());
                   await loadOwners();
                   setDeleteDialogOwner(null);
-                  toast.success('Salon i owner zostali usunięci');
+                  setConfirmOwnerDeleteEmail('');
+                  toast.success('Salon i owner zostali usunięci z bazy');
                 } catch (err: any) {
                   toast.error(err.message || 'Nie udało się usunąć salonu');
                 }
               }}
             >
               Usuń na stałe
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!deleteDialogClient}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteDialogClient(null);
+            setConfirmClientDeleteEmail('');
+            setConfirmClientDeletePhone('');
+          }
+        }}
+      >
+        <DialogContent className="rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle>Usunąć klienta na zawsze?</DialogTitle>
+            <DialogDescription>
+              Usunięte zostaną wizyty, konto aplikacji (jeśli jest) i rekord CRM. Ten sam e-mail / telefon będzie można ponownie użyć po rejestracji.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteDialogClient && (deleteDialogClient.email?.trim() || deleteDialogClient.account?.email?.trim()) ? (
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">
+                Wpisz e-mail (klienta lub konta): {deleteDialogClient.account?.email || deleteDialogClient.email}
+              </label>
+              <Input
+                className="h-11 rounded-xl"
+                value={confirmClientDeleteEmail}
+                onChange={(e) => setConfirmClientDeleteEmail(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">
+                Brak e-maila — wpisz numer telefonu (tylko cyfry, jak w bazie)
+              </label>
+              <Input
+                className="h-11 rounded-xl font-mono"
+                value={confirmClientDeletePhone}
+                onChange={(e) => setConfirmClientDeletePhone(e.target.value.replace(/\D/g, ''))}
+                placeholder="np. 575730760"
+                autoComplete="off"
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setDeleteDialogClient(null)}>
+              Anuluj
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl"
+              disabled={(() => {
+                if (!deleteDialogClient) return true;
+                const hasEmail = !!(deleteDialogClient.account?.email?.trim() || deleteDialogClient.email?.trim());
+                const expectedMail = (deleteDialogClient.account?.email || deleteDialogClient.email || '').trim().toLowerCase();
+                const emailOk = hasEmail && confirmClientDeleteEmail.trim().toLowerCase() === expectedMail;
+                const phoneOk =
+                  !hasEmail &&
+                  confirmClientDeletePhone.replace(/\D/g, '') === deleteDialogClient.phone.replace(/\D/g, '') &&
+                  deleteDialogClient.phone.replace(/\D/g, '').length >= 6;
+                return hasEmail ? !emailOk : !phoneOk;
+              })()}
+              onClick={async () => {
+                if (!deleteDialogClient) return;
+                try {
+                  await deleteAdminClient(deleteDialogClient.id, {
+                    confirmEmail:
+                      deleteDialogClient.email?.trim() || deleteDialogClient.account?.email?.trim()
+                        ? confirmClientDeleteEmail.trim()
+                        : undefined,
+                    confirmPhoneDigits:
+                      deleteDialogClient.email?.trim() || deleteDialogClient.account?.email?.trim()
+                        ? undefined
+                        : confirmClientDeletePhone.replace(/\D/g, ''),
+                  });
+                  await loadClients();
+                  setDeleteDialogClient(null);
+                  toast.success('Klient usunięty z bazy');
+                } catch (err: any) {
+                  toast.error(err.message || 'Nie udało się usunąć');
+                }
+              }}
+            >
+              Usuń trwale
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={mailDialogOpen} onOpenChange={setMailDialogOpen}>
+        <DialogContent className="rounded-2xl max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Wyślij e-mail (SendGrid)</DialogTitle>
+            <DialogDescription>Jednorazowa wiadomość na podany adres — użyj ostrożnie.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Do (e-mail)</label>
+              <Input
+                className="h-11 rounded-xl"
+                value={mailForm.to}
+                onChange={(e) => setMailForm((f) => ({ ...f, to: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Temat</label>
+              <Input
+                className="h-11 rounded-xl"
+                value={mailForm.subject}
+                onChange={(e) => setMailForm((f) => ({ ...f, subject: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Treść (HTML)</label>
+              <Textarea
+                className="rounded-xl min-h-[140px] font-mono text-xs"
+                value={mailForm.html}
+                onChange={(e) => setMailForm((f) => ({ ...f, html: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setMailDialogOpen(false)}>
+              Anuluj
+            </Button>
+            <Button
+              className="rounded-xl"
+              onClick={async () => {
+                try {
+                  await sendAdminEmail(mailForm);
+                  toast.success('Wysłano lub przyjęto przez SendGrid');
+                  setMailDialogOpen(false);
+                  setMailForm({ to: '', subject: '', html: '' });
+                } catch (err: any) {
+                  toast.error(err.message || 'Błąd wysyłki');
+                }
+              }}
+            >
+              Wyślij
             </Button>
           </DialogFooter>
         </DialogContent>
