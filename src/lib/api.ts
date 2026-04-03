@@ -16,6 +16,23 @@ const setClientToken = (token: string) => localStorage.setItem("client_token", t
 
 type FetchOptions = RequestInit & { auth?: boolean };
 
+/** Czytelny komunikat przy !res.ok: JSON { error } albo skrót treści (np. HTML z nginx). */
+async function errorMessageFromResponse(res: Response): Promise<string> {
+  const text = await res.text();
+  if (!text.trim()) {
+    return `Błąd serwera (${res.status}). Brak treści odpowiedzi — sprawdź logi API.`;
+  }
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+    if (typeof parsed.error === "string" && parsed.error.trim()) return parsed.error;
+    if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+  } catch {
+    /* nie JSON */
+  }
+  const snippet = text.slice(0, 400).replace(/\s+/g, " ").trim();
+  return `Błąd serwera (${res.status}). Odpowiedź nie jest JSON — możliwy nginx/proxy. Fragment: ${snippet}`;
+}
+
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -40,8 +57,8 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     throw new Error(`Brak połączenia z API.${hint}`);
   }
   if (!res.ok) {
-    const payload = await res.json().catch(() => ({}));
-    throw new Error(payload.error || `Request failed: ${res.status}`);
+    const message = await errorMessageFromResponse(res);
+    throw new Error(message);
   }
   return res.json();
 }
@@ -74,8 +91,8 @@ async function clientApiFetch<T>(path: string, options: FetchOptions = {}): Prom
     throw new Error("UNAUTHORIZED");
   }
   if (!res.ok) {
-    const payload = await res.json().catch(() => ({}));
-    throw new Error(payload.error || `Request failed: ${res.status}`);
+    const message = await errorMessageFromResponse(res);
+    throw new Error(message);
   }
   return res.json();
 }

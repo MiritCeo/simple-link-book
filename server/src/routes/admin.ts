@@ -422,9 +422,18 @@ router.delete("/clients/:id", async (req: AuthRequest, res) => {
           error: "Usuwanie trwało zbyt długo (timeout). Spróbuj ponownie; jeśli klient ma bardzo dużo wizyt, daj znać administratorowi.",
         });
       }
+      if (e.code === "P2022") {
+        return res.status(500).json({
+          error:
+            "Nie udało się usunąć klienta — baza ma niezgodny schemat (brak kolumny/tabeli). Uruchom migracje na serwerze (`prisma migrate deploy`).",
+        });
+      }
+      return res.status(500).json({
+        error: `Nie udało się usunąć klienta (kod bazy: ${e.code}). Skontaktuj się z administratorem technicznym.`,
+      });
     }
     return res.status(500).json({
-      error: "Nie udało się usunąć klienta. Spróbuj ponownie za chwilę lub skontaktuj się z administratorem.",
+      error: "Nie udało się usunąć klienta (błąd serwera). Spróbuj ponownie za chwilę lub skontaktuj się z administratorem.",
     });
   }
 
