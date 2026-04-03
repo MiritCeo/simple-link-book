@@ -29,7 +29,7 @@ export default function PanelLayout() {
       return;
     }
     if (role === 'STAFF') {
-      const allowed = ['/panel/kalendarz', '/panel/wizyty', '/panel/klienci', '/panel/magazyn'];
+      const allowed = ['/panel/kalendarz', '/panel/wizyty', '/panel/klienci', '/panel/magazyn', '/panel/wspoltworzymy'];
       const isAllowed = allowed.some(path => location.pathname.startsWith(path));
       if (!isAllowed) {
         navigate('/panel/kalendarz', { replace: true });

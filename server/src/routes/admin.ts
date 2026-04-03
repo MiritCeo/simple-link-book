@@ -576,5 +576,119 @@ router.post("/push/test", async (req: AuthRequest, res) => {
   return res.json({ ...result, tokenCount: tokens.length });
 });
 
+// --- Zgłoszenia od salonów (rozwój produktu) ---
+router.get("/feedback", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const status = (req.query.status || "").toString().trim();
+  const page = Math.max(1, Number(req.query.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize || 30)));
+
+  const where =
+    status && ["NEW", "UNDER_REVIEW", "IN_VOTING", "PLANNED", "DONE", "DECLINED"].includes(status)
+      ? { status: status as any }
+      : {};
+
+  const [total, rows] = await Promise.all([
+    prisma.salonFeedback.count({ where }),
+    prisma.salonFeedback.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: {
+        salon: { select: { id: true, name: true, slug: true } },
+        author: { select: { id: true, email: true } },
+        _count: { select: { votes: true } },
+      },
+    }),
+  ]);
+
+  return res.json({
+    feedback: rows.map((f) => ({
+      id: f.id,
+      category: f.category,
+      title: f.title,
+      body: f.body,
+      priority: f.priority,
+      status: f.status,
+      votingOpenedAt: f.votingOpenedAt,
+      adminNote: f.adminNote,
+      publicReply: f.publicReply,
+      createdAt: f.createdAt,
+      updatedAt: f.updatedAt,
+      voteCount: f._count.votes,
+      salon: f.salon,
+      author: f.author,
+    })),
+    total,
+    page,
+    pageSize,
+  });
+});
+
+router.patch("/feedback/:id", async (req: AuthRequest, res) => {
+  if (!requireSuperAdmin(req, res)) return;
+  const schema = z.object({
+    status: z.enum(["NEW", "UNDER_REVIEW", "IN_VOTING", "PLANNED", "DONE", "DECLINED"]).optional(),
+    adminNote: z.string().max(20000).optional().nullable(),
+    publicReply: z.string().max(20000).optional().nullable(),
+    openForVoting: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane" });
+
+  const existing = await prisma.salonFeedback.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: "Nie znaleziono zgłoszenia" });
+
+  let nextStatus = parsed.data.status ?? existing.status;
+  let nextVotingOpenedAt: Date | null = existing.votingOpenedAt;
+
+  if (parsed.data.openForVoting === true) {
+    nextStatus = "IN_VOTING";
+    nextVotingOpenedAt = new Date();
+  } else if (parsed.data.status) {
+    nextStatus = parsed.data.status;
+    if (parsed.data.status === "IN_VOTING" && !existing.votingOpenedAt) {
+      nextVotingOpenedAt = new Date();
+    } else if (parsed.data.status !== "IN_VOTING") {
+      nextVotingOpenedAt = null;
+    }
+  }
+
+  const updated = await prisma.salonFeedback.update({
+    where: { id: existing.id },
+    data: {
+      status: nextStatus,
+      votingOpenedAt: nextVotingOpenedAt,
+      ...(parsed.data.adminNote !== undefined ? { adminNote: parsed.data.adminNote } : {}),
+      ...(parsed.data.publicReply !== undefined ? { publicReply: parsed.data.publicReply } : {}),
+    },
+    include: {
+      salon: { select: { id: true, name: true, slug: true } },
+      author: { select: { id: true, email: true } },
+      _count: { select: { votes: true } },
+    },
+  });
+
+  return res.json({
+    feedback: {
+      id: updated.id,
+      category: updated.category,
+      title: updated.title,
+      body: updated.body,
+      priority: updated.priority,
+      status: updated.status,
+      votingOpenedAt: updated.votingOpenedAt,
+      adminNote: updated.adminNote,
+      publicReply: updated.publicReply,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+      voteCount: updated._count.votes,
+      salon: updated.salon,
+      author: updated.author,
+    },
+  });
+});
+
 export default router;
 

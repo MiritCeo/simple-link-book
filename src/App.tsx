@@ -25,6 +25,7 @@ import HoursSettingsPage from "./pages/panel/settings/HoursSettingsPage";
 import BreaksSettingsPage from "./pages/panel/settings/BreaksSettingsPage";
 import SalonsSettingsPage from "./pages/panel/settings/SalonsSettingsPage";
 import NotificationsPage from "./pages/panel/NotificationsPage";
+import SalonFeedbackPage from "./pages/panel/SalonFeedbackPage";
 import StaffSchedulePage from "./pages/panel/StaffSchedulePage";
 import StaffScheduleEditPage from "./pages/panel/StaffScheduleEditPage";
 import InventoryItemsPage from "./pages/panel/inventory/InventoryItemsPage";
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="grafik" element={<StaffSchedulePage />} />
             <Route path="grafik/:id" element={<StaffScheduleEditPage />} />
             <Route path="powiadomienia" element={<NotificationsPage />} />
+            <Route path="wspoltworzymy" element={<SalonFeedbackPage />} />
             <Route path="ustawienia" element={<SettingsPage />} />
             <Route path="ustawienia/uslugi" element={<ServicesSettingsPage />} />
             <Route path="ustawienia/salony" element={<SalonsSettingsPage />} />

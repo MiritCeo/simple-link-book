@@ -13,6 +13,7 @@ import { sendEmail, sendSms } from "../notifications.js";
 import type { AuthRequest } from "../middleware/auth.js";
 import { clientMatchesSearchQuery } from "../lib/clientSearch.js";
 import { resolveClientForSalon } from "../lib/clientId.js";
+import salonFeedbackRoutes from "./salonFeedback.js";
 
 const router = Router();
 
@@ -2315,6 +2316,8 @@ router.delete("/schedule/:staffId/exceptions/:id", async (req: AuthRequest, res)
   await prisma.staffException.delete({ where: { id: req.params.id } });
   return res.json({ ok: true });
 });
+
+router.use(salonFeedbackRoutes);
 
 export default router;
 

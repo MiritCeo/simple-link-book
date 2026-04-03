@@ -1127,3 +1127,58 @@ export async function sendAdminEmail(payload: { to: string; subject: string; htm
     body: JSON.stringify(payload),
   });
 }
+
+export async function createSalonFeedback(payload: {
+  category: string;
+  title: string;
+  body: string;
+  priority?: string;
+}) {
+  return apiFetch<{ feedback: any }>("/api/salon/feedback", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getSalonFeedbackList() {
+  return apiFetch<{ feedback: any[] }>("/api/salon/feedback", { auth: true });
+}
+
+export async function getSalonFeedbackVoting() {
+  return apiFetch<{ items: any[] }>("/api/salon/feedback/voting", { auth: true });
+}
+
+export async function toggleSalonFeedbackVote(id: string) {
+  return apiFetch<{ ok: boolean; voted: boolean; voteCount: number }>(
+    `/api/salon/feedback/${encodeURIComponent(id)}/vote`,
+    { method: "POST", auth: true },
+  );
+}
+
+export async function getAdminFeedback(params?: { status?: string; page?: number; pageSize?: number }) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set("status", params.status);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch<{ feedback: any[]; total: number; page: number; pageSize: number }>(`/api/admin/feedback${suffix}`, {
+    auth: true,
+  });
+}
+
+export async function patchAdminFeedback(
+  id: string,
+  payload: {
+    status?: string;
+    adminNote?: string | null;
+    publicReply?: string | null;
+    openForVoting?: boolean;
+  },
+) {
+  return apiFetch<{ feedback: any }>(`/api/admin/feedback/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}

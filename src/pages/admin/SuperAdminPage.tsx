@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut, Trash2, KeyRound, Mail, Building2, Users, Send, Info } from 'lucide-react';
+import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut, Trash2, KeyRound, Mail, Building2, Users, Send, Info, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
@@ -20,8 +21,19 @@ import {
   resendAdminOwnerActivation,
   sendAdminEmail,
   updateAdminOwner,
+  getAdminFeedback,
+  patchAdminFeedback,
 } from '@/lib/api';
 import { clearAuth, getRole } from '@/lib/auth';
+
+const feedbackStatusLabels: Record<string, string> = {
+  NEW: 'Nowe',
+  UNDER_REVIEW: 'W analizie',
+  IN_VOTING: 'W głosowaniu',
+  PLANNED: 'Zaplanowane',
+  DONE: 'Zrobione',
+  DECLINED: 'Odrzucone',
+};
 
 export default function SuperAdminPage() {
   const navigate = useNavigate();
@@ -45,6 +57,14 @@ export default function SuperAdminPage() {
   const [clientSearchDebounced, setClientSearchDebounced] = useState('');
   const [clientsLoading, setClientsLoading] = useState(false);
   const [adminTab, setAdminTab] = useState('owners');
+  const [feedbackItems, setFeedbackItems] = useState<any[]>([]);
+  const [feedbackTotal, setFeedbackTotal] = useState(0);
+  const [feedbackPage, setFeedbackPage] = useState(1);
+  const [feedbackStatus, setFeedbackStatus] = useState('');
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackDialog, setFeedbackDialog] = useState<any | null>(null);
+  const [feedbackForm, setFeedbackForm] = useState({ status: 'NEW', adminNote: '', publicReply: '' });
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -107,6 +127,31 @@ export default function SuperAdminPage() {
     if (adminTab !== 'clients') return;
     loadClients();
   }, [clientSearchDebounced, clientPage, adminTab]);
+
+  useEffect(() => {
+    if (adminTab !== 'feedback') return;
+    let cancelled = false;
+    setFeedbackLoading(true);
+    getAdminFeedback({
+      status: feedbackStatus || undefined,
+      page: feedbackPage,
+      pageSize: 25,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setFeedbackItems(res.feedback || []);
+        setFeedbackTotal(res.total ?? 0);
+      })
+      .catch((err: any) => {
+        if (!cancelled) toast.error(err.message || 'Nie udało się wczytać zgłoszeń');
+      })
+      .finally(() => {
+        if (!cancelled) setFeedbackLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [adminTab, feedbackPage, feedbackStatus]);
 
   const stats = useMemo(() => {
     const active = owners.filter(o => o.active).length;
@@ -192,6 +237,10 @@ export default function SuperAdminPage() {
           <TabsTrigger value="clients" className="rounded-lg gap-1.5">
             <Users className="w-3.5 h-3.5" />
             Klienci
+          </TabsTrigger>
+          <TabsTrigger value="feedback" className="rounded-lg gap-1.5">
+            <Lightbulb className="w-3.5 h-3.5" />
+            Zgłoszenia
           </TabsTrigger>
         </TabsList>
 
@@ -463,6 +512,103 @@ export default function SuperAdminPage() {
                 className="rounded-xl"
                 disabled={clientPage * 25 >= clientsTotal}
                 onClick={() => setClientPage((p) => p + 1)}
+              >
+                Następna
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="feedback" className="mt-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={feedbackStatus || 'all'}
+              onValueChange={(v) => {
+                setFeedbackStatus(v === 'all' ? '' : v);
+                setFeedbackPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[200px] rounded-xl h-9 text-xs">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Wszystkie statusy</SelectItem>
+                {Object.entries(feedbackStatusLabels).map(([k, label]) => (
+                  <SelectItem key={k} value={k}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">
+              Łącznie: {feedbackTotal}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Widzisz salon, autora i liczbę głosów. Możesz zmienić status, dodać notatkę wewnętrzną, publiczną odpowiedź
+            oraz otworzyć pomysł do głosowania (wszystkie salony, anonimowo).
+          </p>
+          {feedbackLoading ? (
+            <div className="text-sm text-muted-foreground p-4">Ładowanie…</div>
+          ) : feedbackItems.length === 0 ? (
+            <div className="bg-card rounded-2xl border border-border p-6 text-sm text-muted-foreground text-center">
+              Brak zgłoszeń.
+            </div>
+          ) : (
+            <MotionList className="space-y-2">
+              {feedbackItems.map((f) => (
+                <MotionItem key={f.id}>
+                  <button
+                    type="button"
+                    className="w-full text-left bg-card rounded-2xl p-4 border border-border hover:bg-muted/30 transition-colors"
+                    onClick={() => {
+                      setFeedbackDialog(f);
+                      setFeedbackForm({
+                        status: f.status,
+                        adminNote: f.adminNote || '',
+                        publicReply: f.publicReply || '',
+                      });
+                    }}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm">{f.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {f.salon?.name || '—'} · {f.author?.email || '—'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 shrink-0">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {feedbackStatusLabels[f.status] || f.status}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] tabular-nums">
+                          {f.voteCount ?? 0} głosów
+                        </Badge>
+                      </div>
+                    </div>
+                  </button>
+                </MotionItem>
+              ))}
+            </MotionList>
+          )}
+          {feedbackTotal > 25 && (
+            <div className="flex items-center gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                disabled={feedbackPage <= 1}
+                onClick={() => setFeedbackPage((p) => Math.max(1, p - 1))}
+              >
+                Poprzednia
+              </Button>
+              <span className="text-xs text-muted-foreground">Strona {feedbackPage}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                disabled={feedbackPage * 25 >= feedbackTotal}
+                onClick={() => setFeedbackPage((p) => p + 1)}
               >
                 Następna
               </Button>
@@ -811,6 +957,144 @@ export default function SuperAdminPage() {
             >
               Wyślij
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!feedbackDialog}
+        onOpenChange={(open) => {
+          if (!open) setFeedbackDialog(null);
+        }}
+      >
+        <DialogContent className="rounded-2xl max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Zgłoszenie</DialogTitle>
+            <DialogDescription className="space-y-1">
+              {feedbackDialog && (
+                <>
+                  <span className="block text-foreground font-medium">{feedbackDialog.title}</span>
+                  <span className="block text-xs">
+                    Salon: {feedbackDialog.salon?.name || '—'} ({feedbackDialog.salon?.slug || '—'})
+                  </span>
+                  <span className="block text-xs">Autor: {feedbackDialog.author?.email || '—'}</span>
+                  <span className="block text-xs tabular-nums">
+                    Głosy: {feedbackDialog.voteCount ?? 0}
+                    {feedbackDialog.votingOpenedAt && (
+                      <> · Głosowanie od {new Date(feedbackDialog.votingOpenedAt).toLocaleString('pl-PL')}</>
+                    )}
+                  </span>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {feedbackDialog && (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap max-h-40 overflow-y-auto">
+                {feedbackDialog.body}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                <Select
+                  value={feedbackForm.status}
+                  onValueChange={(v) => setFeedbackForm((f) => ({ ...f, status: v }))}
+                >
+                  <SelectTrigger className="rounded-xl h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(feedbackStatusLabels).map(([k, label]) => (
+                      <SelectItem key={k} value={k}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Notatka wewnętrzna</label>
+                <Textarea
+                  value={feedbackForm.adminNote}
+                  onChange={(e) => setFeedbackForm((f) => ({ ...f, adminNote: e.target.value }))}
+                  className="rounded-xl min-h-[72px] text-xs"
+                  placeholder="Widoczna tylko dla super admina"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Publiczna odpowiedź (dla salonu)</label>
+                <Textarea
+                  value={feedbackForm.publicReply}
+                  onChange={(e) => setFeedbackForm((f) => ({ ...f, publicReply: e.target.value }))}
+                  className="rounded-xl min-h-[72px] text-xs"
+                  placeholder="Pojawi się przy zgłoszeniu w panelu salonu"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between sm:items-center">
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-xl w-full sm:w-auto"
+              disabled={feedbackSaving || !feedbackDialog}
+              onClick={async () => {
+                if (!feedbackDialog) return;
+                setFeedbackSaving(true);
+                try {
+                  const res = await patchAdminFeedback(feedbackDialog.id, { openForVoting: true });
+                  const updated = res.feedback;
+                  setFeedbackItems((items) => items.map((i) => (i.id === updated.id ? { ...i, ...updated } : i)));
+                  setFeedbackDialog(updated);
+                  setFeedbackForm({
+                    status: updated.status,
+                    adminNote: updated.adminNote || '',
+                    publicReply: updated.publicReply || '',
+                  });
+                  toast.success('Otwarto do głosowania');
+                } catch (err: any) {
+                  toast.error(err.message || 'Błąd zapisu');
+                } finally {
+                  setFeedbackSaving(false);
+                }
+              }}
+            >
+              Otwórz do głosowania
+            </Button>
+            <div className="flex gap-2 w-full sm:w-auto justify-end">
+              <Button variant="outline" className="rounded-xl" onClick={() => setFeedbackDialog(null)}>
+                Zamknij
+              </Button>
+              <Button
+                className="rounded-xl"
+                disabled={feedbackSaving || !feedbackDialog}
+                onClick={async () => {
+                  if (!feedbackDialog) return;
+                  setFeedbackSaving(true);
+                  try {
+                    const res = await patchAdminFeedback(feedbackDialog.id, {
+                      status: feedbackForm.status,
+                      adminNote: feedbackForm.adminNote.trim() || null,
+                      publicReply: feedbackForm.publicReply.trim() || null,
+                    });
+                    const updated = res.feedback;
+                    setFeedbackItems((items) => items.map((i) => (i.id === updated.id ? { ...i, ...updated } : i)));
+                    setFeedbackDialog(updated);
+                    setFeedbackForm({
+                      status: updated.status,
+                      adminNote: updated.adminNote || '',
+                      publicReply: updated.publicReply || '',
+                    });
+                    toast.success('Zapisano');
+                  } catch (err: any) {
+                    toast.error(err.message || 'Błąd zapisu');
+                  } finally {
+                    setFeedbackSaving(false);
+                  }
+                }}
+              >
+                Zapisz
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

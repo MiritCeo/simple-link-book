@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { clearAuth, getActiveSalonId, getRole, getSalons, setActiveSalonId } from '@/lib/auth';
-import { LayoutDashboard, CalendarDays, ClipboardList, Users, Bell, Settings, CalendarClock, LogOut, Boxes } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, ClipboardList, Users, Bell, Settings, CalendarClock, LogOut, Boxes, Lightbulb } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { switchSalon } from '@/lib/api';
@@ -13,6 +13,7 @@ const navItems = [
   { path: '/panel/magazyn', label: 'Magazyn', icon: Boxes },
   { path: '/panel/grafik', label: 'Grafik', icon: CalendarClock },
   { path: '/panel/powiadomienia', label: 'Powiadomienia', icon: Bell },
+  { path: '/panel/wspoltworzymy', label: 'Współtworzymy', icon: Lightbulb },
   { path: '/panel/ustawienia', label: 'Ustawienia', icon: Settings },
 ];
 
@@ -21,6 +22,7 @@ const mobileNavItems = [
   navItems.find(item => item.path === '/panel/dashboard')!,
   navItems.find(item => item.path === '/panel/kalendarz')!,
   navItems.find(item => item.path === '/panel/wizyty')!,
+  navItems.find(item => item.path === '/panel/wspoltworzymy')!,
   navItems.find(item => item.path === '/panel/grafik')!,
   navItems.find(item => item.path === '/panel/ustawienia')!,
 ];
@@ -38,7 +40,10 @@ export function Sidebar({ logoUrl, salonName }: { logoUrl?: string | null; salon
     navigate('/login');
   };
   const visibleItems = role === 'STAFF'
-    ? navItems.filter(item => !['/panel/ustawienia', '/panel/powiadomienia', '/panel/grafik', '/panel/dashboard'].includes(item.path))
+    ? navItems.filter(
+        item =>
+          !['/panel/ustawienia', '/panel/powiadomienia', '/panel/grafik', '/panel/dashboard'].includes(item.path),
+      )
     : navItems;
 
   useEffect(() => {
@@ -128,7 +133,9 @@ export default function BottomNav() {
   const navigate = useNavigate();
   const role = getRole();
   const visibleMobileItems = role === 'STAFF'
-    ? mobileNavItems.filter(item => !['/panel/dashboard', '/panel/grafik', '/panel/ustawienia'].includes(item.path))
+    ? mobileNavItems.filter(
+        item => !['/panel/dashboard', '/panel/grafik', '/panel/ustawienia'].includes(item.path),
+      )
     : mobileNavItems;
 
   return (
