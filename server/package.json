@@ -9,6 +9,7 @@
     "prestart": "npm run build",
     "start": "node --experimental-specifier-resolution=node dist/index.js",
     "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy",
     "prisma:migrate": "prisma migrate dev",
     "seed": "tsx src/seed.ts"
   },

@@ -419,6 +419,10 @@ model AppointmentToken {
   type          AppointmentTokenType
   expiresAt     DateTime
   usedAt        DateTime?
+  verificationCodeHash      String?
+  verificationCodeExpiresAt DateTime?
+  verificationCodeAttempts  Int      @default(0)
+  verificationCodeSentAt    DateTime?
   createdAt     DateTime             @default(now())
 
   appointment Appointment @relation(fields: [appointmentId], references: [id])

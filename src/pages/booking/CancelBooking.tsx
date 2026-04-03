@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CalendarX2, ShieldCheck } from 'lucide-react';
+import { CalendarX2, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { PageTransition } from '@/components/motion';
-import { cancelPublicAppointment, getPublicCancelAvailability, getPublicCancelDetails, reschedulePublicAppointment } from '@/lib/api';
+import {
+  cancelPublicAppointment,
+  getPublicCancelAvailability,
+  getPublicCancelDetails,
+  requestPublicCancelCode,
+  reschedulePublicAppointment,
+} from '@/lib/api';
 import { toast } from 'sonner';
 
 export default function CancelBooking() {
@@ -23,6 +29,10 @@ export default function CancelBooking() {
   const [slots, setSlots] = useState<string[]>([]);
   const [rescheduling, setRescheduling] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [codeSending, setCodeSending] = useState(false);
+  const [codeCooldown, setCodeCooldown] = useState(0);
+  const [phoneMask, setPhoneMask] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -36,6 +46,14 @@ export default function CancelBooking() {
       .then(res => {
         if (!mounted) return;
         setAppointment(res.appointment);
+        setPhoneMask(res.verification?.phoneMask || null);
+        if (res.verification?.sentAt) {
+          const sentAt = new Date(res.verification.sentAt).getTime();
+          const cooldownLeft = Math.max(0, 45 - Math.floor((Date.now() - sentAt) / 1000));
+          setCodeCooldown(cooldownLeft);
+        } else {
+          setCodeCooldown(0);
+        }
         setError(null);
       })
       .catch(err => {
@@ -45,6 +63,14 @@ export default function CancelBooking() {
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
   }, [token]);
+
+  useEffect(() => {
+    if (codeCooldown <= 0) return;
+    const t = setInterval(() => {
+      setCodeCooldown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [codeCooldown]);
 
   useEffect(() => {
     let mounted = true;
@@ -78,7 +104,7 @@ export default function CancelBooking() {
           </div>
           <h1 className="text-2xl font-bold">Zmień lub odwołaj wizytę</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Bezpieczny link jednorazowy • token: {token ? `${token.slice(0, 6)}…` : '—'}
+            Unikalny link z wiadomości — bez logowania
           </p>
         </div>
 
@@ -113,14 +139,41 @@ export default function CancelBooking() {
 
         <div className="bg-secondary/50 rounded-2xl p-5 border border-border mb-5">
           <div className="flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <Link2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-medium">Potwierdzenie tożsamości</p>
+              <p className="text-sm font-medium">Weryfikacja SMS</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Wpisz kod SMS, aby dokończyć zmianę lub odwołanie.
+                Aby zmienić termin lub odwołać wizytę, wyślij kod na numer klienta{phoneMask ? ` (${phoneMask})` : ''} i wpisz go poniżej.
               </p>
-              <Input placeholder="Kod SMS" className="h-11 rounded-xl mt-3" disabled />
-              <p className="text-[10px] text-muted-foreground mt-2">Funkcjonalność weryfikacji tożsamości jest chwilowo nieaktywna.</p>
+              <div className="flex items-center gap-2 mt-3">
+                <Input
+                  placeholder="Kod SMS (6 cyfr)"
+                  className="h-11 rounded-xl font-mono tracking-widest text-center"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl h-11 shrink-0"
+                  disabled={!appointment || codeSending || codeCooldown > 0}
+                  onClick={async () => {
+                    if (!token) return;
+                    setCodeSending(true);
+                    try {
+                      const res = await requestPublicCancelCode(token);
+                      setCodeCooldown(res.retryAfterSeconds || 45);
+                      toast.success('Kod SMS został wysłany');
+                    } catch (err: any) {
+                      toast.error(err.message || 'Nie udało się wysłać kodu');
+                    } finally {
+                      setCodeSending(false);
+                    }
+                  }}
+                >
+                  {codeCooldown > 0 ? `Ponów za ${codeCooldown}s` : codeSending ? 'Wysyłanie…' : 'Wyślij kod'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -187,12 +240,12 @@ export default function CancelBooking() {
               )}
               <Button
                 className="w-full h-11 rounded-xl"
-                disabled={!newDate || !newTime || rescheduling}
+                disabled={!newDate || !newTime || rescheduling || verificationCode.trim().length < 4}
                 onClick={async () => {
                   if (!token) return;
                   setRescheduling(true);
                   try {
-                    await reschedulePublicAppointment(token, { date: newDate, time: newTime });
+                    await reschedulePublicAppointment(token, { date: newDate, time: newTime, code: verificationCode.trim() });
                     toast.success('Termin został zmieniony');
                     setActionMessage('Termin został zmieniony.');
                     setRescheduleOpen(false);
@@ -213,12 +266,12 @@ export default function CancelBooking() {
           )}
         <Button
           className="w-full h-12 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          disabled={!appointment || cancelling}
+          disabled={!appointment || cancelling || verificationCode.trim().length < 4}
           onClick={async () => {
             if (!token) return;
             setCancelling(true);
             try {
-              await cancelPublicAppointment(token);
+              await cancelPublicAppointment(token, { code: verificationCode.trim() });
               toast.success('Wizyta odwołana');
               setActionMessage('Wizyta została odwołana.');
               setAppointment(null);
@@ -234,7 +287,7 @@ export default function CancelBooking() {
         </div>
 
         <p className="text-[11px] text-muted-foreground text-center mt-4">
-          Link jest ważny przez ograniczony czas i działa tylko raz.
+          Link jest ważny ok. 7 dni; po udanej zmianie terminu lub odwołaniu wizyty przestaje działać (jednorazowo).
         </p>
       </div>
     </PageTransition>

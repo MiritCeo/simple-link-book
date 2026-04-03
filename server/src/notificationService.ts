@@ -99,7 +99,7 @@ export async function sendEventNotification(
   const defaultBody = (channel: "SMS" | "EMAIL") => {
     switch (event) {
       case "BOOKING_CONFIRMATION":
-        return `Twoja wizyta w {salon_name} dnia {date} o {time} została potwierdzona. Link do zarządzania wizytą i rejestracji konta: {cancel_link}`;
+        return `Twoja wizyta w {salon_name} dnia {date} o {time} została potwierdzona. Zmiana terminu lub odwołanie: {cancel_link}`;
       case "REMINDER_24H":
       case "REMINDER_2H":
         return `Przypomnienie: Twoja wizyta w {salon_name} dnia {date} o {time}.`;

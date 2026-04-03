@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../prisma.js";
 import { phonesMatchDigits, toPhoneDigits } from "../lib/phoneDigits.js";
-import { sendEmail, sendSms } from "../notifications.js";
+import { sendSms } from "../notifications.js";
 import { buildClientSalons, ensureAccountSalonLink } from "./client.js";
 import type { Prisma } from "@prisma/client";
 
@@ -82,13 +82,11 @@ async function sendVerificationChannels(email: string, phoneDigits: string, plai
   const smsTo = smsRecipientFromDigits(phoneDigits);
   const msg = `Twój kod weryfikacyjny honly: ${plainCode}`;
   await sendSms(smsTo, msg);
-  await sendEmail(email, "Kod weryfikacyjny honly", `<p>Twój kod potwierdzający numer telefonu: <strong>${plainCode}</strong></p><p>Ten sam kod został wysłany SMS-em.</p>`);
 
   const hasSms = !!(process.env.SMSAPI_API_KEY || process.env.SMSAPI_KEY);
-  const hasMail = !!(process.env.SENDGRID_API_KEY && process.env.SENDGRID_FROM);
   if (process.env.NODE_ENV !== "production") {
     // eslint-disable-next-line no-console
-    console.info(`[dev] Kod rejestracji dla ${email} / ${smsTo}: ${plainCode} (SMS skonfigurowane: ${hasSms}, email: ${hasMail})`);
+    console.info(`[dev] Kod rejestracji dla ${email} / ${smsTo}: ${plainCode} (SMS skonfigurowane: ${hasSms})`);
   }
 }
 
@@ -154,7 +152,7 @@ router.post("/client/register/session", async (req, res) => {
   return res.json({ sessionToken, linkedSalonUser });
 });
 
-/** Krok 2: telefon + wysłanie SMS i e-maila z tym samym kodem */
+/** Krok 2: telefon + wysłanie kodu SMS */
 router.post("/client/register/session/phone", async (req, res) => {
   const schema = z.object({
     sessionToken: z.string().min(16),

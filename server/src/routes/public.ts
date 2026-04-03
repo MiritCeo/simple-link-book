@@ -9,6 +9,9 @@ import { sendEmail, sendSms } from "../notifications.js";
 import { phonesMatchDigits } from "../lib/phoneDigits.js";
 
 const router = Router();
+const CANCEL_CODE_TTL_MS = 10 * 60 * 1000;
+const CANCEL_CODE_MAX_ATTEMPTS = 6;
+const CANCEL_CODE_RESEND_COOLDOWN_MS = 45 * 1000;
 
 const toMinutes = (time: string) => {
   const [h, m] = time.split(":").map(Number);
@@ -49,6 +52,27 @@ const parseBreakDays = (days?: string) => {
       }
     });
   return set.size ? set : null;
+};
+
+const cancelCodeChars = "23456789";
+const generateCancelVerificationCode = () => {
+  let code = "";
+  for (let i = 0; i < 6; i += 1) {
+    code += cancelCodeChars[crypto.randomInt(cancelCodeChars.length)]!;
+  }
+  return code;
+};
+
+const smsRecipientFromClientPhone = (phone: string) => {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("48")) return `+${digits}`;
+  return `+48${digits}`;
+};
+
+const maskPhone = (phone: string) => {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 4) return "••••";
+  return `••• ••• ${digits.slice(-3)}`;
 };
 
 const getBufferMinutes = (breaks: Array<{ type: string; label: string; minutes?: number | null }>) => {
@@ -605,6 +629,35 @@ router.post("/salons/:slug/appointments", async (req, res) => {
   return res.json({ appointment, cancelToken: cancelToken.token });
 });
 
+async function verifyCancelActionCodeOrFail(
+  record: {
+    id: string;
+    verificationCodeHash: string | null;
+    verificationCodeExpiresAt: Date | null;
+    verificationCodeAttempts: number;
+  },
+  code: string,
+) {
+  if (!record.verificationCodeHash || !record.verificationCodeExpiresAt) {
+    return { ok: false as const, status: 400, error: "verification_code_required" };
+  }
+  if (record.verificationCodeExpiresAt.getTime() < Date.now()) {
+    return { ok: false as const, status: 400, error: "verification_code_expired" };
+  }
+  if (record.verificationCodeAttempts >= CANCEL_CODE_MAX_ATTEMPTS) {
+    return { ok: false as const, status: 429, error: "verification_too_many_attempts" };
+  }
+  const valid = await bcrypt.compare(code.trim(), record.verificationCodeHash);
+  if (!valid) {
+    await prisma.appointmentToken.update({
+      where: { id: record.id },
+      data: { verificationCodeAttempts: { increment: 1 } } as any,
+    });
+    return { ok: false as const, status: 400, error: "verification_code_invalid" };
+  }
+  return { ok: true as const };
+}
+
 router.get("/cancel/:token", async (req, res) => {
   const token = req.params.token;
   const record = await prisma.appointmentToken.findFirst({
@@ -626,7 +679,66 @@ router.get("/cancel/:token", async (req, res) => {
     },
   });
   if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
-  return res.json({ appointment: record.appointment });
+  const tokenRecord = record as any;
+  return res.json({
+    appointment: record.appointment,
+    verification: {
+      required: true,
+      sentAt: tokenRecord.verificationCodeSentAt,
+      phoneMask: maskPhone(record.appointment.client.phone || ""),
+    },
+  });
+});
+
+router.post("/cancel/:token/request-code", async (req, res) => {
+  const token = req.params.token;
+  const record = await prisma.appointmentToken.findFirst({
+    where: {
+      token,
+      type: "CANCEL",
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    include: { appointment: { include: { client: true } } },
+  });
+  if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
+  if (!record.appointment.client.phone?.trim()) {
+    return res.status(400).json({ error: "Brak numeru telefonu klienta dla tej wizyty" });
+  }
+
+  const tokenRecord = record as any;
+  const sentAtMs = tokenRecord.verificationCodeSentAt?.getTime() || 0;
+  const msSinceLast = Date.now() - sentAtMs;
+  if (sentAtMs && msSinceLast < CANCEL_CODE_RESEND_COOLDOWN_MS) {
+    return res.status(429).json({
+      error: "verification_code_cooldown",
+      retryAfterSeconds: Math.ceil((CANCEL_CODE_RESEND_COOLDOWN_MS - msSinceLast) / 1000),
+    });
+  }
+
+  const plainCode = generateCancelVerificationCode();
+  const codeHash = await bcrypt.hash(plainCode, 10);
+  await prisma.appointmentToken.update({
+    where: { id: record.id },
+    data: {
+      verificationCodeHash: codeHash,
+      verificationCodeExpiresAt: new Date(Date.now() + CANCEL_CODE_TTL_MS),
+      verificationCodeAttempts: 0,
+      verificationCodeSentAt: new Date(),
+    } as any,
+  });
+
+  await sendSms(
+    smsRecipientFromClientPhone(record.appointment.client.phone),
+    `Kod do zmiany/odwołania wizyty honly: ${plainCode}`,
+  );
+
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.info(`[dev] cancel verification code for token ${record.token.slice(0, 8)}...: ${plainCode}`);
+  }
+
+  return res.json({ ok: true, retryAfterSeconds: Math.ceil(CANCEL_CODE_RESEND_COOLDOWN_MS / 1000) });
 });
 
 router.get("/cancel/:token/availability", async (req, res) => {
@@ -663,6 +775,7 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
   const schema = z.object({
     date: z.string().min(8),
     time: z.string().min(4),
+    code: z.string().min(4).max(8),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane zmiany terminu" });
@@ -686,6 +799,10 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
     },
   });
   if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
+  const verification = await verifyCancelActionCodeOrFail(record as any, parsed.data.code);
+  if (!verification.ok) {
+    return res.status(verification.status).json({ error: verification.error });
+  }
   if (record.appointment.status === "CANCELLED") {
     return res.status(400).json({ error: "Wizyta jest anulowana" });
   }
@@ -717,7 +834,13 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
 
   await prisma.appointmentToken.update({
     where: { id: record.id },
-    data: { usedAt: new Date() },
+    data: {
+      usedAt: new Date(),
+      verificationCodeHash: null,
+      verificationCodeExpiresAt: null,
+      verificationCodeAttempts: 0,
+      verificationCodeSentAt: null,
+    } as any,
   });
 
   await sendEventNotification("BOOKING_CONFIRMATION", updated as any);
@@ -726,6 +849,9 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
 
 router.post("/cancel/:token", async (req, res) => {
   const token = req.params.token;
+  const schema = z.object({ code: z.string().min(4).max(8) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "verification_code_required" });
   const record = await prisma.appointmentToken.findFirst({
     where: {
       token,
@@ -745,6 +871,10 @@ router.post("/cancel/:token", async (req, res) => {
     },
   });
   if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
+  const verification = await verifyCancelActionCodeOrFail(record as any, parsed.data.code);
+  if (!verification.ok) {
+    return res.status(verification.status).json({ error: verification.error });
+  }
 
   const appointment = record.appointment;
   if (appointment.status !== "CANCELLED") {
@@ -763,7 +893,13 @@ router.post("/cancel/:token", async (req, res) => {
 
   await prisma.appointmentToken.update({
     where: { id: record.id },
-    data: { usedAt: new Date() },
+    data: {
+      usedAt: new Date(),
+      verificationCodeHash: null,
+      verificationCodeExpiresAt: null,
+      verificationCodeAttempts: 0,
+      verificationCodeSentAt: null,
+    } as any,
   });
 
   return res.json({ ok: true });
@@ -888,16 +1024,7 @@ router.post("/client/resend-code", async (req, res) => {
     });
 
     const smsTo = `+${session.phoneDigits.startsWith("48") ? session.phoneDigits : `48${session.phoneDigits}`}`;
-    const emailResult = await sendEmail(
-      session.email,
-      "Kod weryfikacyjny honly",
-      `<p>Twój kod potwierdzający numer telefonu: <strong>${plainCode}</strong></p><p>Ten sam kod został wysłany SMS-em.</p>`,
-    );
     await sendSms(smsTo, `Twój kod weryfikacyjny honly: ${plainCode}`);
-
-    if (!emailResult.ok) {
-      return res.status(502).json({ error: "code_send_failed", reason: emailResult.reason });
-    }
     return res.json({ ok: true });
   }
 

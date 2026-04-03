@@ -93,7 +93,7 @@ export default function ClientRegisterPage() {
     try {
       await clientRegisterSessionPhone({ sessionToken, phone });
       setStep(3);
-      setInfo("Wysłaliśmy 6-znakowy kod SMS-em i na e-mail (ten sam kod). Wpisz go poniżej.");
+      setInfo("Wysłaliśmy 6-znakowy kod SMS. Wpisz go poniżej.");
     } catch (err) {
       setError(registerFlowError(err));
     } finally {
@@ -126,7 +126,7 @@ export default function ClientRegisterPage() {
     setError(null);
     try {
       await clientRegisterSessionResendCode({ sessionToken });
-      setInfo("Wysłaliśmy nowy kod SMS-em i na e-mail.");
+      setInfo("Wysłaliśmy nowy kod SMS.");
     } catch (err) {
       setError(registerFlowError(err));
     } finally {
@@ -235,7 +235,7 @@ export default function ClientRegisterPage() {
             {error && <p className="text-sm text-destructive">{error}</p>}
             {info && <p className="text-xs text-muted-foreground">{info}</p>}
             <Button type="submit" size="lg" className="w-full h-14 rounded-2xl text-base" disabled={loading}>
-              {loading ? "Wysyłanie kodu…" : "Wyślij kod SMS i e-mail"}
+              {loading ? "Wysyłanie kodu…" : "Wyślij kod SMS"}
             </Button>
             <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={restart}>
               Wróć
@@ -257,7 +257,7 @@ export default function ClientRegisterPage() {
                 onChange={e => setCode(e.target.value.toUpperCase())}
                 maxLength={8}
               />
-              <p className="text-[10px] text-muted-foreground mt-1">Ten sam kod jest w SMS i w wiadomości e-mail.</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Kod otrzymasz SMS-em na podany numer telefonu.</p>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             {info && <p className="text-xs text-muted-foreground">{info}</p>}

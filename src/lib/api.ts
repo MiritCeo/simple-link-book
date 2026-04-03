@@ -370,12 +370,22 @@ export async function resendClientRegistrationCode(payload: { phone?: string; em
 }
 
 export async function getPublicCancelDetails(token: string) {
-  return apiFetch<{ appointment: any }>(`/api/public/cancel/${token}`);
+  return apiFetch<{
+    appointment: any;
+    verification?: { required: boolean; sentAt?: string | null; phoneMask?: string };
+  }>(`/api/public/cancel/${token}`);
 }
 
-export async function cancelPublicAppointment(token: string) {
+export async function requestPublicCancelCode(token: string) {
+  return apiFetch<{ ok: boolean; retryAfterSeconds?: number }>(`/api/public/cancel/${token}/request-code`, {
+    method: "POST",
+  });
+}
+
+export async function cancelPublicAppointment(token: string, payload: { code: string }) {
   return apiFetch<{ ok: boolean }>(`/api/public/cancel/${token}`, {
     method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -384,7 +394,7 @@ export async function getPublicCancelAvailability(token: string, date: string) {
   return apiFetch<{ slots: string[] }>(`/api/public/cancel/${token}/availability?${query.toString()}`);
 }
 
-export async function reschedulePublicAppointment(token: string, payload: { date: string; time: string }) {
+export async function reschedulePublicAppointment(token: string, payload: { date: string; time: string; code: string }) {
   return apiFetch<{ appointment: any }>(`/api/public/cancel/${token}/reschedule`, {
     method: "POST",
     body: JSON.stringify(payload),
