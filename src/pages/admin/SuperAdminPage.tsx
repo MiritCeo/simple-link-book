@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut, Trash2, KeyRound, Mail, Building2, Users, Send } from 'lucide-react';
+import { Plus, Shield, UserX, UserCheck, RefreshCw, LogOut, Trash2, KeyRound, Mail, Building2, Users, Send, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -203,6 +203,15 @@ export default function SuperAdminPage() {
         <span>•</span>
         <span>Nieaktywni: {stats.inactive}</span>
       </div>
+      <p className="flex gap-2 items-start rounded-xl border border-border/80 bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground leading-relaxed">
+        <Info className="w-4 h-4 shrink-0 mt-0.5 text-primary" aria-hidden />
+        <span>
+          <span className="font-medium text-foreground">E-mail / link</span>
+          {' — '}wysyła na adres e-mail właściciela wiadomość z informacją o koncie salonu oraz{' '}
+          <strong className="font-medium text-foreground">linkiem do strony logowania</strong> do panelu.
+          Możesz użyć tego jako przypomnienia albo zaraz po aktywacji konta przełącznikiem „Aktywuj”.
+        </span>
+      </p>
 
       {loading ? (
         <div className="bg-card rounded-2xl border border-border p-6 text-sm text-muted-foreground">
@@ -234,12 +243,13 @@ export default function SuperAdminPage() {
                     variant="outline"
                     size="sm"
                     className="rounded-xl h-9 text-xs gap-1.5"
+                    title="Wysyła e-mail do ownera z informacją o koncie i linkiem do logowania do panelu salonu (SendGrid)."
                     onClick={async () => {
                       try {
                         const res = await resendAdminOwnerActivation(owner.id);
                         const info = res.email;
                         if (info?.sent) {
-                          toast.success('Wiadomość wysłana (lub przyjęta przez SendGrid).');
+                          toast.success('Wysłano e-mail z linkiem do logowania (SendGrid przyjął wiadomość).');
                         } else {
                           toast.warning('Nie udało się wysłać e-maila.');
                         }

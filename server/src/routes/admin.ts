@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import prisma from "../prisma.js";
 import type { AuthRequest } from "../middleware/auth.js";
 import { sendEmail } from "../notifications.js";
@@ -399,9 +400,33 @@ router.delete("/clients/:id", async (req: AuthRequest, res) => {
     });
   }
 
-  await prisma.$transaction(async (tx) => {
-    await hardDeleteClientInTransaction(tx, client.id);
-  });
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        await hardDeleteClientInTransaction(tx, client.id);
+      },
+      { maxWait: 10_000, timeout: 120_000 },
+    );
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[admin] DELETE /clients/:id", req.params.id, e);
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === "P2003") {
+        return res.status(409).json({
+          error:
+            "Nie można usunąć klienta — w bazie są jeszcze powiązane rekordy. Jeśli problem się powtarza, daj znać administratorowi technicznemu.",
+        });
+      }
+      if (e.code === "P2028") {
+        return res.status(504).json({
+          error: "Usuwanie trwało zbyt długo (timeout). Spróbuj ponownie; jeśli klient ma bardzo dużo wizyt, daj znać administratorowi.",
+        });
+      }
+    }
+    return res.status(500).json({
+      error: "Nie udało się usunąć klienta. Spróbuj ponownie za chwilę lub skontaktuj się z administratorem.",
+    });
+  }
 
   return res.json({ ok: true, deletedClientId: client.id });
 });

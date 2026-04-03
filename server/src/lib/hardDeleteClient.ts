@@ -34,6 +34,9 @@ export async function hardDeleteClientInTransaction(tx: Tx, clientId: string): P
 
   await tx.inventoryMovement.deleteMany({ where: { clientId } });
 
+  // Musi być przed usunięciem ClientAccount / Client (FK RESTRICT na ClientAccountSalon → Client i ClientAccount).
+  await tx.clientAccountSalon.deleteMany({ where: { clientId } });
+
   if (client.account) {
     const accId = client.account.id;
     await tx.clientPasswordReset.deleteMany({ where: { clientAccountId: accId } });
@@ -41,7 +44,6 @@ export async function hardDeleteClientInTransaction(tx: Tx, clientId: string): P
     await tx.clientFavoriteGooglePlace.deleteMany({ where: { clientAccountId: accId } });
     await tx.clientFavoriteSalon.deleteMany({ where: { clientAccountId: accId } });
     await tx.salonRating.deleteMany({ where: { clientAccountId: accId } });
-    await tx.clientAccountSalon.deleteMany({ where: { clientAccountId: accId } });
     await tx.clientAccount.delete({ where: { id: accId } });
   }
 
