@@ -116,6 +116,7 @@ export async function registerSalon(payload: {
   password: string;
   salonName: string;
   salonSlug: string;
+  privacyAccepted: boolean;
 }) {
   const data = await apiFetch<{
     ok: boolean;

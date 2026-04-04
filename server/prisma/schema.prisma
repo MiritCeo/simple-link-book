@@ -124,6 +124,8 @@ model User {
   role         UserRole
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+  /// Zgoda na politykę prywatności przy rejestracji właściciela salonu (ślad audytowy)
+  privacyPolicyAcceptedAt DateTime?
 
   salon   Salon? @relation(fields: [salonId], references: [id])
   salonId String?

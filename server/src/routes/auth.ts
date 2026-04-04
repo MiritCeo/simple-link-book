@@ -12,6 +12,7 @@ const registerSchema = z.object({
   password: z.string().min(8),
   salonName: z.string().min(2),
   salonSlug: z.string().min(2),
+  privacyAccepted: z.boolean(),
 });
 
 const loginSchema = z.object({
@@ -23,6 +24,10 @@ router.post("/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "invalid_payload" });
+  }
+
+  if (parsed.data.privacyAccepted !== true) {
+    return res.status(400).json({ error: "privacy_required" });
   }
 
   const { email, phone, password, salonName, salonSlug } = parsed.data;
@@ -51,6 +56,7 @@ router.post("/register", async (req, res) => {
       role: "OWNER",
       salonId: salon.id,
       active: false,
+      privacyPolicyAcceptedAt: new Date(),
     },
   });
   await prisma.userSalon.create({

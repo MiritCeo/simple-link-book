@@ -58,6 +58,11 @@ export default function PrivacyPolicyPage() {
               świadczenia usługi (logowanie, rezerwacje, powiadomienia, ulubione salony, oceny wizyt).
             </li>
             <li>
+              <strong className="text-foreground">Konto właściciela / personelu salonu (panel)</strong> — e-mail, telefon,
+              hasło (hash), dane salonu i powiązane informacje biznesowe w systemie: w celu świadczenia usługi Honly dla
+              salonu (kalendarz, CRM, powiadomienia, magazyn itd.).
+            </li>
+            <li>
               <strong className="text-foreground">Rezerwacje i wizyty</strong> — dane niezbędne do umówienia i realizacji
               wizyty u wybranego salonu (m.in. identyfikacja w systemie salonu).
             </li>

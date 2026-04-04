@@ -3,6 +3,7 @@ import { AlertCircle, BadgeCheck } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { registerSalon } from "@/lib/api";
 import AuthSplitLayout from "./AuthSplitLayout";
 
@@ -24,10 +25,17 @@ export default function SalonRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   const slugPreview = useMemo(() => slugify(salonSlug || salonName), [salonSlug, salonName]);
   const canSubmit =
-    !loading && email.length > 3 && phone.trim().length >= 6 && password.length >= 8 && salonName.trim().length >= 2 && slugPreview.length >= 2;
+    !loading &&
+    privacyAccepted &&
+    email.length > 3 &&
+    phone.trim().length >= 6 &&
+    password.length >= 8 &&
+    salonName.trim().length >= 2 &&
+    slugPreview.length >= 2;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,11 +49,13 @@ export default function SalonRegisterPage() {
         password,
         salonName: salonName.trim(),
         salonSlug: slugPreview,
+        privacyAccepted: true,
       });
       setSubmittedEmail(email.trim());
     } catch (err: any) {
       const code = err?.message;
       if (code === "email_taken") setError("Ten adres e-mail jest już zajęty.");
+      else if (code === "privacy_required") setError("Musisz zaakceptować politykę prywatności.");
       else setError(err?.message || "Nie udało się utworzyć konta salonu.");
     } finally {
       setLoading(false);
@@ -126,15 +136,35 @@ export default function SalonRegisterPage() {
           <p className="mt-1 text-[11px] text-muted-foreground">Podgląd: /s/{slugPreview || "nazwa-salonu"}</p>
         </div>
 
+        <label className="flex items-start gap-3 cursor-pointer text-left rounded-xl border border-border bg-muted/30 px-3 py-3">
+          <Checkbox
+            id="privacy-salon-register"
+            checked={privacyAccepted}
+            onCheckedChange={(v) => setPrivacyAccepted(v === true)}
+            className="mt-0.5"
+          />
+          <span className="text-xs text-muted-foreground leading-relaxed">
+            Oświadczam, że zapoznałem(-am) się z{' '}
+            <Link to="/polityka-prywatnosci" className="text-primary font-medium underline underline-offset-2">
+              polityką prywatności
+            </Link>{' '}
+            i akceptuję przetwarzanie moich danych osobowych w zakresie niezbędnym do założenia konta właściciela salonu i
+            korzystania z usługi Honly.
+          </span>
+        </label>
+
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <Button type="submit" size="lg" className="w-full h-12 rounded-xl" disabled={!canSubmit}>
           {loading ? "Tworzenie konta..." : "Załóż konto salonu"}
         </Button>
 
-        <div className="pt-1 text-center">
-          <Link to="/login" className="text-xs text-muted-foreground hover:underline">
+        <div className="pt-1 text-center space-y-1">
+          <Link to="/login" className="text-xs text-muted-foreground hover:underline block">
             Masz już konto? Zaloguj się
+          </Link>
+          <Link to="/polityka-prywatnosci" className="text-xs text-muted-foreground hover:underline block">
+            Polityka prywatności
           </Link>
         </div>
 
