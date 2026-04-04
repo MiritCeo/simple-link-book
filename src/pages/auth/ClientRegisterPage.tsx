@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   clientRegisterSessionPhone,
   clientRegisterSessionResendCode,
@@ -24,6 +25,7 @@ function registerFlowError(err: unknown): string {
     too_many_attempts: "Za dużo nieudanych prób — wyślij nowy kod.",
     phone_linked_other_account: "Ten numer jest już powiązany z innym kontem klienta.",
     internal_error: "Błąd serwera. Spróbuj ponownie później.",
+    privacy_required: "Musisz zaakceptować politykę prywatności, aby utworzyć konto.",
   };
   return map[msg] ?? msg;
 }
@@ -43,6 +45,7 @@ export default function ClientRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
 
   const formatPhonePL = (input: string) => {
     const digits = input.replace(/\D/g, "");
@@ -57,6 +60,10 @@ export default function ClientRegisterPage() {
 
   const onStep1 = async (e: FormEvent) => {
     e.preventDefault();
+    if (!privacyAccepted) {
+      setError("Zaakceptuj politykę prywatności, aby kontynuować.");
+      return;
+    }
     if (password.length < 8 || password !== confirmPassword) {
       setError("Hasło min. 8 znaków i oba pola muszą być zgodne.");
       return;
@@ -65,7 +72,12 @@ export default function ClientRegisterPage() {
     setError(null);
     setInfo(null);
     try {
-      const res = await clientRegisterSessionStart({ email: email.trim(), password, confirmPassword });
+      const res = await clientRegisterSessionStart({
+        email: email.trim(),
+        password,
+        confirmPassword,
+        privacyAccepted: true,
+      });
       setSessionToken(res.sessionToken);
       setLinkedSalonUser(res.linkedSalonUser);
       setStep(2);
@@ -203,8 +215,29 @@ export default function ClientRegisterPage() {
                 onChange={e => setConfirmPassword(e.target.value)}
               />
             </div>
+            <label className="flex items-start gap-3 cursor-pointer text-left rounded-xl border border-border bg-muted/30 px-3 py-3">
+              <Checkbox
+                checked={privacyAccepted}
+                onCheckedChange={v => setPrivacyAccepted(v === true)}
+                className="mt-0.5"
+                id="privacy-register"
+              />
+              <span className="text-xs text-muted-foreground leading-relaxed">
+                Oświadczam, że zapoznałem(-am) się z{' '}
+                <Link to="/polityka-prywatnosci" className="text-primary underline underline-offset-2 font-medium">
+                  polityką prywatności
+                </Link>{' '}
+                i akceptuję przetwarzanie moich danych osobowych w zakresie niezbędnym do założenia i korzystania z konta
+                klienta Honly.
+              </span>
+            </label>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" size="lg" className="w-full h-14 rounded-2xl text-base" disabled={loading}>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full h-14 rounded-2xl text-base"
+              disabled={loading || !privacyAccepted}
+            >
               {loading ? "Zapisywanie…" : "Dalej"}
             </Button>
           </form>
@@ -275,6 +308,9 @@ export default function ClientRegisterPage() {
 
         <Link to="/konto/logowanie" className="text-xs text-muted-foreground text-center block hover:underline mt-8">
           Masz już konto? Zaloguj się
+        </Link>
+        <Link to="/polityka-prywatnosci" className="text-xs text-muted-foreground text-center block hover:underline mt-2">
+          Polityka prywatności
         </Link>
       </div>
     </div>

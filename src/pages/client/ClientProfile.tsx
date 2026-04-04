@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { PageTransition } from '@/components/motion';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { changeClientPassword, getClientMe, updateClientProfile } from '@/lib/api';
 
 export default function ClientProfile() {
@@ -261,9 +261,19 @@ export default function ClientProfile() {
                   <LogOut className="w-4 h-4" />Wyloguj się
                 </Button>
               </motion.div>
-              <Button variant="ghost" className="w-full rounded-xl h-11 gap-2 justify-start text-destructive hover:text-destructive">
+              <Button
+                variant="ghost"
+                className="w-full rounded-xl h-11 gap-2 justify-start text-destructive hover:text-destructive"
+                onClick={() => navigate('/konto/usun-konto')}
+              >
                 Usuń konto
               </Button>
+              <Link
+                to="/polityka-prywatnosci"
+                className="block text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pt-1"
+              >
+                Polityka prywatności
+              </Link>
             </div>
           </motion.div>
         </div>

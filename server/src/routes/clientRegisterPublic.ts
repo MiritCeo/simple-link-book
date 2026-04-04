@@ -105,13 +105,14 @@ async function ensureUnassignedSalon(tx: Prisma.TransactionClient) {
   });
 }
 
-/** Krok 1: email + hasło */
+/** Krok 1: email + hasło (+ wymagana akceptacja polityki prywatności) */
 router.post("/client/register/session", async (req, res) => {
   const schema = z
     .object({
       email: emailSchema,
       password: passwordSchema,
       confirmPassword: passwordSchema,
+      privacyAccepted: z.boolean(),
     })
     .refine(d => d.password === d.confirmPassword, { message: "password_mismatch" });
 
@@ -122,6 +123,10 @@ router.post("/client/register/session", async (req, res) => {
       return res.status(400).json({ error: "password_mismatch" });
     }
     return res.status(400).json({ error: "invalid_payload" });
+  }
+
+  if (parsed.data.privacyAccepted !== true) {
+    return res.status(400).json({ error: "privacy_required" });
   }
 
   const { email, password } = parsed.data;
@@ -146,6 +151,7 @@ router.post("/client/register/session", async (req, res) => {
       sessionToken,
       email,
       passwordHash,
+      privacyAcceptedAt: new Date(),
     },
   });
 
@@ -238,6 +244,9 @@ router.post("/client/register/session/verify", async (req, res) => {
     where: { sessionToken: parsed.data.sessionToken },
   });
   if (!session) return res.status(404).json({ error: "session_not_found" });
+  if (!session.privacyAcceptedAt) {
+    return res.status(400).json({ error: "privacy_required" });
+  }
   if (!session.phoneDigits || !session.codeHash || !session.codeExpiresAt) {
     return res.status(400).json({ error: "phone_not_set" });
   }
@@ -303,6 +312,7 @@ router.post("/client/register/session/verify", async (req, res) => {
           email: session.email,
           passwordHash: session.passwordHash,
           active: true,
+          privacyPolicyAcceptedAt: session.privacyAcceptedAt,
         },
       });
 

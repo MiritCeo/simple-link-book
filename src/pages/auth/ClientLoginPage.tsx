@@ -77,6 +77,9 @@ export default function ClientLoginPage() {
         <Link to="/konto/reset-hasla" className="text-xs text-muted-foreground text-center block hover:underline">
           Nie pamiętasz hasła?
         </Link>
+        <Link to="/polityka-prywatnosci" className="text-xs text-muted-foreground text-center block hover:underline">
+          Polityka prywatności
+        </Link>
         <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={() => navigate(-1)}>
           Wróć
         </Button>

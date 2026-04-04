@@ -288,6 +288,8 @@ model ClientAccount {
   socialUserId String?
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+  /// Zgoda na politykę prywatności przy rejestracji (ślad audytowy)
+  privacyPolicyAcceptedAt DateTime?
 
   client   Client @relation(fields: [clientId], references: [id])
   clientId String @unique
@@ -344,6 +346,8 @@ model ClientRegistrationSession {
   codeAttempts    Int       @default(0)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  /// Akceptacja polityki prywatności przy starcie sesji (wymagane do utworzenia konta)
+  privacyAcceptedAt DateTime?
 
   @@index([email])
 }

@@ -38,6 +38,8 @@ import ClientProfile from "./pages/client/ClientProfile";
 import ClientSalons from "./pages/client/ClientSalons";
 import SuperAdminPage from "./pages/admin/SuperAdminPage";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicyPage from "./pages/legal/PrivacyPolicyPage";
+import DeleteAccountPage from "./pages/client/DeleteAccountPage";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +63,7 @@ const App = () => (
           <Route path="/konto/rejestracja" element={<ClientRegisterPage />} />
           <Route path="/konto/reset-hasla" element={<ClientResetPasswordPage />} />
           <Route path="/wybierz-salon" element={<SalonSelectPage />} />
+          <Route path="/polityka-prywatnosci" element={<PrivacyPolicyPage />} />
 
           {/* Client panel */}
           <Route path="/konto" element={<ClientLayout />}>
@@ -69,6 +72,7 @@ const App = () => (
             <Route path="ulubione" element={<ClientSalons mode="favorites" />} />
             <Route path="salony" element={<ClientSalons mode="explore" />} />
             <Route path="profil" element={<ClientProfile />} />
+            <Route path="usun-konto" element={<DeleteAccountPage />} />
           </Route>
 
           {/* Super admin */}

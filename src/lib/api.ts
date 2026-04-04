@@ -147,6 +147,19 @@ export async function getClientMe() {
   return clientApiFetch<{ client: any; salonPanelAvailable?: boolean }>("/api/client/me");
 }
 
+/** Usuwa konto klienta w aplikacji; czyści token z localStorage po sukcesie. */
+export async function deleteClientAccount(payload: { password: string }) {
+  const res = await clientApiFetch<{ ok: boolean }>("/api/client/account/delete", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  localStorage.removeItem("client_token");
+  localStorage.removeItem("client_id");
+  localStorage.removeItem("client_salon_id");
+  localStorage.removeItem("client_salons");
+  return res;
+}
+
 export async function getClientAppointments() {
   return clientApiFetch<{ appointments: any[] }>("/api/client/appointments");
 }
@@ -324,8 +337,13 @@ export async function registerClientFromBooking(payload: { token: string; email?
   });
 }
 
-/** Rejestracja klienta — krok 1 (publiczne API, także mobile) */
-export async function clientRegisterSessionStart(payload: { email: string; password: string; confirmPassword: string }) {
+/** Rejestracja klienta — krok 1 (publiczne API, także mobile); privacyAccepted musi być true */
+export async function clientRegisterSessionStart(payload: {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  privacyAccepted: boolean;
+}) {
   return apiFetch<{ sessionToken: string; linkedSalonUser: boolean }>("/api/public/client/register/session", {
     method: "POST",
     body: JSON.stringify(payload),

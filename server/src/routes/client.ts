@@ -852,5 +852,54 @@ router.delete("/favorites/google-places/:id", async (req: ClientAuthRequest, res
   return res.json({ ok: true });
 });
 
+/** Usunięcie konta aplikacji klienta: logowanie, ulubione, oceny, tokeny push; dane CRM w salonach są anonimizowane. */
+router.post("/account/delete", async (req: ClientAuthRequest, res) => {
+  const schema = z.object({
+    password: z.string().min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Podaj hasło do konta." });
+  }
+
+  const ctx = await getAccountContext(req);
+  if (!ctx) return res.status(404).json({ error: "Nie znaleziono konta." });
+
+  const ok = await bcrypt.compare(parsed.data.password, ctx.account.passwordHash);
+  if (!ok) {
+    return res.status(400).json({ error: "Nieprawidłowe hasło." });
+  }
+
+  const accountId = ctx.account.id;
+  const accountEmail = ctx.account.email.trim().toLowerCase();
+  const clientIds = ctx.clientIds;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.clientPasswordReset.deleteMany({ where: { clientAccountId: accountId } });
+      await tx.clientAccountSalon.deleteMany({ where: { clientAccountId: accountId } });
+      await tx.clientAccount.delete({ where: { id: accountId } });
+      for (const cid of clientIds) {
+        await tx.client.update({
+          where: { id: cid },
+          data: {
+            name: "Konto usunięte",
+            phone: `deleted-${cid.replace(/[^a-z0-9]/gi, "").slice(-24) || cid}`,
+            email: null,
+            notes: null,
+            allergies: null,
+          },
+        });
+      }
+      await tx.clientRegistrationSession.deleteMany({ where: { email: accountEmail } });
+    });
+  } catch (e) {
+    console.error("client account/delete", e);
+    return res.status(500).json({ error: "Nie udało się usunąć konta. Spróbuj ponownie lub skontaktuj się z pomocą." });
+  }
+
+  return res.json({ ok: true });
+});
+
 export default router;
 
