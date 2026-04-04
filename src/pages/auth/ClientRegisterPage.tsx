@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +32,7 @@ function registerFlowError(err: unknown): string {
 
 export default function ClientRegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [linkedSalonUser, setLinkedSalonUser] = useState(false);
@@ -224,7 +225,11 @@ export default function ClientRegisterPage() {
               />
               <span className="text-xs text-muted-foreground leading-relaxed">
                 Oświadczam, że zapoznałem(-am) się z{' '}
-                <Link to="/polityka-prywatnosci" className="text-primary underline underline-offset-2 font-medium">
+                <Link
+                  to="/polityka-prywatnosci"
+                  state={{ from: location.pathname }}
+                  className="text-primary underline underline-offset-2 font-medium"
+                >
                   polityką prywatności
                 </Link>{' '}
                 i akceptuję przetwarzanie moich danych osobowych w zakresie niezbędnym do założenia i korzystania z konta
@@ -309,7 +314,11 @@ export default function ClientRegisterPage() {
         <Link to="/konto/logowanie" className="text-xs text-muted-foreground text-center block hover:underline mt-8">
           Masz już konto? Zaloguj się
         </Link>
-        <Link to="/polityka-prywatnosci" className="text-xs text-muted-foreground text-center block hover:underline mt-2">
+        <Link
+          to="/polityka-prywatnosci"
+          state={{ from: location.pathname }}
+          className="text-xs text-muted-foreground text-center block hover:underline mt-2"
+        >
           Polityka prywatności
         </Link>
       </div>

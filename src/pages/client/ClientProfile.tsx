@@ -5,11 +5,12 @@ import { Input } from '@/components/ui/input';
 import { PageTransition } from '@/components/motion';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { changeClientPassword, getClientMe, updateClientProfile } from '@/lib/api';
 
 export default function ClientProfile() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [profile, setProfile] = useState({
     name: '',
     phone: '',
@@ -270,6 +271,7 @@ export default function ClientProfile() {
               </Button>
               <Link
                 to="/polityka-prywatnosci"
+                state={{ from: location.pathname }}
                 className="block text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground pt-1"
               >
                 Polityka prywatności

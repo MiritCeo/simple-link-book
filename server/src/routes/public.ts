@@ -629,6 +629,9 @@ router.post("/salons/:slug/appointments", async (req, res) => {
   return res.json({ appointment, cancelToken: cancelToken.token });
 });
 
+const CANCEL_FLOW_HINT_PL =
+  "Kolejność: (1) POST /api/public/cancel/:token/request-code — wysyła SMS z 6-cyfrowym kodem; (2) POST /api/public/cancel/:token z JSON {\"code\":\"123456\"} — anuluje lub zmienia termin.";
+
 async function verifyCancelActionCodeOrFail(
   record: {
     id: string;
@@ -639,13 +642,28 @@ async function verifyCancelActionCodeOrFail(
   code: string,
 ) {
   if (!record.verificationCodeHash || !record.verificationCodeExpiresAt) {
-    return { ok: false as const, status: 400, error: "verification_code_required" };
+    return {
+      ok: false as const,
+      status: 400,
+      error: "verification_code_required",
+      message: `Brak aktywnego kodu SMS dla tego linku. ${CANCEL_FLOW_HINT_PL}`,
+    };
   }
   if (record.verificationCodeExpiresAt.getTime() < Date.now()) {
-    return { ok: false as const, status: 400, error: "verification_code_expired" };
+    return {
+      ok: false as const,
+      status: 400,
+      error: "verification_code_expired",
+      message: "Kod wygasł — wyślij nowy: POST /api/public/cancel/:token/request-code",
+    };
   }
   if (record.verificationCodeAttempts >= CANCEL_CODE_MAX_ATTEMPTS) {
-    return { ok: false as const, status: 429, error: "verification_too_many_attempts" };
+    return {
+      ok: false as const,
+      status: 429,
+      error: "verification_too_many_attempts",
+      message: "Zbyt wiele błędnych prób — poproś o nowy kod SMS.",
+    };
   }
   const valid = await bcrypt.compare(code.trim(), record.verificationCodeHash);
   if (!valid) {
@@ -653,7 +671,7 @@ async function verifyCancelActionCodeOrFail(
       where: { id: record.id },
       data: { verificationCodeAttempts: { increment: 1 } } as any,
     });
-    return { ok: false as const, status: 400, error: "verification_code_invalid" };
+    return { ok: false as const, status: 400, error: "verification_code_invalid", message: "Nieprawidłowy kod SMS." };
   }
   return { ok: true as const };
 }
@@ -801,7 +819,10 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
   if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
   const verification = await verifyCancelActionCodeOrFail(record as any, parsed.data.code);
   if (!verification.ok) {
-    return res.status(verification.status).json({ error: verification.error });
+    return res.status(verification.status).json({
+      error: verification.error,
+      ...(verification.message ? { message: verification.message } : {}),
+    });
   }
   if (record.appointment.status === "CANCELLED") {
     return res.status(400).json({ error: "Wizyta jest anulowana" });
@@ -850,8 +871,13 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
 router.post("/cancel/:token", async (req, res) => {
   const token = req.params.token;
   const schema = z.object({ code: z.string().min(4).max(8) });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "verification_code_required" });
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "verification_code_required",
+      message: `Wymagane jest ciało JSON z polem code (6 cyfr z SMS), np. {"code":"123456"}. ${CANCEL_FLOW_HINT_PL}`,
+    });
+  }
   const record = await prisma.appointmentToken.findFirst({
     where: {
       token,
@@ -873,7 +899,10 @@ router.post("/cancel/:token", async (req, res) => {
   if (!record) return res.status(404).json({ error: "Link jest nieprawidłowy lub wygasł" });
   const verification = await verifyCancelActionCodeOrFail(record as any, parsed.data.code);
   if (!verification.ok) {
-    return res.status(verification.status).json({ error: verification.error });
+    return res.status(verification.status).json({
+      error: verification.error,
+      ...(verification.message ? { message: verification.message } : {}),
+    });
   }
 
   const appointment = record.appointment;

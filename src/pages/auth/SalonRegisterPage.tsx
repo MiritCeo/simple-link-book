@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { AlertCircle, BadgeCheck } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,6 +17,7 @@ const slugify = (value: string) =>
 
 export default function SalonRegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -145,7 +146,11 @@ export default function SalonRegisterPage() {
           />
           <span className="text-xs text-muted-foreground leading-relaxed">
             Oświadczam, że zapoznałem(-am) się z{' '}
-            <Link to="/polityka-prywatnosci" className="text-primary font-medium underline underline-offset-2">
+            <Link
+              to="/polityka-prywatnosci"
+              state={{ from: location.pathname }}
+              className="text-primary font-medium underline underline-offset-2"
+            >
               polityką prywatności
             </Link>{' '}
             i akceptuję przetwarzanie moich danych osobowych w zakresie niezbędnym do założenia konta właściciela salonu i
@@ -163,7 +168,7 @@ export default function SalonRegisterPage() {
           <Link to="/login" className="text-xs text-muted-foreground hover:underline block">
             Masz już konto? Zaloguj się
           </Link>
-          <Link to="/polityka-prywatnosci" className="text-xs text-muted-foreground hover:underline block">
+          <Link to="/polityka-prywatnosci" state={{ from: location.pathname }} className="text-xs text-muted-foreground hover:underline block">
             Polityka prywatności
           </Link>
         </div>

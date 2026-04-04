@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { deleteClientAccount } from '@/lib/api';
 
 export default function DeleteAccountPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [password, setPassword] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -42,7 +43,7 @@ export default function DeleteAccountPage() {
       <p className="text-sm text-muted-foreground mb-6">
         Trwale usuniesz konto w aplikacji Honly oraz powiązane dane (logowanie, ulubione, oceny, powiadomienia). Dane
         widoczne u salonów w ramach historii wizyt mogą zostać zanonimizowane —{' '}
-        <Link to="/polityka-prywatnosci" className="text-primary underline underline-offset-2">
+        <Link to="/polityka-prywatnosci" state={{ from: location.pathname }} className="text-primary underline underline-offset-2">
           polityka prywatności
         </Link>
         .

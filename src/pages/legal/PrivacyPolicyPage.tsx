@@ -1,20 +1,42 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { PageTransition } from '@/components/motion';
 
 const publicAppUrl = (import.meta.env.VITE_PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, '') || 'https://honly.app';
 
+export type PrivacyPolicyLocationState = { from?: string };
+
 export default function PrivacyPolicyPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as PrivacyPolicyLocationState | null)?.from;
+
+  const handleBack = () => {
+    if (typeof from === 'string' && from.startsWith('/')) {
+      navigate(from, { replace: false });
+      return;
+    }
+    navigate(-1);
+  };
+
   return (
     <PageTransition className="min-h-screen bg-background">
       <header className="sticky top-0 z-10 bg-card/95 backdrop-blur border-b border-border">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
-          <Link
-            to="/konto/logowanie"
+          <button
+            type="button"
+            onClick={handleBack}
             className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="w-4 h-4" />
-            Logowanie
+            Wróć
+          </button>
+          <Link
+            to="/konto/logowanie"
+            state={{ backBeforeClientLogin: from }}
+            className="ml-auto text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            Logowanie klienta
           </Link>
         </div>
       </header>
@@ -121,7 +143,7 @@ export default function PrivacyPolicyPage() {
           <p className="text-muted-foreground leading-relaxed">
             <strong className="text-foreground">Usunięcie konta w aplikacji</strong> możesz zainicjować w ustawieniach
             konta (strona:{' '}
-            <Link to="/konto/usun-konto" className="text-primary underline underline-offset-2">
+            <Link to="/konto/usun-konto" state={{ from: location.pathname }} className="text-primary underline underline-offset-2">
               {publicAppUrl}/konto/usun-konto
             </Link>
             ) po zalogowaniu. Po potwierdzeniu usuwane są dane logowania i powiązane z kontem rekordy w aplikacji (m.in.

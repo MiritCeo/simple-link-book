@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { clientLogin } from "@/lib/api";
@@ -7,12 +7,23 @@ import AuthSplitLayout from "./AuthSplitLayout";
 
 export default function ClientLoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit = email.length > 3 && password.length >= 8 && !loading;
+
+  const backBeforeClientLogin = (location.state as { backBeforeClientLogin?: string } | null)?.backBeforeClientLogin;
+
+  const handleBack = () => {
+    if (typeof backBeforeClientLogin === "string" && backBeforeClientLogin.startsWith("/")) {
+      navigate(backBeforeClientLogin);
+      return;
+    }
+    navigate(-1);
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -77,12 +88,21 @@ export default function ClientLoginPage() {
         <Link to="/konto/reset-hasla" className="text-xs text-muted-foreground text-center block hover:underline">
           Nie pamiętasz hasła?
         </Link>
-        <Link to="/polityka-prywatnosci" className="text-xs text-muted-foreground text-center block hover:underline">
+        <Link
+          to="/polityka-prywatnosci"
+          state={{ from: location.pathname }}
+          className="text-xs text-muted-foreground text-center block hover:underline"
+        >
           Polityka prywatności
         </Link>
-        <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={() => navigate(-1)}>
-          Wróć
-        </Button>
+        <div className="flex flex-col gap-2 pt-1">
+          <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={handleBack}>
+            Wróć
+          </Button>
+          <Button type="button" variant="ghost" className="w-full h-10 rounded-2xl text-xs text-muted-foreground" onClick={() => navigate("/login")}>
+            Logowanie do panelu salonu (właściciel / personel)
+          </Button>
+        </div>
       </form>
     </AuthSplitLayout>
   );
