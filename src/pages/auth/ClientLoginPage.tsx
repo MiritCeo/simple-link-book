@@ -15,16 +15,6 @@ export default function ClientLoginPage() {
 
   const canSubmit = email.length > 3 && password.length >= 8 && !loading;
 
-  const backBeforeClientLogin = (location.state as { backBeforeClientLogin?: string } | null)?.backBeforeClientLogin;
-
-  const handleBack = () => {
-    if (typeof backBeforeClientLogin === "string" && backBeforeClientLogin.startsWith("/")) {
-      navigate(backBeforeClientLogin);
-      return;
-    }
-    navigate(-1);
-  };
-
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -95,14 +85,9 @@ export default function ClientLoginPage() {
         >
           Polityka prywatności
         </Link>
-        <div className="flex flex-col gap-2 pt-1">
-          <Button type="button" variant="outline" className="w-full h-12 rounded-2xl" onClick={handleBack}>
-            Wróć
-          </Button>
-          <Button type="button" variant="ghost" className="w-full h-10 rounded-2xl text-xs text-muted-foreground" onClick={() => navigate("/login")}>
-            Logowanie do panelu salonu (właściciel / personel)
-          </Button>
-        </div>
+        <Button type="button" variant="ghost" className="w-full h-10 rounded-2xl text-xs text-muted-foreground pt-2" onClick={() => navigate("/login")}>
+          Logowanie do panelu salonu (właściciel / personel)
+        </Button>
       </form>
     </AuthSplitLayout>
   );

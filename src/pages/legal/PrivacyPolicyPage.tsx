@@ -33,7 +33,6 @@ export default function PrivacyPolicyPage() {
           </button>
           <Link
             to="/konto/logowanie"
-            state={{ backBeforeClientLogin: from }}
             className="ml-auto text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
           >
             Logowanie klienta
