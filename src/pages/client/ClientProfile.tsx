@@ -8,6 +8,28 @@ import { toast } from 'sonner';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { changeClientPassword, getClientMe, updateClientProfile } from '@/lib/api';
 
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
+}
+
+/** `client.createdAt` z API (ISO) → np. „kwietnia 2026” */
+function memberSinceLabel(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    const month = d.toLocaleDateString('pl-PL', { month: 'long' });
+    const year = d.getFullYear();
+    const m = month.charAt(0).toUpperCase() + month.slice(1);
+    return `Klient od ${m} ${year}`;
+  } catch {
+    return null;
+  }
+}
+
 export default function ClientProfile() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,6 +44,7 @@ export default function ClientProfile() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [salonPanelAvailable, setSalonPanelAvailable] = useState(false);
+  const [memberSince, setMemberSince] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -34,6 +57,7 @@ export default function ClientProfile() {
           email: res.client?.email || '',
         });
         setSalonPanelAvailable(!!res.salonPanelAvailable);
+        setMemberSince(memberSinceLabel(res.client?.createdAt));
       })
       .catch(() => {});
     return () => { mounted = false; };
@@ -107,11 +131,11 @@ export default function ClientProfile() {
           {/* Avatar */}
           <div className="flex items-center gap-4 mb-5">
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="font-bold text-lg text-primary">JM</span>
+              <span className="font-bold text-lg text-primary">{initialsFromName(profile.name || '?')}</span>
             </div>
             <div>
               <p className="font-bold">{profile.name}</p>
-              <p className="text-xs text-muted-foreground">Klient od stycznia 2025</p>
+              {memberSince && <p className="text-xs text-muted-foreground">{memberSince}</p>}
             </div>
           </div>
 

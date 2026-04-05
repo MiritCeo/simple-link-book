@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarDays, Clock, MapPin, ArrowRight, Repeat, Star, Phone } from 'lucide-react';
+import { CalendarDays, Clock, MapPin, ArrowRight, Repeat, Star, Phone, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { statusLabels, statusColors, type Appointment } from '@/data/mockData';
@@ -32,6 +32,13 @@ const mapStatus = (status?: string): Appointment['status'] => {
 };
 
 const toDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`);
+
+function salonInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '—';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ''}${parts[parts.length - 1][0] ?? ''}`.toUpperCase();
+}
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
@@ -120,6 +127,13 @@ export default function ClientDashboard() {
 
   const salonInfo = rawAppointments[0]?.salon;
   const activeSalon = salons.find(s => s.id === activeSalonId) || salonInfo;
+  /** Salon z ostatniej rezerwacji lub z wybranego kontekstu konta — skrót do kolejnej rezerwacji. */
+  const hasSalonContext = Boolean(
+    activeSalon?.name && (activeSalon.slug || (activeSalon as { id?: string }).id),
+  );
+  const isEmptyJourney =
+    upcomingAppointments.length === 0 && quickBookOptions.length === 0;
+
   const totalSpent = rawAppointments
     .filter(a => a.status === 'COMPLETED')
     .reduce((sum, a) => sum + (a.appointmentServices || []).reduce((s: number, svc: any) => s + (svc.service?.price || 0), 0), 0);
@@ -129,8 +143,42 @@ export default function ClientDashboard() {
       {/* Greeting */}
       <div className="mb-6">
         <h1 className="text-xl font-bold lg:text-2xl">Cześć, {client?.name || '👋'}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Co nowego w Twoich wizytach?</p>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {isEmptyJourney
+            ? 'Znajdź salon i umów się na wizytę — wtedy zobaczysz tu podsumowanie.'
+            : 'Co nowego w Twoich wizytach?'}
+        </p>
       </div>
+
+      {isEmptyJourney && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/10 to-primary/5 p-5 mb-6"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-11 h-11 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+              <Compass className="w-5 h-5 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-bold text-lg leading-snug">Umów pierwszą wizytę</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Przeglądaj salony w katalogu albo wybierz coś z ulubionych — rezerwacja jest w kilku krokach.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                <Button className="rounded-xl h-11 gap-2" onClick={() => navigate('/konto/salony')}>
+                  <Compass className="w-4 h-4" />
+                  Przeglądaj salony
+                </Button>
+                <Button variant="outline" className="rounded-xl h-11" onClick={() => navigate('/konto/ulubione')}>
+                  Ulubione
+                </Button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Next appointment - hero card */}
       {nextAppointment && (
@@ -195,7 +243,11 @@ export default function ClientDashboard() {
           </div>
           <MotionList className="space-y-2 mb-6">
           {quickBookOptions.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-6">Brak historii do szybkiego rebookingu</p>
+            <p className="text-sm text-muted-foreground text-center py-6">
+              {isEmptyJourney
+                ? 'Po pierwszej zakończonej wizycie pojawią się tu skróty do ponownego umówienia.'
+                : 'Brak historii do szybkiego ponownego umówienia.'}
+            </p>
           )}
           {quickBookOptions.map(opt => (
               <MotionItem key={opt.service}>
@@ -250,51 +302,77 @@ export default function ClientDashboard() {
           )}
         </div>
 
-        {/* Right: salon info */}
+        {/* Right: salon z ostatniej rezerwacji / kontekstu — skrót do kolejnej wizyty */}
         <div>
+          {hasSalonContext && activeSalon && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.4 }}
             className="bg-card rounded-2xl p-5 border border-border mb-4"
           >
-            <h2 className="font-semibold mb-3">Mój salon</h2>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+              Ostatnia wizyta w salonie
+            </p>
+            <h2 className="font-semibold text-base leading-snug">Wróć i umów kolejną wizytę</h2>
+            <p className="text-xs text-muted-foreground mt-1.5 mb-3 leading-relaxed">
+              Chodzi o ten sam salon co przy ostatniej rezerwacji (także nadchodzącej). Przy kilku salonach w koncie możesz widzieć inny — ustawiony jako kontekst.
+            </p>
             <div className="flex items-start gap-3 mb-4">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="font-bold text-primary text-sm">
-                  {activeSalon?.name ? activeSalon.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2) : 'PB'}
+                  {salonInitials(activeSalon.name)}
                 </span>
               </div>
-              <div>
-                <p className="font-bold">{activeSalon?.name || 'Salon'}</p>
-                <p className="text-xs text-muted-foreground">{activeSalon?.description || '—'}</p>
+              <div className="min-w-0">
+                <p className="font-bold">{activeSalon.name}</p>
+                {activeSalon.description ? (
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-3">{activeSalon.description}</p>
+                ) : null}
               </div>
             </div>
             <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <MapPin className="w-4 h-4 shrink-0" />
-                <span>{activeSalon?.address || '—'}</span>
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Clock className="w-4 h-4 shrink-0" />
-                <span>{activeSalon?.hours || '—'}</span>
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Phone className="w-4 h-4 shrink-0" />
-                <span>{activeSalon?.phone || '—'}</span>
-              </div>
+              {activeSalon.address ? (
+                <div className="flex items-start gap-2 text-muted-foreground">
+                  <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{activeSalon.address}</span>
+                </div>
+              ) : null}
+              {activeSalon.hours ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="w-4 h-4 shrink-0" />
+                  <span>{activeSalon.hours}</span>
+                </div>
+              ) : null}
+              {activeSalon.phone ? (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Phone className="w-4 h-4 shrink-0" />
+                  <a href={`tel:${String(activeSalon.phone).replace(/\s/g, '')}`} className="underline-offset-2 hover:underline text-foreground">
+                    {activeSalon.phone}
+                  </a>
+                </div>
+              ) : null}
             </div>
             <div className="flex gap-2 mt-4">
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="flex-1">
-                <Button onClick={() => activeSalon?.slug && navigate(`/s/${activeSalon.slug}`)} className="w-full rounded-xl h-10 gap-1.5">
+                <Button
+                  onClick={() => activeSalon.slug && navigate(`/s/${activeSalon.slug}`)}
+                  className="w-full rounded-xl h-10 gap-1.5"
+                  disabled={!activeSalon.slug}
+                >
                   <CalendarDays className="w-4 h-4" />Umów wizytę
                 </Button>
               </motion.div>
-              <Button variant="outline" size="icon" className="rounded-xl h-10 w-10 shrink-0">
-                <Phone className="w-4 h-4" />
-              </Button>
+              {activeSalon.phone ? (
+                <Button variant="outline" size="icon" className="rounded-xl h-10 w-10 shrink-0" asChild>
+                  <a href={`tel:${String(activeSalon.phone).replace(/\s/g, '')}`} aria-label="Zadzwoń do salonu">
+                    <Phone className="w-4 h-4" />
+                  </a>
+                </Button>
+              ) : null}
             </div>
           </motion.div>
+          )}
 
           {/* Stats */}
           <motion.div
@@ -305,8 +383,11 @@ export default function ClientDashboard() {
           >
             {[
               { label: 'Wizyt łącznie', value: String(appointments.length) },
-              { label: 'Ostatnia', value: pastAppointments[0] ? formatDate(pastAppointments[0].date).split(', ')[1] : '—' },
-              { label: 'Wydane', value: totalSpent ? `${totalSpent} zł` : '—' },
+              {
+                label: 'Ostatnia',
+                value: pastAppointments[0] ? formatDate(pastAppointments[0].date).split(', ')[1] : 'Brak',
+              },
+              { label: 'Wydane', value: totalSpent > 0 ? `${totalSpent} zł` : '0 zł' },
             ].map((stat) => (
               <div key={stat.label} className="bg-card rounded-xl p-3 border border-border text-center">
                 <p className="text-lg font-bold">{stat.value}</p>
