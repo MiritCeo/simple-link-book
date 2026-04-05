@@ -441,28 +441,33 @@ router.use(clientAuth);
 
 // FCM: rejestracja tokenu urządzenia (jedno konto -> wiele urządzeń)
 router.post("/push-token", async (req: ClientAuthRequest, res) => {
-  const schema = z.object({
-    token: z.string().min(10),
-    // opcjonalne, jeśli mobile będzie chciało wysłać dodatkowe meta
-    platform: z.string().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+  try {
+    const schema = z.object({
+      token: z.string().min(10),
+      // opcjonalne, jeśli mobile będzie chciało wysłać dodatkowe meta
+      platform: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
 
-  const account = await prisma.clientAccount.findUnique({
-    where: { clientId: req.client!.clientId },
-    select: { id: true },
-  });
-  if (!account) return res.status(404).json({ error: "account_not_found" });
+    const account = await prisma.clientAccount.findUnique({
+      where: { clientId: req.client!.clientId },
+      select: { id: true },
+    });
+    if (!account) return res.status(404).json({ error: "account_not_found" });
 
-  const p = prisma as any;
-  await p.pushDeviceToken.upsert({
-    where: { token: parsed.data.token },
-    update: { clientAccountId: account.id },
-    create: { token: parsed.data.token, clientAccountId: account.id },
-  });
+    const p = prisma as any;
+    await p.pushDeviceToken.upsert({
+      where: { token: parsed.data.token },
+      update: { clientAccountId: account.id },
+      create: { token: parsed.data.token, clientAccountId: account.id },
+    });
 
-  return res.json({ ok: true });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("[client/push-token]", e);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 router.get("/salons", async (req: ClientAuthRequest, res) => {
@@ -559,20 +564,25 @@ router.post("/salons/attach", async (req: ClientAuthRequest, res) => {
 });
 
 router.get("/me", async (req: ClientAuthRequest, res) => {
-  const client = await prisma.client.findUnique({
-    where: { id: req.client!.clientId },
-  });
-  if (!client) return res.status(404).json({ error: "profile_not_found" });
-  const account = await getAccountForClient(req.client!.clientId);
-  let salonPanelAvailable = false;
-  if (account) {
-    const salonUser = await prisma.user.findUnique({
-      where: { email: account.email },
-      select: { id: true, active: true },
+  try {
+    const client = await prisma.client.findUnique({
+      where: { id: req.client!.clientId },
     });
-    salonPanelAvailable = !!(salonUser && salonUser.active);
+    if (!client) return res.status(404).json({ error: "profile_not_found" });
+    const account = await getAccountForClient(req.client!.clientId);
+    let salonPanelAvailable = false;
+    if (account) {
+      const salonUser = await prisma.user.findUnique({
+        where: { email: account.email },
+        select: { id: true, active: true },
+      });
+      salonPanelAvailable = !!(salonUser && salonUser.active);
+    }
+    return res.json({ client, salonPanelAvailable });
+  } catch (e) {
+    console.error("[client/me]", e);
+    return res.status(500).json({ error: "internal_error" });
   }
-  return res.json({ client, salonPanelAvailable });
 });
 
 router.get("/appointments", async (req: ClientAuthRequest, res) => {

@@ -39,6 +39,15 @@ app.use("/api/salon", auth, salonRoutes);
 app.use("/api/salon/inventory", auth, inventoryRoutes);
 app.use("/api/admin", auth, adminRoutes);
 
+/** Ostatnia deska ratunku — unika „pustej” odpowiedzi przy nieobsłużonych błędach async (nginx wtedy zwraca 502). */
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("[api] Unhandled error:", err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({ error: "internal_error" });
+});
+
 const toDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`);
 const addMinutes = (d: Date, minutes: number) => new Date(d.getTime() + minutes * 60000);
 
