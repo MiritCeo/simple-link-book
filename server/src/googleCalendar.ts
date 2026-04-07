@@ -39,12 +39,20 @@ export const buildGoogleOAuthUrl = (state: string) => {
 export const exchangeGoogleOAuthCode = async (code: string) => {
   const oauth = getOAuthClient(process.env.GOOGLE_OAUTH_REDIRECT_URI);
   const { tokens } = await oauth.getToken(code);
-  oauth.setCredentials(tokens);
-  const oauth2Api = google.oauth2({ version: "v2", auth: oauth });
-  const me = await oauth2Api.userinfo.get();
+  let email: string | null = null;
+  // Przy scope tylko calendar.events endpoint userinfo może zwrócić błąd.
+  // Email jest opcjonalny dla integracji, więc nie blokujemy podłączenia.
+  try {
+    oauth.setCredentials(tokens);
+    const oauth2Api = google.oauth2({ version: "v2", auth: oauth });
+    const me = await oauth2Api.userinfo.get();
+    email = me.data.email || null;
+  } catch {
+    email = null;
+  }
   return {
     tokens,
-    email: me.data.email || null,
+    email,
   };
 };
 
