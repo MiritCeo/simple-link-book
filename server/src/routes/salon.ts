@@ -14,6 +14,12 @@ import type { AuthRequest } from "../middleware/auth.js";
 import { clientMatchesSearchQuery } from "../lib/clientSearch.js";
 import { resolveClientForSalon } from "../lib/clientId.js";
 import salonFeedbackRoutes from "./salonFeedback.js";
+import {
+  cancelAppointmentInGoogleCalendar,
+  getGoogleCalendarConfigStatus,
+  syncAppointmentToGoogleCalendar,
+  syncSalonFutureAppointmentsToGoogleCalendar,
+} from "../googleCalendar.js";
 
 const router = Router();
 
@@ -301,6 +307,78 @@ router.put("/profile", async (req: AuthRequest, res) => {
     data: parsed.data as any,
   });
   return res.json({ salon });
+});
+
+router.get("/google-calendar/status", async (req: AuthRequest, res) => {
+  const salonId = getSalonId(req);
+  const config = getGoogleCalendarConfigStatus();
+  const connection = await prisma.salonGoogleCalendarConnection.findUnique({
+    where: { salonId },
+    select: {
+      id: true,
+      googleAccountEmail: true,
+      googleCalendarId: true,
+      googleCalendarName: true,
+      syncEnabled: true,
+      syncHorizonDays: true,
+      lastSyncAt: true,
+      lastSyncError: true,
+      updatedAt: true,
+    },
+  });
+  return res.json({
+    configured: config.configured,
+    redirectUri: config.redirectUri,
+    scope: config.scope,
+    connected: !!connection,
+    connection,
+  });
+});
+
+router.put("/google-calendar/settings", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const schema = z.object({
+    syncEnabled: z.boolean().optional(),
+    syncHorizonDays: z.number().int().min(1).max(365).optional(),
+  });
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+  const salonId = getSalonId(req);
+  const existing = await prisma.salonGoogleCalendarConnection.findUnique({ where: { salonId } });
+  if (!existing) return res.status(404).json({ error: "google_calendar_not_connected" });
+  const connection = await prisma.salonGoogleCalendarConnection.update({
+    where: { salonId },
+    data: {
+      syncEnabled: parsed.data.syncEnabled,
+      syncHorizonDays: parsed.data.syncHorizonDays,
+    },
+    select: {
+      id: true,
+      googleAccountEmail: true,
+      googleCalendarId: true,
+      googleCalendarName: true,
+      syncEnabled: true,
+      syncHorizonDays: true,
+      lastSyncAt: true,
+      lastSyncError: true,
+      updatedAt: true,
+    },
+  });
+  return res.json({ connection });
+});
+
+router.post("/google-calendar/sync-now", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const salonId = getSalonId(req);
+  const result = await syncSalonFutureAppointmentsToGoogleCalendar(salonId);
+  return res.json({ ok: true, ...result });
+});
+
+router.post("/google-calendar/disconnect", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
+  const salonId = getSalonId(req);
+  await prisma.salonGoogleCalendarConnection.deleteMany({ where: { salonId } });
+  return res.json({ ok: true });
 });
 
 router.get("/user-salons", async (req: AuthRequest, res) => {
@@ -1961,6 +2039,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
   await linkClientAccountToSalonByEmail(client);
   const salon = await prisma.salon.findUnique({ where: { id: appointment.salonId } });
   await sendEventNotification("BOOKING_CONFIRMATION", { ...appointment, salon } as any);
+  await syncAppointmentToGoogleCalendar(appointment.id).catch(() => {});
   return res.json({ appointment });
 });
 
@@ -2105,12 +2184,16 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
   if (isCancelledNow) {
     const salon = await prisma.salon.findUnique({ where: { id: updated.salonId } });
     await sendEventNotification("CANCELLATION", { ...updated, salon });
+    await cancelAppointmentInGoogleCalendar(updated.id).catch(() => {});
   } else if (isConfirmedNow || timeChanged) {
     const salon = await prisma.salon.findUnique({ where: { id: updated.salonId } });
     await sendEventNotification("BOOKING_CONFIRMATION", { ...updated, salon } as any);
+    await syncAppointmentToGoogleCalendar(updated.id).catch(() => {});
   } else if (isCompletedNow) {
     const salon = await prisma.salon.findUnique({ where: { id: updated.salonId } });
     await sendEventNotification("FOLLOWUP", { ...updated, salon });
+  } else if (statusChanged || staffIdChanged || parsed.data.serviceIds || parsed.data.duration || parsed.data.durationOverride) {
+    await syncAppointmentToGoogleCalendar(updated.id).catch(() => {});
   }
   return res.json({ appointment: updated });
 });
@@ -2122,6 +2205,7 @@ router.delete("/appointments/:id", async (req: AuthRequest, res) => {
   if (!appointment) {
     return res.status(404).json({ error: "Nie znaleziono wizyty w tym salonie" });
   }
+  await cancelAppointmentInGoogleCalendar(appointment.id).catch(() => {});
   await prisma.$transaction(async (tx) => {
     await tx.notificationLog.deleteMany({ where: { appointmentId: appointment.id } });
     await tx.appointmentToken.deleteMany({ where: { appointmentId: appointment.id } });

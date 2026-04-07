@@ -7,6 +7,7 @@ import prisma from "../prisma.js";
 import { ensureCancelToken, sendEventNotification } from "../notificationService.js";
 import { sendEmail, sendSms } from "../notifications.js";
 import { phonesMatchDigits } from "../lib/phoneDigits.js";
+import { cancelAppointmentInGoogleCalendar, syncAppointmentToGoogleCalendar } from "../googleCalendar.js";
 
 const router = Router();
 const CANCEL_CODE_TTL_MS = 10 * 60 * 1000;
@@ -624,6 +625,7 @@ router.post("/salons/:slug/appointments", async (req, res) => {
     salon: salon,
     client: appointment.client,
   });
+  await syncAppointmentToGoogleCalendar(appointment.id).catch(() => {});
 
   const cancelToken = await ensureCancelToken(appointment.id);
   return res.json({ appointment, cancelToken: cancelToken.token });
@@ -865,6 +867,7 @@ router.post("/cancel/:token/reschedule", async (req, res) => {
   });
 
   await sendEventNotification("BOOKING_CONFIRMATION", updated as any);
+  await syncAppointmentToGoogleCalendar(updated.id).catch(() => {});
   return res.json({ appointment: updated });
 });
 
@@ -918,6 +921,7 @@ router.post("/cancel/:token", async (req, res) => {
       },
     });
     await sendEventNotification("CANCELLATION", updated as any);
+    await cancelAppointmentInGoogleCalendar(updated.id).catch(() => {});
   }
 
   await prisma.appointmentToken.update({

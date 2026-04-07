@@ -441,6 +441,51 @@ export async function updateSalonProfile(payload: {
   });
 }
 
+export async function getSalonGoogleCalendarStatus() {
+  return apiFetch<{
+    configured: boolean;
+    redirectUri: string | null;
+    scope: string;
+    connected: boolean;
+    connection?: {
+      googleAccountEmail?: string | null;
+      googleCalendarId: string;
+      googleCalendarName?: string | null;
+      syncEnabled: boolean;
+      syncHorizonDays: number;
+      lastSyncAt?: string | null;
+      lastSyncError?: string | null;
+      updatedAt?: string;
+    } | null;
+  }>("/api/salon/google-calendar/status", { auth: true });
+}
+
+export async function getGoogleCalendarOAuthStartUrl() {
+  return apiFetch<{ authUrl: string }>("/api/auth/google-calendar/oauth/start", { auth: true });
+}
+
+export async function saveSalonGoogleCalendarSettings(payload: { syncEnabled?: boolean; syncHorizonDays?: number }) {
+  return apiFetch<{ connection: any }>("/api/salon/google-calendar/settings", {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function syncSalonGoogleCalendarNow() {
+  return apiFetch<{ ok: boolean; synced: number }>("/api/salon/google-calendar/sync-now", {
+    method: "POST",
+    auth: true,
+  });
+}
+
+export async function disconnectSalonGoogleCalendar() {
+  return apiFetch<{ ok: boolean }>("/api/salon/google-calendar/disconnect", {
+    method: "POST",
+    auth: true,
+  });
+}
+
 export async function getUserSalons() {
   return apiFetch<{ salons: any[] }>("/api/salon/user-salons", { auth: true });
 }

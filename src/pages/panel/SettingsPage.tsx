@@ -1,12 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, QrCode, Link2, ChevronRight, Clock, Users, Scissors, Palette, ExternalLink, Store } from 'lucide-react';
+import { Copy, QrCode, Link2, ChevronRight, Clock, Users, Scissors, Palette, ExternalLink, Store, RefreshCw, PlugZap, Unplug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
-import { getSalonProfile, getSalonServices, getSalonStaff, updateSalonProfile } from '@/lib/api';
+import {
+  disconnectSalonGoogleCalendar,
+  getGoogleCalendarOAuthStartUrl,
+  getSalonGoogleCalendarStatus,
+  getSalonProfile,
+  getSalonServices,
+  getSalonStaff,
+  saveSalonGoogleCalendarSettings,
+  syncSalonGoogleCalendarNow,
+  updateSalonProfile,
+} from '@/lib/api';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getRole } from '@/lib/auth';
@@ -19,6 +29,12 @@ export default function SettingsPage() {
   const [staffCount, setStaffCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [googleCal, setGoogleCal] = useState<{
+    configured: boolean;
+    connected: boolean;
+    connection?: any;
+  } | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [profileForm, setProfileForm] = useState({
     name: '',
     address: '',
@@ -35,8 +51,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([getSalonProfile(), getSalonServices(), getSalonStaff()])
-      .then(([profileRes, servicesRes, staffRes]) => {
+    Promise.all([getSalonProfile(), getSalonServices(), getSalonStaff(), getSalonGoogleCalendarStatus().catch(() => null)])
+      .then(([profileRes, servicesRes, staffRes, googleRes]) => {
         if (!mounted) return;
         setSalon(profileRes.salon);
         setProfileForm({
@@ -51,6 +67,13 @@ export default function SettingsPage() {
         });
         setServicesCount(servicesRes.services?.length || 0);
         setStaffCount(staffRes.staff?.length || 0);
+        if (googleRes) {
+          setGoogleCal({
+            configured: !!googleRes.configured,
+            connected: !!googleRes.connected,
+            connection: googleRes.connection || null,
+          });
+        }
       })
       .finally(() => mounted && setLoading(false));
     return () => { mounted = false; };
@@ -91,6 +114,28 @@ export default function SettingsPage() {
       toast.error(err.message || 'Błąd zapisu');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const refreshGoogleStatus = async () => {
+    const status = await getSalonGoogleCalendarStatus();
+    setGoogleCal({
+      configured: !!status.configured,
+      connected: !!status.connected,
+      connection: status.connection || null,
+    });
+  };
+
+  const connectGoogleCalendar = async () => {
+    try {
+      setGoogleBusy(true);
+      const { authUrl } = await getGoogleCalendarOAuthStartUrl();
+      window.open(authUrl, '_blank', 'noopener,noreferrer');
+      toast.success('Otworzyliśmy logowanie Google. Po autoryzacji wróć tutaj i kliknij Odśwież status.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Nie udało się rozpocząć integracji Google');
+    } finally {
+      setGoogleBusy(false);
     }
   };
 
@@ -304,6 +349,131 @@ export default function SettingsPage() {
                 {saving ? 'Zapisywanie...' : 'Zapisz'}
               </Button>
             </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.4 }}
+            className="bg-card rounded-2xl p-5 border border-border mb-4 lg:p-6"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <PlugZap className="w-5 h-5 text-primary" />
+              <h2 className="font-semibold">Google Calendar (timeline)</h2>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Synchronizacja jednostronna: wizyty z honly trafiają do kalendarza Google (bez importu zmian z Google).
+            </p>
+            {!googleCal?.configured ? (
+              <p className="text-xs text-destructive">
+                Brak konfiguracji kluczy Google OAuth po stronie serwera.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-border p-3 text-xs">
+                  <p><span className="text-muted-foreground">Status:</span> {googleCal?.connected ? 'Połączono' : 'Niepołączono'}</p>
+                  {googleCal?.connection?.googleAccountEmail && (
+                    <p><span className="text-muted-foreground">Konto Google:</span> {googleCal.connection.googleAccountEmail}</p>
+                  )}
+                  {googleCal?.connection?.lastSyncAt && (
+                    <p><span className="text-muted-foreground">Ostatnia synchronizacja:</span> {new Date(googleCal.connection.lastSyncAt).toLocaleString('pl-PL')}</p>
+                  )}
+                  {googleCal?.connection?.lastSyncError && (
+                    <p className="text-destructive mt-1">Ostatni błąd: {googleCal.connection.lastSyncError}</p>
+                  )}
+                </div>
+
+                {googleCal?.connected && (
+                  <div className="flex items-center justify-between rounded-xl border border-border p-3">
+                    <div>
+                      <p className="text-sm font-medium">Sync aktywny</p>
+                      <p className="text-xs text-muted-foreground">Przyszłe wizyty do 180 dni.</p>
+                    </div>
+                    <Switch
+                      checked={googleCal.connection?.syncEnabled !== false}
+                      disabled={role !== 'OWNER' || googleBusy}
+                      onCheckedChange={async (checked) => {
+                        try {
+                          setGoogleBusy(true);
+                          await saveSalonGoogleCalendarSettings({ syncEnabled: checked, syncHorizonDays: 180 });
+                          await refreshGoogleStatus();
+                          toast.success(checked ? 'Włączono synchronizację' : 'Wyłączono synchronizację');
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Nie udało się zapisać ustawień');
+                        } finally {
+                          setGoogleBusy(false);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {!googleCal?.connected ? (
+                    <Button
+                      className="rounded-xl h-9 gap-1.5"
+                      onClick={connectGoogleCalendar}
+                      disabled={role !== 'OWNER' || googleBusy}
+                    >
+                      <PlugZap className="w-4 h-4" />
+                      Połącz z Google
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="rounded-xl h-9 gap-1.5"
+                        onClick={async () => {
+                          try {
+                            setGoogleBusy(true);
+                            const res = await syncSalonGoogleCalendarNow();
+                            toast.success(`Zsynchronizowano ${res.synced} wizyt.`);
+                            await refreshGoogleStatus();
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Nie udało się uruchomić synchronizacji');
+                          } finally {
+                            setGoogleBusy(false);
+                          }
+                        }}
+                        disabled={role !== 'OWNER' || googleBusy}
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Sync teraz
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="rounded-xl h-9 gap-1.5 text-destructive"
+                        onClick={async () => {
+                          try {
+                            setGoogleBusy(true);
+                            await disconnectSalonGoogleCalendar();
+                            toast.success('Odłączono Google Calendar');
+                            await refreshGoogleStatus();
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Nie udało się odłączyć');
+                          } finally {
+                            setGoogleBusy(false);
+                          }
+                        }}
+                        disabled={role !== 'OWNER' || googleBusy}
+                      >
+                        <Unplug className="w-4 h-4" />
+                        Odłącz
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="ghost"
+                    className="rounded-xl h-9 gap-1.5"
+                    onClick={refreshGoogleStatus}
+                    disabled={googleBusy}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Odśwież status
+                  </Button>
+                </div>
+              </div>
+            )}
           </motion.div>
 
           <h2 className="font-semibold mb-3 hidden lg:block">Zarządzanie</h2>

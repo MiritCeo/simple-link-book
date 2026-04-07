@@ -49,6 +49,9 @@ components:
             - verification_code_expired
             - invalid_verification_code
             - too_many_attempts
+            - salon_not_selected
+            - google_calendar_not_connected
+            - google_oauth_not_configured
       required:
         - error
     AuthResponse:
@@ -160,6 +163,49 @@ components:
       required:
         - activeSalonId
         - salons
+    GoogleCalendarStatusResponse:
+      type: object
+      properties:
+        configured:
+          type: boolean
+        redirectUri:
+          type: string
+          nullable: true
+        scope:
+          type: string
+        connected:
+          type: boolean
+        connection:
+          type: object
+          nullable: true
+          properties:
+            googleAccountEmail:
+              type: string
+              nullable: true
+            googleCalendarId:
+              type: string
+            googleCalendarName:
+              type: string
+              nullable: true
+            syncEnabled:
+              type: boolean
+            syncHorizonDays:
+              type: integer
+            lastSyncAt:
+              type: string
+              format: date-time
+              nullable: true
+            lastSyncError:
+              type: string
+              nullable: true
+            updatedAt:
+              type: string
+              format: date-time
+      required:
+        - configured
+        - redirectUri
+        - scope
+        - connected
     SalonRegisterResponse:
       type: object
       properties:
@@ -608,6 +654,67 @@ paths:
                 unauthorized:
                   value:
                     error: unauthorized
+      tags:
+        - Auth
+  /api/auth/google-calendar/oauth/start:
+    get:
+      summary: Start OAuth Google Calendar (OWNER)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: URL autoryzacji Google
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authUrl:
+                    type: string
+        "400":
+          description: Brak aktywnego salonu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Brak uprawnień (tylko OWNER)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "500":
+          description: Brak konfiguracji OAuth po stronie serwera
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+      tags:
+        - Auth
+  /api/auth/google-calendar/oauth/callback:
+    get:
+      summary: Callback OAuth Google Calendar
+      description: Endpoint dla przekierowania z Google OAuth. Zapisuje tokeny integracji dla salonu z `state`.
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML z potwierdzeniem połączenia
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          description: Nieprawidłowy callback OAuth
       tags:
         - Auth
   /api/client/login:
@@ -1899,6 +2006,74 @@ paths:
           application/json:
             schema:
               type: object
+      responses:
+        "200":
+          description: OK
+      tags:
+        - Salon
+  /api/salon/google-calendar/status:
+    get:
+      summary: Status integracji Google Calendar dla salonu
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleCalendarStatusResponse"
+      tags:
+        - Salon
+  /api/salon/google-calendar/settings:
+    put:
+      summary: Ustawienia synchronizacji Google Calendar (OWNER)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                syncEnabled:
+                  type: boolean
+                syncHorizonDays:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Integracja nie jest jeszcze podłączona
+      tags:
+        - Salon
+  /api/salon/google-calendar/sync-now:
+    post:
+      summary: Ręczna synchronizacja wizyt do Google (OWNER)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  synced:
+                    type: integer
+      tags:
+        - Salon
+  /api/salon/google-calendar/disconnect:
+    post:
+      summary: Odłączenie integracji Google Calendar (OWNER)
+      security:
+        - BearerAuth: []
       responses:
         "200":
           description: OK

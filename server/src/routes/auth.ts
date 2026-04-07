@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../prisma.js";
 import auth, { type AuthRequest } from "../middleware/auth.js";
+import { buildGoogleOAuthUrl, connectSalonGoogleCalendar, exchangeGoogleOAuthCode } from "../googleCalendar.js";
 
 const router = Router();
 
@@ -20,6 +21,9 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
+
+const signGoogleOAuthState = (payload: { userId: string; salonId: string }) =>
+  jwt.sign(payload, process.env.JWT_SECRET || "dev", { expiresIn: "10m" });
 
 const getInventoryRoleForUser = async (user: { id: string; role: "SUPER_ADMIN" | "OWNER" | "STAFF" }, salonId?: string | null) => {
   if (user.role === "OWNER" || user.role === "SUPER_ADMIN") return "ADMIN" as const;
@@ -233,6 +237,49 @@ router.post("/switch-salon", async (req, res) => {
     ? "ADMIN"
     : (await prisma.staff.findFirst({ where: { userId: user.id, salonId: parsed.data.salonId } }))?.inventoryRole || "STAFF";
   return res.json({ token: newToken, salonId: parsed.data.salonId, role, inventoryRole });
+});
+
+router.get("/google-calendar/oauth/start", auth, async (req: AuthRequest, res) => {
+  if (!req.user?.salonId) return res.status(400).json({ error: "salon_not_selected" });
+  if (req.user.role !== "OWNER") return res.status(403).json({ error: "forbidden" });
+  try {
+    const state = signGoogleOAuthState({ userId: req.user.userId, salonId: req.user.salonId });
+    const authUrl = buildGoogleOAuthUrl(state);
+    return res.json({ authUrl });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "google_oauth_not_configured" });
+  }
+});
+
+router.get("/google-calendar/oauth/callback", async (req, res) => {
+  const schema = z.object({
+    code: z.string().min(10),
+    state: z.string().min(10),
+  });
+  const parsed = schema.safeParse(req.query);
+  if (!parsed.success) return res.status(400).send("Nieprawidłowy callback OAuth.");
+
+  try {
+    const statePayload = jwt.verify(parsed.data.state, process.env.JWT_SECRET || "dev") as { userId: string; salonId: string };
+    const { tokens, email } = await exchangeGoogleOAuthCode(parsed.data.code);
+    if (!tokens.access_token) return res.status(400).send("Brak access token od Google.");
+    await connectSalonGoogleCalendar(statePayload.salonId, {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || null,
+      expiryDate: tokens.expiry_date || null,
+      googleAccountEmail: email,
+      googleCalendarId: "primary",
+      googleCalendarName: "primary",
+    });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(`<!doctype html>
+<html><body style="font-family:Arial,sans-serif;padding:24px">
+<h2>Google Calendar połączony</h2>
+<p>Integracja została zapisana. Możesz zamknąć tę kartę i wrócić do panelu.</p>
+</body></html>`);
+  } catch (e: any) {
+    return res.status(400).send(`Błąd integracji Google Calendar: ${String(e?.message || e)}`);
+  }
 });
 
 export default router;
