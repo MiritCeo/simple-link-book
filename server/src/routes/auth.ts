@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../prisma.js";
+import auth, { type AuthRequest } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -19,6 +20,37 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
 });
+
+const getInventoryRoleForUser = async (user: { id: string; role: "SUPER_ADMIN" | "OWNER" | "STAFF" }, salonId?: string | null) => {
+  if (user.role === "OWNER" || user.role === "SUPER_ADMIN") return "ADMIN" as const;
+  const staff = await prisma.staff.findFirst({
+    where: salonId ? { userId: user.id, salonId } : { userId: user.id },
+    select: { inventoryRole: true },
+  });
+  return (staff?.inventoryRole || "STAFF") as "ADMIN" | "MANAGER" | "STAFF";
+};
+
+const getUserSalons = async (user: { id: string; role: "SUPER_ADMIN" | "OWNER" | "STAFF"; salonId: string | null }) => {
+  if (user.role === "SUPER_ADMIN") {
+    const salons = await prisma.salon.findMany({
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: "asc" },
+    });
+    return salons.map((s) => ({ ...s, role: "SUPER_ADMIN" as const }));
+  }
+
+  const extraSalons = await prisma.userSalon.findMany({
+    where: { userId: user.id },
+    include: { salon: true },
+  });
+  const primarySalon = user.salonId ? await prisma.salon.findUnique({ where: { id: user.salonId } }) : null;
+  return [
+    ...(primarySalon ? [{ id: primarySalon.id, name: primarySalon.name, slug: primarySalon.slug, role: user.role }] : []),
+    ...extraSalons
+      .filter(us => us.salonId !== user.salonId)
+      .map(us => ({ id: us.salon.id, name: us.salon.name, slug: us.salon.slug, role: us.role })),
+  ];
+};
 
 router.post("/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
@@ -126,6 +158,41 @@ router.post("/login", async (req, res) => {
   });
 
   return res.json({ token, salonId: user.salonId, userId: user.id, role: user.role, salons, inventoryRole });
+});
+
+router.get("/me", auth, async (req: AuthRequest, res) => {
+  const authUser = req.user!;
+  const user = await prisma.user.findUnique({
+    where: { id: authUser.userId },
+    select: { id: true, email: true, phone: true, role: true, active: true, salonId: true, createdAt: true },
+  });
+  if (!user) return res.status(401).json({ error: "unauthorized" });
+
+  const activeSalonId = authUser.salonId ?? user.salonId ?? null;
+  const activeSalon = activeSalonId
+    ? await prisma.salon.findUnique({ where: { id: activeSalonId }, select: { id: true, name: true, slug: true } })
+    : null;
+  const inventoryRole = await getInventoryRoleForUser(user, activeSalonId);
+  return res.json({
+    user,
+    activeSalonId,
+    activeSalon,
+    inventoryRole,
+  });
+});
+
+router.get("/salons", auth, async (req: AuthRequest, res) => {
+  const authUser = req.user!;
+  const user = await prisma.user.findUnique({
+    where: { id: authUser.userId },
+    select: { id: true, role: true, salonId: true },
+  });
+  if (!user) return res.status(401).json({ error: "unauthorized" });
+  const salons = await getUserSalons(user);
+  return res.json({
+    activeSalonId: authUser.salonId ?? user.salonId ?? null,
+    salons,
+  });
 });
 
 router.post("/switch-salon", async (req, res) => {

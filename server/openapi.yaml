@@ -76,6 +76,90 @@ components:
                 type: string
               role:
                 type: string
+    AuthSalon:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        role:
+          type: string
+          enum:
+            - SUPER_ADMIN
+            - OWNER
+            - STAFF
+      required:
+        - id
+        - name
+        - slug
+        - role
+    AuthMeResponse:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+              nullable: true
+            role:
+              type: string
+              enum:
+                - SUPER_ADMIN
+                - OWNER
+                - STAFF
+            active:
+              type: boolean
+            salonId:
+              type: string
+              nullable: true
+            createdAt:
+              type: string
+              format: date-time
+          required:
+            - id
+            - email
+            - role
+            - active
+            - createdAt
+        activeSalonId:
+          type: string
+          nullable: true
+        activeSalon:
+          allOf:
+            - $ref: "#/components/schemas/AuthSalon"
+          nullable: true
+        inventoryRole:
+          type: string
+          enum:
+            - ADMIN
+            - MANAGER
+            - STAFF
+      required:
+        - user
+        - activeSalonId
+        - activeSalon
+        - inventoryRole
+    AuthSalonsResponse:
+      type: object
+      properties:
+        activeSalonId:
+          type: string
+          nullable: true
+        salons:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthSalon"
+      required:
+        - activeSalonId
+        - salons
     SalonRegisterResponse:
       type: object
       properties:
@@ -474,6 +558,56 @@ paths:
                 forbidden:
                   value:
                     error: forbidden
+      tags:
+        - Auth
+  /api/auth/me:
+    get:
+      summary: Informacje o koncie zalogowanego użytkownika panelu
+      description: Zwraca profil użytkownika panelu (SUPER_ADMIN/OWNER/STAFF) wraz z aktywnym salonem z tokena i rolą magazynową.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthMeResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                unauthorized:
+                  value:
+                    error: unauthorized
+      tags:
+        - Auth
+  /api/auth/salons:
+    get:
+      summary: Lista salonów dostępnych dla zalogowanego użytkownika panelu
+      description: Dla OWNER/STAFF zwraca salony przypisane do konta; dla SUPER_ADMIN zwraca pełną listę salonów.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSalonsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                unauthorized:
+                  value:
+                    error: unauthorized
       tags:
         - Auth
   /api/client/login:
