@@ -427,6 +427,9 @@ export default function ServicesSettingsPage() {
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Cena (zł)</label>
                 <Input value={form.price} onChange={(e) => setForm(f => ({ ...f, price: Number(e.target.value) }))} placeholder="120" className="h-11 rounded-xl" />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Ustaw <span className="font-medium">0 zł</span>, jeśli cena ma być ukryta w formularzu rezerwacji.
+                </p>
               </div>
             </div>
             <div>

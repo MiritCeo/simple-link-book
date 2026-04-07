@@ -256,6 +256,8 @@ export default function SalonBooking() {
     return { day: d.getDate(), weekday: dayNames[d.getDay()], month: monthNames[d.getMonth()] };
   };
 
+  const hasVisiblePrice = (price?: number | null) => Number(price || 0) > 0;
+
   const bookingErrorMessages: Record<string, string> = {
     invalid_payload: "Nieprawidłowe dane rezerwacji",
     salon_not_found: "Nie znaleziono salonu o podanym linku",
@@ -445,7 +447,9 @@ export default function SalonBooking() {
                       <p className="font-medium text-sm">{s.name}</p>
                       <p className="text-xs text-muted-foreground">{s.duration} min</p>
                     </div>
-                    <p className="font-semibold text-sm">{s.price} zł</p>
+                    {hasVisiblePrice(s.price) && (
+                      <p className="font-semibold text-sm">{s.price} zł</p>
+                    )}
                   </div>
                 ))}
               </motion.div>
@@ -492,7 +496,7 @@ export default function SalonBooking() {
               ['Specjalista', anySpecialist ? 'Dowolny' : selectedSpecialist?.name],
               ['Data', selectedDate],
               ['Godzina', selectedTime],
-              ['Cena', `${selectedService?.price} zł`],
+              ...(hasVisiblePrice(selectedService?.price) ? [['Cena', `${selectedService?.price} zł`] as const] : []),
             ].map(([label, value]) => (
               <motion.div key={label} variants={fadeUp} className="flex justify-between">
                 <span className="text-sm text-muted-foreground">{label}</span>
@@ -753,7 +757,7 @@ export default function SalonBooking() {
                                 {s.description && <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>}
                               </div>
                               <div className="text-right shrink-0 ml-3">
-                                <p className="font-semibold">{s.price} zł</p>
+                                {hasVisiblePrice(s.price) && <p className="font-semibold">{s.price} zł</p>}
                                 <p className="text-xs text-muted-foreground">{s.duration} min</p>
                               </div>
                             </div>
@@ -1075,10 +1079,12 @@ export default function SalonBooking() {
                       <span className="text-sm font-medium">{value}</span>
                     </motion.div>
                   ))}
-                  <motion.div variants={fadeUp} className="border-t border-border pt-3 flex justify-between">
-                    <span className="text-sm font-semibold">Do zapłaty</span>
-                    <span className="text-sm font-bold">{selectedService?.price} zł</span>
-                  </motion.div>
+                  {hasVisiblePrice(selectedService?.price) && (
+                    <motion.div variants={fadeUp} className="border-t border-border pt-3 flex justify-between">
+                      <span className="text-sm font-semibold">Do zapłaty</span>
+                      <span className="text-sm font-bold">{selectedService?.price} zł</span>
+                    </motion.div>
+                  )}
                 </motion.div>
 
                 <motion.div
