@@ -1696,7 +1696,6 @@ router.delete("/clients/:id", async (req: AuthRequest, res) => {
 });
 
 router.get("/hours", async (req: AuthRequest, res) => {
-  if (!requireOwner(req, res)) return;
   const salonId = getSalonId(req);
   let hours = await prisma.salonHour.findMany({
     where: { salonId },
@@ -1748,7 +1747,6 @@ router.put("/hours", async (req: AuthRequest, res) => {
 });
 
 router.get("/hours/exceptions", async (req: AuthRequest, res) => {
-  if (!requireOwner(req, res)) return;
   const exceptions = await prisma.salonException.findMany({
     where: { salonId: getSalonId(req) },
     orderBy: { date: "asc" },
@@ -1848,7 +1846,6 @@ router.put("/hours/exceptions/:id", async (req: AuthRequest, res) => {
 });
 
 router.get("/breaks", async (req: AuthRequest, res) => {
-  if (!requireOwner(req, res)) return;
   const breaks = await prisma.salonBreak.findMany({
     where: { salonId: getSalonId(req) },
     orderBy: { label: "asc" },
@@ -1930,8 +1927,18 @@ router.post("/appointments/dedupe", async (req: AuthRequest, res) => {
 });
 
 router.get("/appointments", async (req: AuthRequest, res) => {
+  const salonId = getSalonId(req);
+  const where: any = { salonId };
+  if (req.user?.role === "STAFF") {
+    const ownStaff = await prisma.staff.findFirst({
+      where: { salonId, userId: req.user.userId, active: true },
+      select: { id: true },
+    });
+    if (!ownStaff) return res.json({ appointments: [] });
+    where.staffId = ownStaff.id;
+  }
   const appointments = await prisma.appointment.findMany({
-    where: { salonId: getSalonId(req) },
+    where,
     include: { client: true, staff: true, appointmentServices: { include: { service: true } } },
     orderBy: { date: "asc" },
   });
@@ -1939,6 +1946,7 @@ router.get("/appointments", async (req: AuthRequest, res) => {
 });
 
 router.post("/appointments", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
   const schema = z.object({
     date: z.string().min(8),
     time: z.string().min(4),
@@ -2044,6 +2052,7 @@ router.post("/appointments", async (req: AuthRequest, res) => {
 });
 
 router.put("/appointments/:id", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
   const schema = z.object({
     date: z.string().min(8).optional(),
     time: z.string().min(4).optional(),
@@ -2199,6 +2208,7 @@ router.put("/appointments/:id", async (req: AuthRequest, res) => {
 });
 
 router.delete("/appointments/:id", async (req: AuthRequest, res) => {
+  if (!requireOwner(req, res)) return;
   const appointment = await prisma.appointment.findFirst({
     where: { id: req.params.id, salonId: getSalonId(req) },
   });

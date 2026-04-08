@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { statusLabels, statusColors, type Appointment } from '@/data/mockData';
 import { getReadableTextColor } from '@/lib/color';
 import { normalizeAssetUrl } from '@/lib/url';
+import { getRole } from '@/lib/auth';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { motion } from 'framer-motion';
 import { createAppointment, createClient, createSalonException, createStaffException, deleteAppointment, deleteSalonException, deleteStaffException, getSalonAppointments, getSalonBreaks, getSalonClients, getSalonExceptions, getSalonHours, getSalonProfile, getSalonServices, getSalonStaff, getStaffSchedule, updateAppointment, updateClient, updateSalonException, updateStaffException } from '@/lib/api';
@@ -250,6 +251,7 @@ const DraggableAppointmentChip = ({
 };
 
 export default function CalendarPage() {
+  const isStaffReadOnly = getRole() === 'STAFF';
   const isDeletedStaff = (sp: any) =>
     sp?.active === false || /\[USUNIĘTY\]$/i.test(String(sp?.role || ''));
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -453,6 +455,25 @@ export default function CalendarPage() {
         setSalonHours(hoursRes.hours || []);
         setSalonExceptions(exceptionsRes.exceptions || []);
         setSalonBreaks(breaksRes.breaks || []);
+        setKolhozMode(!!profileRes.salon?.kolhozMode);
+      })
+      .catch(async () => {
+        if (!mounted) return;
+        const [servicesRes, staffRes, clientsRes, apptsRes, profileRes] = await Promise.all([
+          getSalonServices().catch(() => ({ services: [] })),
+          getSalonStaff().catch(() => ({ staff: [] })),
+          getSalonClients({ all: true }).catch(() => ({ clients: [] })),
+          getSalonAppointments().catch(() => ({ appointments: [] })),
+          getSalonProfile().catch(() => ({ salon: {} })),
+        ]);
+        if (!mounted) return;
+        setServices(servicesRes.services || []);
+        setStaff(staffRes.staff || []);
+        setClients(clientsRes.clients || []);
+        setAppointments(apptsRes.appointments || []);
+        setSalonHours([]);
+        setSalonExceptions([]);
+        setSalonBreaks([]);
         setKolhozMode(!!profileRes.salon?.kolhozMode);
       })
       .finally(() => mounted && setLoading(false));
@@ -728,6 +749,10 @@ export default function CalendarPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (isStaffReadOnly) {
+      toast.error('Brak uprawnień do edycji wizyt');
+      return;
+    }
     const { active, over, delta } = event;
     if (!over) return;
     const activeData = active.data.current as any;
@@ -871,6 +896,7 @@ export default function CalendarPage() {
 
   const openAddAtTimelineSlot = useCallback(
     (e: MouseEvent<HTMLDivElement>, staffId: string | null | undefined, hour: number) => {
+      if (isStaffReadOnly) return;
       if ((e.target as HTMLElement).closest('[data-timeline-appointment]')) return;
       const rect = e.currentTarget.getBoundingClientRect();
       const y = e.clientY - rect.top;
@@ -882,7 +908,7 @@ export default function CalendarPage() {
       setSlotAction({ date: selectedDate, time: timeStr, staffId: staffId || null });
       setSlotActionOpen(true);
     },
-    [selectedDate, timelineScale],
+    [selectedDate, timelineScale, isStaffReadOnly],
   );
 
   const editServiceBase = useMemo(() => {
@@ -990,12 +1016,20 @@ export default function CalendarPage() {
     return `${months[d.getMonth()]} ${d.getFullYear()}`;
   };
   const openAddForDate = (dateStr: string) => {
+    if (isStaffReadOnly) {
+      toast.error('Brak uprawnień do dodawania wizyt');
+      return;
+    }
     setSelectedDate(dateStr);
     setAppointmentDate(dateStr);
     setAppointmentTime('');
     setAddOpen(true);
   };
   const handleSaveAppointment = async () => {
+    if (isStaffReadOnly) {
+      toast.error('Brak uprawnień do dodawania wizyt');
+      return;
+    }
     if (!canSaveAppointment || saving) return;
     try {
       setSaving(true);
@@ -1434,7 +1468,18 @@ export default function CalendarPage() {
           </Dialog>
           <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) resetAppointmentForm(); }}>
             <DialogTrigger asChild>
-              <Button size="sm" className="rounded-xl gap-1.5 h-10" onClick={() => setAddOpen(true)}>
+              <Button
+                size="sm"
+                className="rounded-xl gap-1.5 h-10"
+                onClick={() => {
+                  if (isStaffReadOnly) {
+                    toast.error('Brak uprawnień do dodawania wizyt');
+                    return;
+                  }
+                  setAddOpen(true);
+                }}
+                disabled={isStaffReadOnly}
+              >
                 <Plus className="w-4 h-4" />
                 <span className="hidden sm:inline">Dodaj wizytę</span>
                 <span className="sm:hidden">Dodaj</span>
@@ -1895,7 +1940,13 @@ export default function CalendarPage() {
               <button
                 key={sp.id}
                 type="button"
-                onClick={() => { if (sp.id) { setSelectedSpecialistId(sp.id); setAddOpen(true); } }}
+                onClick={() => {
+                  if (isStaffReadOnly) return;
+                  if (sp.id) {
+                    setSelectedSpecialistId(sp.id);
+                    setAddOpen(true);
+                  }
+                }}
                 className="min-w-[160px] rounded-xl border border-border bg-card px-3 py-2 text-left hover:border-primary/40 hover:bg-primary/5 transition-colors"
               >
                 <div className="flex items-center gap-2">
@@ -2815,102 +2866,104 @@ export default function CalendarPage() {
                   <span className="text-sm text-muted-foreground">Status</span>
                   <span className="text-sm font-medium">{statusLabels[mapStatus(activeApt.status) as keyof typeof statusLabels]}</span>
                 </div>
-                <div className="flex flex-col gap-2 pt-1">
-                  <p className="text-xs text-muted-foreground">Szybkie akcje</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="rounded-xl h-9 text-xs"
-                      disabled={
-                        visitActionLoading ||
-                        mapStatus(activeApt.status) === 'cancelled' ||
-                        mapStatus(activeApt.status) === 'completed'
-                      }
-                      onClick={async () => {
-                        if (!activeAptId) return;
-                        setVisitActionLoading(true);
-                        try {
-                          await updateAppointment(activeAptId, { status: 'CANCELLED' });
-                          const [, , , apptsRes] = await loadData();
-                          setAppointments(apptsRes.appointments || []);
-                          toast.success('Wizyta anulowana');
-                          setDetailsOpen(false);
-                        } catch (err: any) {
-                          toast.error(err?.message || 'Nie udało się anulować wizyty');
-                        } finally {
-                          setVisitActionLoading(false);
+                {!isStaffReadOnly ? (
+                  <div className="flex flex-col gap-2 pt-1">
+                    <p className="text-xs text-muted-foreground">Szybkie akcje</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl h-9 text-xs"
+                        disabled={
+                          visitActionLoading ||
+                          mapStatus(activeApt.status) === 'cancelled' ||
+                          mapStatus(activeApt.status) === 'completed'
                         }
-                      }}
-                    >
-                      Anuluj wizytę
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="rounded-xl h-9 text-xs"
-                      disabled={
-                        visitActionLoading ||
-                        mapStatus(activeApt.status) === 'no-show' ||
-                        mapStatus(activeApt.status) === 'cancelled' ||
-                        mapStatus(activeApt.status) === 'completed'
-                      }
-                      onClick={async () => {
-                        if (!activeAptId) return;
-                        setVisitActionLoading(true);
-                        try {
-                          await updateAppointment(activeAptId, { status: 'NO_SHOW' });
-                          const [, , , apptsRes] = await loadData();
-                          setAppointments(apptsRes.appointments || []);
-                          toast.success('Oznaczono jako nieobecność');
-                          setDetailsOpen(false);
-                        } catch (err: any) {
-                          toast.error(err?.message || 'Nie udało się zapisać');
-                        } finally {
-                          setVisitActionLoading(false);
+                        onClick={async () => {
+                          if (!activeAptId) return;
+                          setVisitActionLoading(true);
+                          try {
+                            await updateAppointment(activeAptId, { status: 'CANCELLED' });
+                            const [, , , apptsRes] = await loadData();
+                            setAppointments(apptsRes.appointments || []);
+                            toast.success('Wizyta anulowana');
+                            setDetailsOpen(false);
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Nie udało się anulować wizyty');
+                          } finally {
+                            setVisitActionLoading(false);
+                          }
+                        }}
+                      >
+                        Anuluj wizytę
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl h-9 text-xs"
+                        disabled={
+                          visitActionLoading ||
+                          mapStatus(activeApt.status) === 'no-show' ||
+                          mapStatus(activeApt.status) === 'cancelled' ||
+                          mapStatus(activeApt.status) === 'completed'
                         }
-                      }}
-                    >
-                      <UserX className="w-3.5 h-3.5 mr-1" />
-                      Nieobecność
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      className="rounded-xl h-9 text-xs"
-                      disabled={visitActionLoading}
-                      onClick={async () => {
-                        if (!activeAptId) return;
-                        const ok = window.confirm(
-                          'Na pewno usunąć tę wizytę z kalendarza? Tej operacji nie można cofnąć.',
-                        );
-                        if (!ok) return;
-                        setVisitActionLoading(true);
-                        try {
-                          await deleteAppointment(activeAptId);
-                          const [, , , apptsRes] = await loadData();
-                          setAppointments(apptsRes.appointments || []);
-                          toast.success('Wizyta usunięta');
-                          setDetailsOpen(false);
-                          setActiveAptId(null);
-                        } catch (err: any) {
-                          toast.error(err?.message || 'Nie udało się usunąć wizyty');
-                        } finally {
-                          setVisitActionLoading(false);
-                        }
-                      }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5 mr-1" />
-                      Usuń wizytę
-                    </Button>
+                        onClick={async () => {
+                          if (!activeAptId) return;
+                          setVisitActionLoading(true);
+                          try {
+                            await updateAppointment(activeAptId, { status: 'NO_SHOW' });
+                            const [, , , apptsRes] = await loadData();
+                            setAppointments(apptsRes.appointments || []);
+                            toast.success('Oznaczono jako nieobecność');
+                            setDetailsOpen(false);
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Nie udało się zapisać');
+                          } finally {
+                            setVisitActionLoading(false);
+                          }
+                        }}
+                      >
+                        <UserX className="w-3.5 h-3.5 mr-1" />
+                        Nieobecność
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        className="rounded-xl h-9 text-xs"
+                        disabled={visitActionLoading}
+                        onClick={async () => {
+                          if (!activeAptId) return;
+                          const ok = window.confirm(
+                            'Na pewno usunąć tę wizytę z kalendarza? Tej operacji nie można cofnąć.',
+                          );
+                          if (!ok) return;
+                          setVisitActionLoading(true);
+                          try {
+                            await deleteAppointment(activeAptId);
+                            const [, , , apptsRes] = await loadData();
+                            setAppointments(apptsRes.appointments || []);
+                            toast.success('Wizyta usunięta');
+                            setDetailsOpen(false);
+                            setActiveAptId(null);
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Nie udało się usunąć wizyty');
+                          } finally {
+                            setVisitActionLoading(false);
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />
+                        Usuń wizytę
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Anulowane i nieobecności domyślnie chowają się z osi czasu (filtr „Aktywne”). Zmień filtr nad kalendarzem, aby je zobaczyć.
+                    </p>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Anulowane i nieobecności domyślnie chowają się z osi czasu (filtr „Aktywne”). Zmień filtr nad kalendarzem, aby je zobaczyć.
-                  </p>
-                </div>
+                ) : null}
                 <div>
                   <span className="text-sm text-muted-foreground block mb-1">Notatki klienta</span>
                   <Textarea
@@ -2920,8 +2973,7 @@ export default function CalendarPage() {
                   />
                 </div>
               </div>
-            )
-              ) : detailTab === 'client' ? (
+            ) : detailTab === 'client' ? (
                 <div className="space-y-3 mt-4">
                   <div className="rounded-xl border border-border p-3 bg-card">
                     <p className="text-sm font-semibold">{activeApt.client?.name}</p>
@@ -3035,6 +3087,10 @@ export default function CalendarPage() {
                     <Button
                       className="rounded-xl"
                       onClick={async () => {
+                        if (isStaffReadOnly) {
+                          toast.error('Brak uprawnień do edycji wizyt');
+                          return;
+                        }
                         if (!activeAptId) return;
                         try {
                           if (!editDate || !editTime || editServiceIds.length === 0) {
@@ -3093,7 +3149,9 @@ export default function CalendarPage() {
                       Zapisz
                     </Button>
                   ) : (
-                    <Button className="rounded-xl" onClick={() => setEditMode(true)}>Edytuj wizytę</Button>
+                    !isStaffReadOnly ? (
+                      <Button className="rounded-xl" onClick={() => setEditMode(true)}>Edytuj wizytę</Button>
+                    ) : null
                   )
                 )}
                 <Button variant="outline" className="rounded-xl" onClick={() => setDetailsOpen(false)}>Zamknij</Button>
@@ -3114,40 +3172,46 @@ export default function CalendarPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-2">
-            <Button
-              className="rounded-xl h-10"
-              onClick={() => {
-                if (!slotAction) return;
-                setAppointmentDate(slotAction.date);
-                setAppointmentTime(slotAction.time);
-                setSelectedSpecialistId(slotAction.staffId || 'any');
-                setSelectedServiceIds([]);
-                setAppointmentNotes('');
-                setCustomDuration('');
-                setAllowConflict(false);
-                setSlotActionOpen(false);
-                setAddOpen(true);
-              }}
-            >
-              Dodaj wizytę
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-xl h-10"
-              onClick={() => {
-                if (!slotAction) return;
-                const start = toMinutes(slotAction.time);
-                setBlockDate(slotAction.date);
-                setBlockStart(slotAction.time);
-                setBlockEnd(formatTime(start + 60));
-                setBlockStaffId(slotAction.staffId || 'salon');
-                setBlockReason('');
-                setSlotActionOpen(false);
-                setBlockOpen(true);
-              }}
-            >
-              Zablokuj czas
-            </Button>
+            {isStaffReadOnly ? (
+              <p className="text-xs text-muted-foreground">Tryb tylko do odczytu dla roli STAFF.</p>
+            ) : (
+              <>
+                <Button
+                  className="rounded-xl h-10"
+                  onClick={() => {
+                    if (!slotAction) return;
+                    setAppointmentDate(slotAction.date);
+                    setAppointmentTime(slotAction.time);
+                    setSelectedSpecialistId(slotAction.staffId || 'any');
+                    setSelectedServiceIds([]);
+                    setAppointmentNotes('');
+                    setCustomDuration('');
+                    setAllowConflict(false);
+                    setSlotActionOpen(false);
+                    setAddOpen(true);
+                  }}
+                >
+                  Dodaj wizytę
+                </Button>
+                <Button
+                  variant="outline"
+                  className="rounded-xl h-10"
+                  onClick={() => {
+                    if (!slotAction) return;
+                    const start = toMinutes(slotAction.time);
+                    setBlockDate(slotAction.date);
+                    setBlockStart(slotAction.time);
+                    setBlockEnd(formatTime(start + 60));
+                    setBlockStaffId(slotAction.staffId || 'salon');
+                    setBlockReason('');
+                    setSlotActionOpen(false);
+                    setBlockOpen(true);
+                  }}
+                >
+                  Zablokuj czas
+                </Button>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
