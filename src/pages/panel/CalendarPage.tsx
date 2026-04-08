@@ -21,6 +21,24 @@ import { toast } from 'sonner';
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 8);
 
+type TimelineScaleMinutes = 15 | 20 | 30 | 60;
+const TIMELINE_SCALE_OPTIONS: TimelineScaleMinutes[] = [15, 20, 30, 60];
+function isValidTimelineScale(n: unknown): n is TimelineScaleMinutes {
+  return n === 15 || n === 20 || n === 30 || n === 60;
+}
+function slotsPerHour(scale: TimelineScaleMinutes) {
+  return 60 / scale;
+}
+function hourHeightForScale(scale: TimelineScaleMinutes) {
+  const heights: Record<TimelineScaleMinutes, number> = {
+    15: 120,
+    20: 100,
+    30: 96,
+    60: 80,
+  };
+  return heights[scale];
+}
+
 type CalendarStatusFilter = 'all' | 'active' | Appointment['status'];
 
 const ColumnDropZone = ({
@@ -172,16 +190,16 @@ const DraggableAppointment = ({
       {...listeners}
       data-timeline-appointment
       title={detailTitle}
-      className={`absolute rounded-lg cursor-pointer overflow-hidden border border-border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md border-l-[3px] ${accent} flex flex-col min-h-0`}
+      className={`absolute rounded-lg cursor-pointer overflow-hidden border border-border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md border-l-[3px] ${accent} flex min-h-0 min-w-0 max-w-full flex-col`}
       style={style}
       onClick={onClick}
     >
       <div
-        className={`flex flex-col min-h-0 flex-1 ${
+        className={`flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden ${
           compactTimeline ? 'px-2 py-1 gap-0.5' : 'px-2.5 py-1.5 gap-0.5'
         }`}
       >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex min-w-0 items-center gap-2">
         {serviceColor && (
           <span
             className="h-2.5 w-2.5 rounded-full shrink-0 ring-2 ring-border/70 shadow-sm"
@@ -199,7 +217,7 @@ const DraggableAppointment = ({
         <p className="text-[9px] leading-tight text-muted-foreground truncate">{statusLabel}</p>
       )}
       <p
-        className={`min-w-0 leading-snug text-muted-foreground ${compactTimeline ? 'text-[10px] line-clamp-2' : 'text-[11px] line-clamp-3'}`}
+        className={`min-w-0 max-w-full overflow-hidden break-words leading-snug text-muted-foreground [overflow-wrap:anywhere] ${compactTimeline ? 'text-[10px] line-clamp-2' : 'text-[11px] line-clamp-3'}`}
       >
         <span className="font-medium tabular-nums text-foreground/85">{apt.time}</span>
         {servicesLabel ? (
@@ -297,10 +315,10 @@ export default function CalendarPage() {
       return false;
     }
   });
-  const [timelineScale, setTimelineScale] = useState<15 | 30 | 60>(() => {
+  const [timelineScale, setTimelineScale] = useState<TimelineScaleMinutes>(() => {
     try {
       const raw = Number(localStorage.getItem('calendar_timeline_scale'));
-      return raw === 15 || raw === 30 || raw === 60 ? raw : 30;
+      return isValidTimelineScale(raw) ? raw : 30;
     } catch {
       return 30;
     }
@@ -495,6 +513,7 @@ export default function CalendarPage() {
   useEffect(() => {
     localStorage.setItem('calendar_timeline_scale', String(timelineScale));
   }, [timelineScale]);
+
   useEffect(() => {
     localStorage.setItem('calendar_view', view);
   }, [view]);
@@ -1086,10 +1105,7 @@ export default function CalendarPage() {
       setSaving(false);
     }
   };
-  const hourHeight = useMemo(() => {
-    const map: Record<15 | 30 | 60, number> = { 15: 96, 30: 64, 60: 48 };
-    return map[timelineScale];
-  }, [timelineScale]);
+  const hourHeight = useMemo(() => hourHeightForScale(timelineScale), [timelineScale]);
   const slotPxPerMinute = hourHeight / 60;
   const getAppointmentPosition = (apt: Appointment) => {
     const [h, m] = apt.time.split(':').map(Number);
@@ -2083,14 +2099,22 @@ export default function CalendarPage() {
             </SelectContent>
           </Select>
           {view === 'day-timeline' && (
-            <Select value={String(timelineScale)} onValueChange={(value) => setTimelineScale(Number(value) as 15 | 30 | 60)}>
-              <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-28">
+            <Select
+              value={String(timelineScale)}
+              onValueChange={(value) => {
+                const n = Number(value);
+                if (isValidTimelineScale(n)) setTimelineScale(n);
+              }}
+            >
+              <SelectTrigger className="h-9 rounded-xl text-sm w-full sm:w-[7.25rem]">
                 <SelectValue placeholder="Skala" />
               </SelectTrigger>
-              <SelectContent className="bg-popover z-50">
-                <SelectItem value="15">15 min</SelectItem>
-                <SelectItem value="30">30 min</SelectItem>
-                <SelectItem value="60">60 min</SelectItem>
+              <SelectContent className="bg-popover z-50 max-h-72">
+                {TIMELINE_SCALE_OPTIONS.map((m) => (
+                  <SelectItem key={m} value={String(m)}>
+                    {m} min
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           )}
@@ -2244,10 +2268,15 @@ export default function CalendarPage() {
           >
             <div className="border border-border rounded-2xl bg-card overflow-hidden">
             <div className="overflow-x-auto">
-            <div className="min-w-max">
+            <div
+              className="w-full"
+              style={{
+                minWidth: `max(100%, ${64 + Math.max(timelineColumns.length, 1) * 180}px)`,
+              }}
+            >
             <div
               className="grid border-b border-border bg-muted/40"
-              style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(180px, 1fr))` }}
+              style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(0, 1fr))` }}
             >
               <div className="py-2 px-3 text-[10px] uppercase text-muted-foreground">Godzina</div>
               {timelineColumns.length === 0 && (
@@ -2257,7 +2286,7 @@ export default function CalendarPage() {
                 const columnStaff = col.staffId ? staff.find((s: any) => s.id === col.staffId) : null;
                 const blockRows = getColumnBlockSummaries(selectedDate, col.staffId);
                 return (
-                  <div key={col.id} className="py-2 px-3 text-xs font-medium border-l border-border">
+                  <div key={col.id} className="min-w-0 py-2 px-3 text-xs font-medium border-l border-border">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-2 min-w-0">
                         {columnStaff && (
@@ -2279,9 +2308,13 @@ export default function CalendarPage() {
                     {blockRows.length > 0 && (
                       <div className="mt-1.5 space-y-1">
                         {blockRows.slice(0, 2).map((row, i) => (
-                          <div key={`${col.id}-blk-row-${i}`} className="inline-flex max-w-full items-center gap-1 rounded-md bg-amber-100 text-amber-800 px-1.5 py-0.5 text-[10px]">
-                            <Ban className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{row}</span>
+                          <div
+                            key={`${col.id}-blk-row-${i}`}
+                            className="flex w-full min-w-0 max-w-full items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800"
+                            title={row}
+                          >
+                            <Ban className="h-3 w-3 shrink-0" />
+                            <span className="min-w-0 truncate">{row}</span>
                           </div>
                         ))}
                       </div>
@@ -2292,9 +2325,9 @@ export default function CalendarPage() {
             </div>
             <div
               className="grid"
-              style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(180px, 1fr))` }}
+              style={{ gridTemplateColumns: `64px repeat(${Math.max(timelineColumns.length, 1)}, minmax(0, 1fr))` }}
             >
-              <div className="border-r border-border" style={{ height: HOURS.length * hourHeight }}>
+              <div className="min-w-0 border-r border-border" style={{ height: HOURS.length * hourHeight }}>
                 {HOURS.map(hour => (
                   <div key={hour} className="border-b border-border last:border-0 px-3 py-1 text-xs text-muted-foreground text-right" style={{ height: hourHeight }}>
                     {String(hour).padStart(2, '0')}:00
@@ -2316,7 +2349,7 @@ export default function CalendarPage() {
                     key={col.id}
                     id={`col-${col.id}`}
                     staffId={col.staffId}
-                    className="relative border-l border-border"
+                    className="relative min-w-0 overflow-hidden border-l border-border"
                     style={{ height: HOURS.length * hourHeight }}
                     dragPreview={dragPreview && dragPreview.columnId === `col-${col.id}` ? { top: dragPreview.top, time: dragPreview.time } : null}
                   >
@@ -2335,17 +2368,19 @@ export default function CalendarPage() {
                           }
                         }}
                       >
-                        {timelineScale !== 60 && (
-                          <>
-                            <div className="absolute left-0 right-0 border-t border-border/30 pointer-events-none" style={{ top: hourHeight / 2 }} />
-                            {timelineScale === 15 && (
-                              <>
-                                <div className="absolute left-0 right-0 border-t border-border/20 pointer-events-none" style={{ top: hourHeight / 4 }} />
-                                <div className="absolute left-0 right-0 border-t border-border/20 pointer-events-none" style={{ top: (hourHeight / 4) * 3 }} />
-                              </>
-                            )}
-                          </>
-                        )}
+                        {timelineScale < 60 &&
+                          slotsPerHour(timelineScale) > 1 &&
+                          Array.from({ length: slotsPerHour(timelineScale) - 1 }, (_, i) => (
+                            <div
+                              key={`${hour}-slot-${i}`}
+                              className={`absolute left-0 right-0 pointer-events-none border-t ${
+                                i === Math.floor((slotsPerHour(timelineScale) - 1) / 2) && slotsPerHour(timelineScale) % 2 === 0
+                                  ? 'border-border/30'
+                                  : 'border-border/20'
+                              }`}
+                              style={{ top: (hourHeight / slotsPerHour(timelineScale)) * (i + 1) }}
+                            />
+                          ))}
                       </div>
                     ))}
                     {columnAppts.map((apt: any, i: number) => {
@@ -2377,8 +2412,9 @@ export default function CalendarPage() {
                         <div
                           key={blk.id}
                           data-timeline-appointment
-                          className="absolute rounded-lg border border-amber-400/80 bg-amber-100/95 px-2 py-1 overflow-hidden z-[1] cursor-pointer hover:bg-amber-100"
+                          className="absolute z-[1] flex min-h-0 min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-lg border border-amber-400/80 bg-amber-100/95 px-2 py-1 hover:bg-amber-100"
                           style={{ top: pos.top, height: pos.height, width, left }}
+                          title={blk.label ? String(blk.label) : 'Blokada'}
                           onClick={() => openEditBlock({
                             kind: blk.source,
                             id: blk.sourceId,
@@ -2389,11 +2425,13 @@ export default function CalendarPage() {
                             staffId: blk.staffId,
                           })}
                         >
-                          <p className="text-[10px] font-semibold truncate flex items-center gap-1 text-amber-900">
-                            <Ban className="w-3 h-3 shrink-0" />
-                            Blokada
+                          <div className="flex min-w-0 items-center gap-1 text-[10px] font-semibold text-amber-900">
+                            <Ban className="h-3 w-3 shrink-0" />
+                            <span className="min-w-0 truncate">Blokada</span>
+                          </div>
+                          <p className="mt-0.5 min-h-0 min-w-0 max-w-full flex-1 overflow-hidden break-words text-[10px] leading-tight text-amber-800 [overflow-wrap:anywhere] line-clamp-[4]">
+                            {blk.label}
                           </p>
-                          <p className="text-[10px] truncate text-amber-800">{blk.label}</p>
                         </div>
                       );
                     })}

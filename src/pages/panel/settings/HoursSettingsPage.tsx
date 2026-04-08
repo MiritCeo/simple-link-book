@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -163,24 +164,85 @@ export default function HoursSettingsPage() {
         <DialogContent className="rounded-2xl">
           <DialogHeader>
             <DialogTitle>Edytuj godziny pracy</DialogTitle>
-            <DialogDescription>Formularz godzin pracy</DialogDescription>
+            <DialogDescription>
+              Dla każdego dnia ustaw, czy salon jest czynny. W dni nieczynne nie obowiązują godziny otwarcia.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-[min(70vh,520px)] overflow-y-auto pr-1">
             {editingHours.map((day: any) => (
-              <div key={day.weekday} className="grid grid-cols-[1fr_1fr_1fr] gap-2 items-center">
-                <span className="text-sm font-medium">{dayNames[day.weekday]}</span>
-                <Input
-                  type="time"
-                  value={day.open}
-                  onChange={(e) => setEditingHours(prev => prev.map((d: any) => d.weekday === day.weekday ? { ...d, open: e.target.value, active: true } : d))}
-                  className="h-10 rounded-xl"
-                />
-                <Input
-                  type="time"
-                  value={day.close}
-                  onChange={(e) => setEditingHours(prev => prev.map((d: any) => d.weekday === day.weekday ? { ...d, close: e.target.value, active: true } : d))}
-                  className="h-10 rounded-xl"
-                />
+              <div
+                key={day.weekday}
+                className="rounded-xl border border-border bg-card/50 p-3 space-y-3"
+              >
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-sm font-medium">{dayNames[day.weekday]}</span>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id={`salon-hours-active-${day.weekday}`}
+                      checked={!!day.active}
+                      onCheckedChange={(checked) => {
+                        setEditingHours((prev) =>
+                          prev.map((d: any) => {
+                            if (d.weekday !== day.weekday) return d;
+                            if (checked) {
+                              const hasValid =
+                                d.open &&
+                                d.close &&
+                                d.open < d.close;
+                              return {
+                                ...d,
+                                active: true,
+                                open: hasValid ? d.open : '09:00',
+                                close: hasValid ? d.close : '20:00',
+                              };
+                            }
+                            return { ...d, active: false };
+                          }),
+                        );
+                      }}
+                    />
+                    <label
+                      htmlFor={`salon-hours-active-${day.weekday}`}
+                      className="text-sm text-muted-foreground cursor-pointer select-none"
+                    >
+                      {day.active ? 'Czynny' : 'Nieczynny'}
+                    </label>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-xs text-muted-foreground">Otwarcie</span>
+                    <Input
+                      type="time"
+                      disabled={!day.active}
+                      value={day.active ? (day.open || '') : ''}
+                      onChange={(e) =>
+                        setEditingHours((prev) =>
+                          prev.map((d: any) =>
+                            d.weekday === day.weekday ? { ...d, open: e.target.value } : d,
+                          ),
+                        )
+                      }
+                      className="h-10 rounded-xl mt-0.5"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">Zamknięcie</span>
+                    <Input
+                      type="time"
+                      disabled={!day.active}
+                      value={day.active ? (day.close || '') : ''}
+                      onChange={(e) =>
+                        setEditingHours((prev) =>
+                          prev.map((d: any) =>
+                            d.weekday === day.weekday ? { ...d, close: e.target.value } : d,
+                          ),
+                        )
+                      }
+                      className="h-10 rounded-xl mt-0.5"
+                    />
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -196,8 +258,11 @@ export default function HoursSettingsPage() {
                       return;
                     }
                   }
-                  await saveSalonHours(editingHours);
-                  setHours(editingHours);
+                  const payload = editingHours.map((d: any) =>
+                    d.active ? d : { ...d, open: '', close: '' },
+                  );
+                  await saveSalonHours(payload);
+                  setHours(payload);
                   setEditHoursOpen(false);
                   toast.success('Godziny zapisane');
                 } catch (err: any) {

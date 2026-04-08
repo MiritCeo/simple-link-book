@@ -4,71 +4,94 @@ import { googlePlaceMatchesSalon } from "../lib/matchGoogleSalon.js";
 
 const router = Router();
 
+/** Salon techniczny (rejestracja konta) — nie pokazujemy w katalogu publicznym. */
+const UNASSIGNED_SALON_SLUG = "__honly_unassigned__";
+
+const publicApiUrl = (process.env.PUBLIC_API_URL?.trim() || "").replace(/\/$/, "");
+const toAbsoluteAssetUrl = (raw: string | null | undefined) => {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (publicApiUrl) return `${publicApiUrl}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  return raw;
+};
+
 /** Runtime config dla frontendu (np. klucz mapy bez konieczności rebuildu frontu). */
 router.get("/maps/config", (_req, res) => {
   const key = process.env.GOOGLE_MAPS_API_KEY?.trim() || process.env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "";
   return res.json({ googleMapsApiKey: key || null });
 });
 
-/** Katalog salonów Honly (publicznie — do mapy / wyszukiwarki / mobile) */
+/** Katalog salonów Honly (publicznie — mapa / wyszukiwarka / aplikacja mobilna; bez JWT). */
 router.get("/salons/catalog", async (req, res) => {
-  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-  const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
-  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || "20"), 10) || 20));
+  try {
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const page = Math.max(1, parseInt(String(req.query.page || "1"), 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || "20"), 10) || 20));
 
-  const where = q
-    ? {
-        OR: [
-          { name: { contains: q } },
-          { address: { contains: q } },
-          { slug: { contains: q } },
-        ],
-      }
-    : {};
+    const notUnassigned = { slug: { not: UNASSIGNED_SALON_SLUG } };
+    const where = q
+      ? {
+          AND: [
+            notUnassigned,
+            {
+              OR: [
+                { name: { contains: q } },
+                { address: { contains: q } },
+                { slug: { contains: q } },
+              ],
+            },
+          ],
+        }
+      : notUnassigned;
 
-  const [total, rows, aggregates] = await Promise.all([
-    prisma.salon.count({ where }),
-    prisma.salon.findMany({
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        slug: true,
-        name: true,
-        address: true,
-        phone: true,
-        hours: true,
-        description: true,
-        logoUrl: true,
-        accentColor: true,
-        latitude: true,
-        longitude: true,
-      },
-    }),
-    prisma.salonRating.groupBy({
-      by: ["salonId"],
-      _avg: { stars: true },
-      _count: { _all: true },
-    }),
-  ]);
+    const [total, rows, aggregates] = await Promise.all([
+      prisma.salon.count({ where }),
+      prisma.salon.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          address: true,
+          phone: true,
+          hours: true,
+          description: true,
+          logoUrl: true,
+          accentColor: true,
+          latitude: true,
+          longitude: true,
+        },
+      }),
+      prisma.salonRating.groupBy({
+        by: ["salonId"],
+        _avg: { stars: true },
+        _count: { _all: true },
+      }),
+    ]);
 
-  const stats = new Map(
-    aggregates.map((a) => [a.salonId, { avgStars: a._avg.stars ?? null, ratingCount: a._count._all }]),
-  );
+    const stats = new Map(
+      aggregates.map((a) => [a.salonId, { avgStars: a._avg.stars ?? null, ratingCount: a._count._all }]),
+    );
 
-  const salons = rows.map((s) => {
-    const st = stats.get(s.id);
-    return {
-      ...s,
-      avgStars: st?.avgStars != null ? Math.round(st.avgStars * 10) / 10 : null,
-      ratingCount: st?.ratingCount ?? 0,
-      isHonly: true as const,
-    };
-  });
+    const salons = rows.map((s) => {
+      const st = stats.get(s.id);
+      return {
+        ...s,
+        logoUrl: toAbsoluteAssetUrl(s.logoUrl),
+        avgStars: st?.avgStars != null ? Math.round(st.avgStars * 10) / 10 : null,
+        ratingCount: st?.ratingCount ?? 0,
+        isHonly: true as const,
+      };
+    });
 
-  return res.json({ salons, total, page, limit, pages: Math.ceil(total / limit) || 1 });
+    return res.json({ salons, total, page, limit, pages: Math.ceil(total / limit) || 1 });
+  } catch (e) {
+    console.error("[public] GET /salons/catalog", e);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 type NearbyResult = {
@@ -151,6 +174,7 @@ router.get("/places/nearby", async (req, res) => {
   }
 
   const dbSalons = await prisma.salon.findMany({
+    where: { slug: { not: UNASSIGNED_SALON_SLUG } },
     select: { id: true, slug: true, name: true, address: true },
   });
 

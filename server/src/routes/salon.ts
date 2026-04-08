@@ -53,24 +53,40 @@ const requireOwner = (req: AuthRequest, res: any) => {
 };
 
 const linkClientAccountToSalonByEmail = async (client: { id: string; salonId: string; email?: string | null }) => {
-  const normalizedEmail = client.email?.trim().toLowerCase();
-  if (!normalizedEmail) return;
-  const account = await prisma.clientAccount.findUnique({ where: { email: normalizedEmail } });
-  if (!account) return;
-  await prisma.clientAccountSalon.upsert({
-    where: {
-      clientAccountId_salonId: { clientAccountId: account.id, salonId: client.salonId },
-    },
-    create: {
-      clientAccountId: account.id,
-      salonId: client.salonId,
-      clientId: client.id,
-    },
-    update: {
-      clientId: client.id,
-    },
-  });
+  try {
+    const normalizedEmail = client.email?.trim().toLowerCase();
+    if (!normalizedEmail) return;
+    const account = await prisma.clientAccount.findUnique({ where: { email: normalizedEmail } });
+    if (!account) return;
+    await prisma.clientAccountSalon.upsert({
+      where: {
+        clientAccountId_salonId: { clientAccountId: account.id, salonId: client.salonId },
+      },
+      create: {
+        clientAccountId: account.id,
+        salonId: client.salonId,
+        clientId: client.id,
+      },
+      update: {
+        clientId: client.id,
+      },
+    });
+  } catch (e) {
+    /** Np. konflikt @@unique([clientId]) przy powiązaniu konta — nie blokuj zapisu klienta (unika 502). */
+    console.error("[salon] linkClientAccountToSalonByEmail", e);
+  }
 };
+
+const salonClientWriteSchema = z.object({
+  name: z.string().min(2),
+  phone: z.string().min(6),
+  email: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.string().email().optional(),
+  ),
+  notes: z.string().max(65535).optional(),
+  allergies: z.string().max(2000).optional(),
+});
 
 const defaultHours = [
   { weekday: 0, open: "09:00", close: "20:00", active: true },
@@ -1240,21 +1256,19 @@ router.get("/clients", async (req: AuthRequest, res) => {
 });
 
 router.post("/clients", async (req: AuthRequest, res) => {
-  const schema = z.object({
-    name: z.string().min(2),
-    phone: z.string().min(6),
-    email: z.string().email().optional(),
-    notes: z.string().optional(),
-    allergies: z.string().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
-  const normalizedEmail = parsed.data.email?.trim().toLowerCase();
-  const client = await prisma.client.create({
-    data: { ...parsed.data, email: normalizedEmail, salonId: getSalonId(req), active: true },
-  });
-  await linkClientAccountToSalonByEmail(client);
-  return res.json({ client });
+  try {
+    const parsed = salonClientWriteSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
+    const normalizedEmail = parsed.data.email?.trim().toLowerCase();
+    const client = await prisma.client.create({
+      data: { ...parsed.data, email: normalizedEmail ?? null, salonId: getSalonId(req), active: true },
+    });
+    await linkClientAccountToSalonByEmail(client);
+    return res.json({ client });
+  } catch (e) {
+    console.error("[salon] POST /clients", e);
+    return res.status(500).json({ error: "internal_error" });
+  }
 });
 
 router.post("/clients/import", async (req: AuthRequest, res) => {
@@ -1642,27 +1656,32 @@ router.get("/clients/:id", async (req: AuthRequest, res) => {
 });
 
 router.put("/clients/:id", async (req: AuthRequest, res) => {
-  const schema = z.object({
-    name: z.string().min(2),
-    phone: z.string().min(6),
-    email: z.string().email().optional(),
-    notes: z.string().optional(),
-    allergies: z.string().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
-  const salonId = getSalonId(req);
-  const existing = await resolveClientForSalon(prisma, salonId, req.params.id);
-  if (!existing) {
-    return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
+  try {
+    const parsed = salonClientWriteSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Nieprawidłowe dane klienta" });
+    const salonId = getSalonId(req);
+    const existing = await resolveClientForSalon(prisma, salonId, req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: "Nie znaleziono klienta w tym salonie" });
+    }
+    const client = await prisma.client.update({
+      where: { id: existing.id },
+      data: {
+        name: parsed.data.name,
+        phone: parsed.data.phone,
+        ...(parsed.data.notes !== undefined ? { notes: parsed.data.notes } : {}),
+        ...(parsed.data.allergies !== undefined ? { allergies: parsed.data.allergies } : {}),
+        ...(parsed.data.email !== undefined
+          ? { email: parsed.data.email?.trim().toLowerCase() ?? null }
+          : {}),
+      },
+    });
+    await linkClientAccountToSalonByEmail(client);
+    return res.json({ client });
+  } catch (e) {
+    console.error("[salon] PUT /clients/:id", req.params.id, e);
+    return res.status(500).json({ error: "internal_error" });
   }
-  const normalizedEmail = parsed.data.email?.trim().toLowerCase();
-  const client = await prisma.client.update({
-    where: { id: existing.id },
-    data: { ...parsed.data, email: normalizedEmail },
-  });
-  await linkClientAccountToSalonByEmail(client);
-  return res.json({ client });
 });
 
 router.get("/clients/:id/appointments", async (req: AuthRequest, res) => {

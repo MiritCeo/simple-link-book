@@ -15,6 +15,85 @@ components:
       scheme: bearer
       bearerFormat: JWT
   schemas:
+    PublicSalonCatalogItem:
+      type: object
+      description: Salon w katalogu publicznym (Honly)
+      properties:
+        id:
+          type: string
+        slug:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        hours:
+          type: string
+        description:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+          description: URL logo (absolutny, jeśli skonfigurowano PUBLIC_API_URL)
+        accentColor:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: float
+          nullable: true
+        longitude:
+          type: number
+          format: float
+          nullable: true
+        avgStars:
+          type: number
+          format: float
+          nullable: true
+          description: Średnia ocen z wizyt (1–5), null gdy brak ocen
+        ratingCount:
+          type: integer
+          description: Liczba ocen
+        isHonly:
+          type: boolean
+          enum:
+            - true
+          description: Zawsze true — wpis z bazy Honly
+      required:
+        - id
+        - slug
+        - name
+        - address
+        - phone
+        - hours
+        - description
+        - ratingCount
+        - isHonly
+    PublicSalonCatalogResponse:
+      type: object
+      properties:
+        salons:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicSalonCatalogItem"
+        total:
+          type: integer
+          description: Łączna liczba pasujących salonów (do paginacji)
+        page:
+          type: integer
+        limit:
+          type: integer
+        pages:
+          type: integer
+          description: Liczba stron przy aktualnym limit
+      required:
+        - salons
+        - total
+        - page
+        - limit
+        - pages
     Error:
       type: object
       properties:
@@ -1428,25 +1507,48 @@ paths:
         - Client
   /api/public/salons/catalog:
     get:
-      summary: Katalog salonów Purebook (wyszukiwarka, średnia ocen — publiczne, mobile)
+      summary: Katalog salonów Honly (lista + wyszukiwanie)
+      description: |
+        **Publiczny endpoint — bez nagłówka Authorization.** Przeznaczony na aplikację mobilną i katalog w WWW.
+
+        Parametr `q` filtruje po fragmencie nazwy, adresu lub slug (zawiera, MySQL).
+
+        Logo (`logoUrl`) jest zwracane jako pełny URL, gdy na serwerze ustawiono `PUBLIC_API_URL`
+        (względne ścieżki `/uploads/...` są wtedy uzupełniane).
+
+        Salon techniczny rejestracji (`__honly_unassigned__`) nie występuje w wynikach.
       parameters:
         - in: query
           name: q
           schema:
             type: string
+          description: Opcjonalny tekst wyszukiwania (nazwa, adres, slug)
         - in: query
           name: page
           schema:
             type: integer
             default: 1
+            minimum: 1
         - in: query
           name: limit
           schema:
             type: integer
             default: 20
+            minimum: 1
+            maximum: 50
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicSalonCatalogResponse"
+        "500":
+          description: Błąd serwera
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
       tags:
         - Public
   /api/public/maps/config:

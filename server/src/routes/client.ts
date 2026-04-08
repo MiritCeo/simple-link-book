@@ -47,7 +47,12 @@ const loginSchema = z.object({
 
 const profileSchema = z.object({
   name: z.string().min(2),
-  email: z.string().email().optional(),
+  email: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? undefined : v),
+    z.string().email().optional(),
+  ),
+  /** Zgodnie z dokumentacją API mobilnego — aktualizacja telefonu w profilu. */
+  phone: z.string().min(6).optional(),
 });
 
 const passwordSchema = z.object({
@@ -623,36 +628,45 @@ router.get("/appointments", async (req: ClientAuthRequest, res) => {
 });
 
 router.put("/me", async (req: ClientAuthRequest, res) => {
-  const parsed = profileSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "invalid_payload" });
-  }
-
-  const { name, email } = parsed.data;
-  const account = await prisma.clientAccount.findUnique({
-    where: { clientId: req.client!.clientId },
-  });
-
-  if (email && account) {
-    const existing = await prisma.clientAccount.findUnique({ where: { email } });
-    if (existing && existing.clientId !== account.clientId) {
-        return res.status(409).json({ error: "email_taken" });
+  try {
+    const parsed = profileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "invalid_payload" });
     }
-  }
 
-  if (account && email && account.email !== email) {
-    await prisma.clientAccount.update({
-      where: { id: account.id },
-      data: { email },
+    const { name, email, phone } = parsed.data;
+    const account = await prisma.clientAccount.findUnique({
+      where: { clientId: req.client!.clientId },
     });
+
+    if (email && account) {
+      const existing = await prisma.clientAccount.findUnique({ where: { email } });
+      if (existing && existing.clientId !== account.clientId) {
+        return res.status(409).json({ error: "email_taken" });
+      }
+    }
+
+    if (account && email && account.email !== email) {
+      await prisma.clientAccount.update({
+        where: { id: account.id },
+        data: { email },
+      });
+    }
+
+    const client = await prisma.client.update({
+      where: { id: req.client!.clientId },
+      data: {
+        name,
+        email: email ?? null,
+        ...(phone !== undefined ? { phone } : {}),
+      },
+    });
+
+    return res.json({ client });
+  } catch (e) {
+    console.error("[client] PUT /me", e);
+    return res.status(500).json({ error: "internal_error" });
   }
-
-  const client = await prisma.client.update({
-    where: { id: req.client!.clientId },
-    data: { name, email: email ?? null },
-  });
-
-  return res.json({ client });
 });
 
 router.put("/password", async (req: ClientAuthRequest, res) => {
