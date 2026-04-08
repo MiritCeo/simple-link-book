@@ -2973,7 +2973,8 @@ export default function CalendarPage() {
                   />
                 </div>
               </div>
-            ) : detailTab === 'client' ? (
+            ))
+            : detailTab === 'client' ? (
                 <div className="space-y-3 mt-4">
                   <div className="rounded-xl border border-border p-3 bg-card">
                     <p className="text-sm font-semibold">{activeApt.client?.name}</p>
