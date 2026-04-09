@@ -300,6 +300,14 @@ export async function switchSalon(salonId: string) {
   return data;
 }
 
+export async function changePanelPassword(payload: { currentPassword: string; newPassword: string }) {
+  return apiFetch<{ ok: boolean }>("/api/auth/password", {
+    method: "PUT",
+    auth: true,
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getPublicSalon(slug: string) {
   return apiFetch<{ salon: any; services: any[]; staff: any[] }>(`/api/public/salons/${slug}`);
 }

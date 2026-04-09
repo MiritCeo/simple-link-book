@@ -185,6 +185,33 @@ router.get("/me", auth, async (req: AuthRequest, res) => {
   });
 });
 
+router.put("/password", auth, async (req: AuthRequest, res) => {
+  const schema = z.object({
+    currentPassword: z.string().min(8),
+    newPassword: z.string().min(8),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "invalid_payload" });
+
+  const authUser = req.user!;
+  const user = await prisma.user.findUnique({ where: { id: authUser.userId } });
+  if (!user) return res.status(404).json({ error: "profile_not_found" });
+  if (!user.active) return res.status(403).json({ error: "account_inactive" });
+
+  const ok = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
+  if (!ok) return res.status(400).json({ error: "invalid_current_password" });
+  if (parsed.data.currentPassword === parsed.data.newPassword) {
+    return res.status(400).json({ error: "new_password_same_as_current" });
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash },
+  });
+  return res.json({ ok: true });
+});
+
 router.get("/salons", auth, async (req: AuthRequest, res) => {
   const authUser = req.user!;
   const user = await prisma.user.findUnique({

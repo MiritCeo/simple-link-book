@@ -31,8 +31,10 @@ if (fs.existsSync(openApiPath)) {
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
-app.use("/api/public", publicRoutes);
+// Kolejność ma znaczenie: /salons/catalog musi trafić do publicDiscovery
+// zanim /salons/:slug z publicRoutes przechwyci "catalog" jako slug.
 app.use("/api/public", publicDiscoveryRoutes);
+app.use("/api/public", publicRoutes);
 app.use("/api/public", clientRegisterPublicRoutes);
 app.use("/api/client", clientRoutes);
 app.use("/api/salon", auth, salonRoutes);
@@ -50,6 +52,30 @@ app.use((err: unknown, _req: express.Request, res: express.Response, next: expre
 
 const toDateTime = (date: string, time: string) => new Date(`${date}T${time}:00`);
 const addMinutes = (d: Date, minutes: number) => new Date(d.getTime() + minutes * 60000);
+
+const runAutoCompleteAppointments = async () => {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  const candidates = await prisma.appointment.findMany({
+    where: {
+      status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
+      date: { lte: today },
+    },
+    select: { id: true, date: true, time: true, duration: true },
+  });
+
+  const toCompleteIds = candidates
+    .filter((apt) => addMinutes(toDateTime(apt.date, apt.time), apt.duration || 0) <= now)
+    .map((apt) => apt.id);
+
+  if (toCompleteIds.length === 0) return;
+
+  await prisma.appointment.updateMany({
+    where: { id: { in: toCompleteIds } },
+    data: { status: "COMPLETED" },
+  });
+};
 
 const runReminders = async () => {
   const now = new Date();
@@ -106,7 +132,9 @@ const runReminders = async () => {
 };
 
 setInterval(() => {
-  runReminders().catch(() => {});
+  runAutoCompleteAppointments()
+    .then(() => runReminders())
+    .catch(() => {});
 }, 60_000);
 
 const port = process.env.PORT ? Number(process.env.PORT) : 4000;

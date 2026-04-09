@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageTransition, MotionList, MotionItem, HoverCard } from '@/components/motion';
 import { toast } from 'sonner';
 import {
+  changePanelPassword,
   createAdminOwner,
   deleteAdminOwner,
   deleteAdminClient,
@@ -41,6 +42,12 @@ export default function SuperAdminPage() {
   const [owners, setOwners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [ownPasswordDialogOpen, setOwnPasswordDialogOpen] = useState(false);
+  const [ownPasswordForm, setOwnPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
   const [passwordDialogOwner, setPasswordDialogOwner] = useState<any | null>(null);
   const [deleteDialogOwner, setDeleteDialogOwner] = useState<any | null>(null);
   const [confirmOwnerDeleteEmail, setConfirmOwnerDeleteEmail] = useState('');
@@ -182,6 +189,15 @@ export default function SuperAdminPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl h-9 gap-1.5"
+            onClick={() => setOwnPasswordDialogOpen(true)}
+          >
+            <KeyRound className="w-4 h-4" />
+            Moje hasło
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -616,6 +632,92 @@ export default function SuperAdminPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={ownPasswordDialogOpen}
+        onOpenChange={(open) => {
+          setOwnPasswordDialogOpen(open);
+          if (!open) {
+            setOwnPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+          }
+        }}
+      >
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Zmień moje hasło</DialogTitle>
+            <DialogDescription>Zmiana hasła dla aktualnie zalogowanego konta administratora.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Aktualne hasło</label>
+              <Input
+                type="password"
+                value={ownPasswordForm.currentPassword}
+                onChange={(e) => setOwnPasswordForm((f) => ({ ...f, currentPassword: e.target.value }))}
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Nowe hasło</label>
+              <Input
+                type="password"
+                value={ownPasswordForm.newPassword}
+                onChange={(e) => setOwnPasswordForm((f) => ({ ...f, newPassword: e.target.value }))}
+                className="h-11 rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">Powtórz nowe hasło</label>
+              <Input
+                type="password"
+                value={ownPasswordForm.confirmPassword}
+                onChange={(e) => setOwnPasswordForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+                className="h-11 rounded-xl"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setOwnPasswordDialogOpen(false)}>
+              Anuluj
+            </Button>
+            <Button
+              className="rounded-xl"
+              onClick={async () => {
+                if (!ownPasswordForm.currentPassword || !ownPasswordForm.newPassword || !ownPasswordForm.confirmPassword) {
+                  toast.error('Uzupełnij wszystkie pola');
+                  return;
+                }
+                if (ownPasswordForm.newPassword.length < 8) {
+                  toast.error('Nowe hasło musi mieć minimum 8 znaków');
+                  return;
+                }
+                if (ownPasswordForm.newPassword !== ownPasswordForm.confirmPassword) {
+                  toast.error('Nowe hasła nie są takie same');
+                  return;
+                }
+                try {
+                  await changePanelPassword({
+                    currentPassword: ownPasswordForm.currentPassword,
+                    newPassword: ownPasswordForm.newPassword,
+                  });
+                  setOwnPasswordDialogOpen(false);
+                  setOwnPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                  toast.success('Hasło zostało zmienione');
+                } catch (err: any) {
+                  const map: Record<string, string> = {
+                    invalid_current_password: 'Aktualne hasło jest nieprawidłowe',
+                    new_password_same_as_current: 'Nowe hasło musi być inne niż obecne',
+                    invalid_payload: 'Nieprawidłowe dane formularza',
+                  };
+                  toast.error(map[err?.message || ''] || err?.message || 'Nie udało się zmienić hasła');
+                }
+              }}
+            >
+              Zmień hasło
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="rounded-2xl">

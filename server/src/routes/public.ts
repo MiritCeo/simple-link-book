@@ -609,6 +609,7 @@ router.post("/salons/:slug/appointments", async (req, res) => {
       date: parsed.data.date,
       time: parsed.data.time,
       duration,
+      status: "CONFIRMED",
       source: "ONLINE",
       notes: parsed.data.notes,
       clientId: client.id,

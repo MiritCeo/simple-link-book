@@ -710,6 +710,97 @@ paths:
                     error: unauthorized
       tags:
         - Auth
+  /api/auth/password:
+    put:
+      summary: Zmiana hasła zalogowanego użytkownika panelu
+      description: Endpoint dla kont panelowych (OWNER/STAFF/SUPER_ADMIN), np. ustawienia w aplikacji mobilnej.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentPassword:
+                  type: string
+                  minLength: 8
+                newPassword:
+                  type: string
+                  minLength: 8
+              required:
+                - currentPassword
+                - newPassword
+            examples:
+              change_password:
+                value:
+                  currentPassword: "stare_haslo_123"
+                  newPassword: "nowe_haslo_123"
+      responses:
+        "200":
+          description: Hasło zmienione
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                required:
+                  - ok
+              examples:
+                success:
+                  value:
+                    ok: true
+        "400":
+          description: Błędne dane / złe obecne hasło / nowe hasło takie samo jak obecne
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                invalid_payload:
+                  value:
+                    error: invalid_payload
+                invalid_current_password:
+                  value:
+                    error: invalid_current_password
+                new_password_same_as_current:
+                  value:
+                    error: new_password_same_as_current
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                unauthorized:
+                  value:
+                    error: unauthorized
+        "403":
+          description: Konto nieaktywne
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                account_inactive:
+                  value:
+                    error: account_inactive
+        "404":
+          description: Profil użytkownika nie istnieje
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+              examples:
+                profile_not_found:
+                  value:
+                    error: profile_not_found
+      tags:
+        - Auth
   /api/auth/salons:
     get:
       summary: Lista salonów dostępnych dla zalogowanego użytkownika panelu
@@ -1654,6 +1745,9 @@ paths:
   /api/public/salons/{slug}/appointments:
     post:
       summary: Publiczna rezerwacja
+      description: |
+        Tworzy wizytę z formularza klienta (WWW/mobile).
+        Nowo utworzona wizyta dostaje od razu status `CONFIRMED`.
       parameters:
         - in: path
           name: slug
@@ -1702,6 +1796,41 @@ paths:
       responses:
         "200":
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appointment:
+                    allOf:
+                      - $ref: "#/components/schemas/Appointment"
+                      - type: object
+                        properties:
+                          status:
+                            type: string
+                            enum:
+                              - CONFIRMED
+                          source:
+                            type: string
+                            enum:
+                              - ONLINE
+                  cancelToken:
+                    type: string
+                required:
+                  - appointment
+                  - cancelToken
+              examples:
+                success:
+                  value:
+                    appointment:
+                      id: appt_123
+                      date: "2026-04-15"
+                      time: "14:30"
+                      duration: 60
+                      status: CONFIRMED
+                      notes: null
+                      source: ONLINE
+                    cancelToken: tok_abc123
         "400":
           description: Validation or data error
           content:
