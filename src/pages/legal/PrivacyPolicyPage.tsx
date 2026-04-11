@@ -21,8 +21,8 @@ export default function PrivacyPolicyPage() {
 
   return (
     <PageTransition className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 bg-card/95 backdrop-blur border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
+      <header className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-2xl items-center gap-3 px-4 sm:px-6">
           <button
             type="button"
             onClick={handleBack}
@@ -40,7 +40,8 @@ export default function PrivacyPolicyPage() {
         </div>
       </header>
 
-      <article className="max-w-2xl mx-auto px-4 py-8 pb-16 prose prose-sm dark:prose-invert max-w-none">
+      <article className="mx-auto w-full max-w-2xl px-4 py-8 pb-16 sm:px-6">
+        <div className="prose prose-sm max-w-none dark:prose-invert">
         <h1 className="text-2xl font-bold text-foreground mb-2">Polityka prywatności</h1>
         <p className="text-sm text-muted-foreground mb-8">
           Usługa <strong className="text-foreground">Honly</strong> (aplikacja i strona internetowa). Ostatnia aktualizacja:{' '}
@@ -168,6 +169,7 @@ export default function PrivacyPolicyPage() {
             aplikacji lub na stronie. Aktualna wersja jest zawsze dostępna pod tym adresem.
           </p>
         </section>
+        </div>
       </article>
     </PageTransition>
   );

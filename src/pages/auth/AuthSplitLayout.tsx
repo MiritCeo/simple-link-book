@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
 import { Apple, ArrowRight, BadgeCheck, CalendarClock, Check, Smartphone } from "lucide-react";
-
-/** Oficjalne sklepy — aplikacja Honly (klient) */
-const HONLY_APP_STORE_URL = "https://apps.apple.com/us/app/honly/id6760712614";
-const HONLY_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=pl.mirit.honly&hl=pl";
+import { HONLY_APP_STORE_URL, HONLY_PLAY_STORE_URL } from "@/constants/honlyStores";
 
 type AuthSplitLayoutProps = {
   eyebrow?: string;

@@ -39,7 +39,9 @@ import ClientSalons from "./pages/client/ClientSalons";
 import SuperAdminPage from "./pages/admin/SuperAdminPage";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicyPage from "./pages/legal/PrivacyPolicyPage";
+import TermsPage from "./pages/legal/TermsPage";
 import DeleteAccountPage from "./pages/client/DeleteAccountPage";
+import MobileAppsPage from "./pages/marketing/MobileAppsPage";
 
 const queryClient = new QueryClient();
 
@@ -64,6 +66,8 @@ const App = () => (
           <Route path="/konto/reset-hasla" element={<ClientResetPasswordPage />} />
           <Route path="/wybierz-salon" element={<SalonSelectPage />} />
           <Route path="/polityka-prywatnosci" element={<PrivacyPolicyPage />} />
+          <Route path="/regulamin" element={<TermsPage />} />
+          <Route path="/aplikacja" element={<MobileAppsPage />} />
 
           {/* Client panel */}
           <Route path="/konto" element={<ClientLayout />}>
