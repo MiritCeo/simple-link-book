@@ -5,6 +5,26 @@ const getFetch = (): FetchFn | null => {
   return fetchFn ?? null;
 };
 
+/** Stopka promująca apkę (jeden URL dla iOS i Android). Używana na końcu każdego wysłanego SMS. */
+const DEFAULT_SMS_MARKETING_FOOTER = "Apka Honly: https://honly.app/aplikacja";
+
+/** Zwraca treść stopki lub null, jeśli wyłączono (`SMS_APPEND_MARKETING_FOOTER=false`). */
+function getSmsMarketingFooter(): string | null {
+  const off = process.env.SMS_APPEND_MARKETING_FOOTER?.trim().toLowerCase();
+  if (off === "0" || off === "false" || off === "no") return null;
+  const custom = process.env.SMS_MARKETING_FOOTER?.trim();
+  return custom || DEFAULT_SMS_MARKETING_FOOTER;
+}
+
+/** Dokleja stopkę do treści SMS (idempotentnie — nie duplikuje). */
+function appendSmsMarketingFooter(message: string): string {
+  const footer = getSmsMarketingFooter();
+  if (!footer) return message;
+  const trimmed = message.trimEnd();
+  if (trimmed.endsWith(footer)) return message;
+  return `${trimmed}\n${footer}`;
+}
+
 const normalizeSender = (input?: string | null) => {
   if (!input) return null;
   const normalized = input
@@ -60,12 +80,13 @@ export async function sendSms(to: string, message: string, senderName?: string |
   const token = process.env.SMSAPI_API_KEY || process.env.SMSAPI_KEY;
   if (!token) return;
 
+  const body = appendSmsMarketingFooter(message);
   const from = normalizeSender(process.env.SMSAPI_FROM);
   try {
-    const primary = await sendSmsRequest(to, message, from);
+    const primary = await sendSmsRequest(to, body, from);
     if (primary.ok) return primary;
     if (from) {
-      const fallback = await sendSmsRequest(to, message, null);
+      const fallback = await sendSmsRequest(to, body, null);
       if (fallback.ok) return fallback;
       // eslint-disable-next-line no-console
       console.warn("Błąd SMSAPI", { primary: primary.error, fallback: fallback.error });
